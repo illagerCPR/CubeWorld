@@ -1,8 +1,11 @@
 # Project-MC 局域网联机设计文档
 
-> 版本：v0.1（设计稿，未实施）
-> 状态：评审中
-> 关联决策：独立 Node 服务器为房间主机；阶段 0 暂不处理怪物同步。
+> 版本：v0.2（阶段 0 已实现并通过验证）
+> 状态：阶段 0（MVP）完成 —— 2026-08-21
+> 新增：`server/`（index/room/protocol）、`src/net/NetworkManager.js`、`src/entity/RemotePlayer.js`、`src/ui/ChatBox.js`
+> 改动：`World.js`（setBlock 上报钩子）、`Game.js`（联机集成）、`MobManager.js`（spawnEnabled）、`MenuScreen.js`/`main.js`（联机入口）、`start.cmd`（server 子命令）
+> 验证：`server/test-mp.mjs` 协议 13/13 PASS；浏览器 host + Node 客户端双端链路验证通过
+> 开发中发现并修复：①服务器心跳误用协议层 pong（应用层 JSON ping 需客户端回 JSON pong，否则 30s 踢出）；②`set_time/time` 时间字段与消息类型键 `t` 冲突（改为 `time` 字段）；③方块同步需统一挂 `World.setBlock` 钩子（`bindWorld`）而非散点手动上报，保证爆炸/活塞也同步
 
 ---
 
