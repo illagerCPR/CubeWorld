@@ -17,6 +17,7 @@ dev-err.log
 server/world/
 server/*.json
 !server/package.json
+!server/package-lock.json
 
 # 系统/编辑器
 .DS_Store

@@ -48,6 +48,7 @@ export class MobManager {
     this.droppedItems = [];
     this.pendingExplosions = [];
     this.frame = 0;
+    this.spawnEnabled = true; // 联机阶段 0 关闭本地怪物生成
   }
 
   // 异步初始化：mob 用私有 skin atlas，不再注入全局 atlas
@@ -122,6 +123,7 @@ export class MobManager {
 
   // 尝试生成怪物
   trySpawn(playerPos, isNight) {
+    if (!this.spawnEnabled) return;
     if (this.mobs.length >= MAX_MOBS) return;
 
     // 在玩家周围 16~48 格内尝试

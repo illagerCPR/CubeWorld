@@ -19,6 +19,7 @@ import { InventoryScreen } from '../ui/InventoryScreen.js';
 import { PauseMenu } from '../ui/PauseMenu.js';
 import { DeathScreen } from '../ui/DeathScreen.js';
 import { CommandPanel } from '../ui/CommandPanel.js';
+import { ChatBox } from '../ui/ChatBox.js';
 import { CHUNK_SIZE } from '../core/Chunk.js';
 import { matchRecipe } from '../core/Crafting.js';
 import { MobManager } from '../entity/MobManager.js';
@@ -64,6 +65,10 @@ export class Game {
     this.frame = 0;
     this.autoSaveTimer = 0;
     this.autoSaveInterval = 30; // 每30秒自动保存
+    this.networkMode = false;   // 局域网联机模式
+    this.net = null;            // NetworkManager 实例（由 main.js 注入）
+    this.remotePlayers = new Map(); // id -> RemotePlayer 远端玩家
+    this.chatBox = null;        // 联机聊天框
     
     this.blockSvgMap = BlockSVGDefinitions;
     this.itemSvgMap = ItemSVGDefinitions;
@@ -91,6 +96,7 @@ export class Game {
       if (!this.running || this.paused) return;
       if (document.pointerLockElement) return;
       if (!this.controls.enabled) return;
+      if (this.chatBox && this.chatBox.input) return; // 聊天输入中不弹暂停
       if (this.inventoryScreen && this.inventoryScreen.visible) return;
       if (this.commandPanel && this.commandPanel.visible) return;
       if (this.pauseMenu && this.pauseMenu.visible) return;
@@ -130,13 +136,18 @@ export class Game {
     if (this.pauseMenu) { this.pauseMenu.el.remove(); this.pauseMenu = null; }
     if (this.deathScreen) { this.deathScreen.el.remove(); this.deathScreen = null; }
     if (this.commandPanel) { this.commandPanel.el.remove(); this.commandPanel = null; }
+    // 远端玩家与联机聊天框
+    for (const rp of this.remotePlayers.values()) rp.dispose();
+    this.remotePlayers.clear();
+    if (this.chatBox) { this.chatBox.dispose(); this.chatBox = null; }
   }
 
-  async start(mode, seed, loadData = null, slot = 1, cheatsEnabled = false) {
+  async start(mode, seed, loadData = null, slot = 1, cheatsEnabled = false, networkMode = false) {
     try {
     // 清理旧世界资源，防止切换存档时残留
     this._disposeWorld();
     this.currentSlot = slot;
+    this.networkMode = networkMode;
     this.paused = false;
     this.running = false;
     // 显示加载界面
@@ -271,6 +282,18 @@ export class Game {
     this.deathScreen = new DeathScreen(this);
     this.commandPanel = new CommandPanel(this);
 
+    // 联机模式初始化：关闭怪物生成、绑定方块同步钩子、注册网络回调、创建聊天框
+    if (this.networkMode && this.net) {
+      if (this.mobManager) this.mobManager.spawnEnabled = false;
+      this.net.bindWorld(this.world); // World.setBlock 统一上报（含防回环）
+      this.net.on('time', (t) => { if (this.sky) this.sky.time = t; });
+      this.net.on('chat', ({ from, text }) => { if (this.chatBox) this.chatBox.add(`<${from}> ${text}`); });
+      this.net.on('system', (text) => { if (this.chatBox) this.chatBox.add(text, '#aaa'); });
+      this.net.on('attacked', ({ damage }) => { this.player.hurt(damage, 'player', true); });
+      this.chatBox = new ChatBox(this, (text) => this.net.sendChat(text));
+      this.chatBox.add('已进入局域网世界（阶段0：建造+联机），按 T 聊天', '#ff8');
+    }
+
     // 隐藏加载界面
     const loading = document.getElementById('loading');
     if (loading) loading.style.display = 'none';
@@ -312,10 +335,10 @@ export class Game {
           if (this.hotbar) { this.hotbar.update(); this.hotbar.flashName(); }
         }
       }
-      // F5 手动保存
+      // F5 手动保存（联机模式不保存本地槽位）
       if (e.code === 'F5') {
         e.preventDefault();
-        if (this.running && this.world) SaveSystem.save(this);
+        if (this.running && this.world && !this.networkMode) SaveSystem.save(this);
       }
       // ESC 兜底：pointer lock 未激活时也切换暂停菜单（pointerlockchange 不会触发）
       if (e.code === 'Escape') {
@@ -466,17 +489,25 @@ export class Game {
     if (this.redstone) {
       this.redstone.update(dt);
     }
+
+    // 联机网络更新：本地状态上报 + 远端玩家插值
+    if (this.networkMode && this.net) {
+      this.net.update(dt);
+      for (const rp of this.remotePlayers.values()) rp.update(dt);
+    }
     
     // 生存模式更新
     if (this.player.survival) {
       this.updateSurvival(dt);
     }
     
-    // 自动保存
-    this.autoSaveTimer += dt;
-    if (this.autoSaveTimer >= this.autoSaveInterval) {
-      this.autoSaveTimer = 0;
-      SaveSystem.save(this);
+    // 自动保存（联机模式不自动保存，避免覆盖本地槽位）
+    if (!this.networkMode) {
+      this.autoSaveTimer += dt;
+      if (this.autoSaveTimer >= this.autoSaveInterval) {
+        this.autoSaveTimer = 0;
+        SaveSystem.save(this);
+      }
     }
   }
 
@@ -592,6 +623,19 @@ export class Game {
     if (!this.selectedBlock && !(this.controls.mouseLeft && this.mobManager)) return;
     
     if (this.controls.mouseLeft) {
+      // 联机互殴：先检测远端玩家（射线命中优先于怪物）
+      if (this.networkMode && this.net && !this.inventoryScreen?.visible) {
+        const origin = this.player.position.clone();
+        origin.y += 1.62;
+        const dir = new THREE.Vector3();
+        this.renderer.camera.getWorldDirection(dir);
+        const rp = this._findRemoteByRay(origin, dir, 4);
+        if (rp) {
+          this.net.sendAttackPlayer(rp.id, this.getAttackDamage());
+          this.controls.mouseLeft = false;
+          return;
+        }
+      }
       // 先尝试攻击怪物
       if (this.mobManager && !this.inventoryScreen?.visible) {
         const origin = this.player.position.clone();
@@ -733,7 +777,10 @@ export class Game {
     
     if (this.player.health <= 0) {
       this.player.health = 0;
-      if (this.deathScreen && !this.deathScreen.visible) this.deathScreen.show();
+      if (this.deathScreen && !this.deathScreen.visible) {
+        this.deathScreen.show();
+        if (this.networkMode && this.net) this.net.sendPlayerDied();
+      }
     }
   }
 
@@ -746,6 +793,9 @@ export class Game {
     this.player.invulnerable = 0;
     this.player.position.set(0.5, this.world.getHeightAt(0, 0) + 2, 0.5);
     this.player.velocity.set(0, 0, 0);
+    if (this.networkMode && this.net) {
+      this.net.sendRespawn(this.player.position.x, this.player.position.y, this.player.position.z);
+    }
   }
 
   getAttackDamage() {
@@ -757,18 +807,41 @@ export class Game {
     return 1;
   }
 
+  // 射线检测远端玩家（简化球体检测，半径 0.5，高度 1.8），返回命中的 RemotePlayer 或 null
+  _findRemoteByRay(origin, dir, maxDist) {
+    let best = null, bestDist = maxDist;
+    for (const rp of this.remotePlayers.values()) {
+      if (rp.dead) continue;
+      const oc = new THREE.Vector3().subVectors(origin, rp.group.position);
+      const b = oc.dot(dir);
+      const c = oc.dot(oc) - 0.5 * 0.5;
+      const disc = b * b - c;
+      if (disc < 0) continue;
+      const t = -b - Math.sqrt(disc);
+      if (t < 0 || t > bestDist) continue;
+      const hy = origin.y + dir.y * t;
+      if (hy < rp.group.position.y || hy > rp.group.position.y + 1.8) continue;
+      bestDist = t;
+      best = rp;
+    }
+    return best;
+  }
+
   stop() {
     this.running = false;
   }
 
   // 返回主菜单，save=true 时保存存档到当前槽位
   returnToMenu(save = true) {
-    if (save && this.world) {
+    if (save && this.world && !this.networkMode) {
       SaveSystem.save(this);
     }
     this.stop();
     // 清理旧世界 Three.js 资源和 UI DOM，防止回到菜单再进新存档时残留
     this._disposeWorld();
+    // 联机：断开网络连接并复位联机状态
+    if (this.net) this.net.close();
+    this.networkMode = false;
     if (this.infoBar) this.infoBar.hide();
     this.paused = false;
     if (this.controls) this.controls.enabled = false;

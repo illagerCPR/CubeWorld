@@ -1,0 +1,13 @@
+{
+  "name": "project-mc-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Project-MC 局域网联机房间服务器",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}

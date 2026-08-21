@@ -9,6 +9,7 @@ export class World {
     this.chunks = new Map();
     this.generator = new TerrainGenerator(seed);
     this.modifiedBlocks = new Map(); // 存档：全局坐标 -> 方块 id
+    this.onLocalBlockChange = null;  // 本地发起方块修改回调 (x,y,z,id)，由 NetworkManager 注册（联机上报）
   }
 
   key(cx, cz) { return `${cx},${cz}`; }
@@ -69,6 +70,7 @@ export class World {
     c.set(gx - cx * CHUNK_SIZE, gy, gz - cz * CHUNK_SIZE, id);
     c.dirty = true;
     if (recordMod) this.modifiedBlocks.set(`${gx},${gy},${gz}`, id);
+    if (this.onLocalBlockChange) this.onLocalBlockChange(gx, gy, gz, id);
     // 标记邻居区块 dirty（边界方块）
     const lx = gx - cx * CHUNK_SIZE;
     const lz = gz - cz * CHUNK_SIZE;

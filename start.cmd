@@ -1,8 +1,8 @@
 @echo off
 setlocal
 
-rem start.cmd -- Start/stop the Vite dev server
-rem Usage: start.cmd [start^|stop^|restart^|status]  (default: start)
+rem start.cmd -- Start/stop the Vite dev server / LAN server
+rem Usage: start.cmd [start^|stop^|restart^|status^|server^|server-stop]  (default: start)
 
 set ACTION=%1
 if "%ACTION%"=="" set ACTION=start
@@ -13,12 +13,16 @@ if /i "%ACTION%"=="start"   goto :start
 if /i "%ACTION%"=="stop"    goto :stop
 if /i "%ACTION%"=="restart" goto :restart
 if /i "%ACTION%"=="status"  goto :status
+if /i "%ACTION%"=="server"  goto :server
+if /i "%ACTION%"=="server-stop" goto :server-stop
 
-echo Usage: start.cmd [start^|stop^|restart^|status]
-echo   start   Start the Vite dev server (default)
-echo   stop    Stop the server
-echo   restart Restart the server
-echo   status  Show running status
+echo Usage: start.cmd [start^|stop^|restart^|status^|server^|server-stop]
+echo   start        Start the Vite dev server (default)
+echo   stop         Stop the server
+echo   restart      Restart the server
+echo   status       Show running status
+echo   server       Start the LAN multiplayer server (ws://0.0.0.0:3001/ws)
+echo   server-stop  Stop the LAN server
 exit /b 1
 
 :start
@@ -80,3 +84,21 @@ for /f "tokens=5" %%P in ('netstat -ano ^| findstr "LISTENING" ^| findstr ":%POR
 )
 :found
 goto :eof
+
+:server
+if not exist "server\node_modules\ws" (
+    echo Installing LAN server dependencies ...
+    pushd server
+    call npm install
+    popd
+)
+echo Starting LAN server (ws://0.0.0.0:3001/ws) ...
+start "lan-server" /MIN node server\index.mjs
+echo Started LAN server in background (window title: lan-server).
+echo Stop with "start.cmd server-stop" or close that minimized window.
+exit /b 0
+
+:server-stop
+taskkill /FI "WINDOWTITLE eq lan-server*" /F >nul 2>&1
+echo LAN server stopped.
+exit /b 0

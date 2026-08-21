@@ -9,8 +9,9 @@ const MODE_COLOR = {
 };
 
 export class MenuScreen {
-  constructor(onStart) {
+  constructor(onStart, net = null) {
     this.onStart = onStart;
+    this.net = net;
     this.selectedMode = 'creative';
     this.selectedCheats = false;
     this.el = document.createElement('div');
@@ -89,6 +90,24 @@ export class MenuScreen {
         鼠标左键 破坏 / 右键 放置 / E 打开背包 / ESC 暂停 / C 命令面板(需启用)<br/>
         滚轮 切换物品 / 1-9 快捷栏 / F5 手动保存
       </div>
+      <div style="margin-top:22px; border-top:1px solid rgba(255,255,255,0.2); padding-top:14px; width:520px;">
+        <div style="font-size:15px; font-weight:bold; margin-bottom:8px;">🌐 局域网联机</div>
+        <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center; font-size:13px;">
+          <label>昵称</label>
+          <input type="text" id="mp-name" maxlength="16" style="padding:5px 8px; background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; width:100px; font-size:13px;" placeholder="玩家" />
+          <label>服务器</label>
+          <input type="text" id="mp-url" style="padding:5px 8px; background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; flex:1; font-size:13px;" value="ws://127.0.0.1:3001/ws" />
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button id="mp-host" style="padding:8px 16px; font-size:13px; background:#2a5a8a; color:#fff; border:2px solid #1a3a5a; cursor:pointer; font-weight:bold;">创建房间</button>
+          <button id="mp-join" style="padding:8px 16px; font-size:13px; background:#5a3a7a; color:#fff; border:2px solid #3a2a5a; cursor:pointer; font-weight:bold;">加入房间</button>
+          <div id="mp-status" style="font-size:12px; color:#9cf;"></div>
+        </div>
+        <div style="font-size:11px; color:#aaa; margin-top:6px; line-height:1.6;">
+          先运行 <b>node server/index.mjs</b> 开启服务器；创建房间决定世界种子，其它电脑填开房机 IP 加入。<br/>
+          联机支持：方块共建/破坏、玩家可见与移动、互殴、聊天(T)。联机模式不保存本地存档。
+        </div>
+      </div>
     `;
 
     // 模式选择高亮
@@ -136,6 +155,32 @@ export class MenuScreen {
         }
       });
     });
+
+    // 局域网联机：创建房间 / 加入房间
+    if (this.net) {
+      const hostBtn = this.el.querySelector('#mp-host');
+      const joinBtn = this.el.querySelector('#mp-join');
+      if (hostBtn) hostBtn.addEventListener('click', () => {
+        this._mpConnect('host');
+      });
+      if (joinBtn) joinBtn.addEventListener('click', () => {
+        this._mpConnect('join');
+      });
+    }
+  }
+
+  _mpConnect(kind) {
+    const name = this.el.querySelector('#mp-name')?.value.trim() || '玩家';
+    const url = this.el.querySelector('#mp-url')?.value.trim() || 'ws://127.0.0.1:3001/ws';
+    this.setMpStatus('连接中...', '#9cf');
+    this.net.connect(url, name);
+    if (kind === 'host') this.net.createRoom(this._readSeed(), this.selectedMode);
+    else this.net.joinRoom();
+  }
+
+  setMpStatus(text, color = '#9cf') {
+    const el = this.el.querySelector('#mp-status');
+    if (el) { el.textContent = text; el.style.color = color; }
   }
 
   _readSeed() {
