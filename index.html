@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Project-MC</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+    #app { width: 100vw; height: 100vh; position: relative; }
+    canvas { display: block; }
+    #loading {
+      position: absolute; inset: 0; display: none; flex-direction: column;
+      align-items: center; justify-content: center; color: #fff;
+      background: linear-gradient(180deg, #6db7ff 0%, #2a5a8a 100%); z-index: 100;
+      font-size: 20px; letter-spacing: 2px;
+    }
+    #loading .bar { width: 320px; height: 16px; border: 2px solid #fff; margin-top: 20px; background: rgba(0,0,0,0.3); }
+    #loading .fill { width: 0%; height: 100%; background: #8ff; transition: width 0.2s; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="loading">
+      <div>世界生成中...</div>
+      <div class="bar"><div class="fill" id="load-fill"></div></div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

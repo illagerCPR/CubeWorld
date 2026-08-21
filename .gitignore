@@ -1,0 +1,27 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+*.tsbuildinfo
+
+# 日志
+*.log
+dev-out.log
+dev-err.log
+
+# 测试/本地工具缓存
+.playwright-cli/
+
+# 联机服务器运行时数据（世界存档等，不提交）
+server/world/
+server/*.json
+!server/package.json
+
+# 系统/编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
