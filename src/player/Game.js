@@ -286,12 +286,14 @@ export class Game {
     if (this.networkMode && this.net) {
       if (this.mobManager) this.mobManager.spawnEnabled = false;
       this.net.bindWorld(this.world); // World.setBlock 统一上报（含防回环）
+      // 联机拾取掉落物：通知服务器移除并广播
+      if (this.mobManager) this.mobManager.onDropTaken = (id) => this.net.sendDropTaken(id);
       this.net.on('time', (t) => { if (this.sky) this.sky.time = t; });
       this.net.on('chat', ({ from, text }) => { if (this.chatBox) this.chatBox.add(`<${from}> ${text}`); });
       this.net.on('system', (text) => { if (this.chatBox) this.chatBox.add(text, '#aaa'); });
       this.net.on('attacked', ({ damage }) => { this.player.hurt(damage, 'player', true); });
       this.chatBox = new ChatBox(this, (text) => this.net.sendChat(text));
-      this.chatBox.add('已进入局域网世界（阶段0：建造+联机），按 T 聊天', '#ff8');
+      this.chatBox.add('已进入局域网世界（阶段1：建造+联机+掉落物），按 T 聊天', '#ff8');
     }
 
     // 隐藏加载界面
@@ -480,7 +482,7 @@ export class Game {
       this.mobManager.onPickup = (name, count) => {
         const remaining = this.inventory.add(name, count);
         this.hotbar.update();
-        return remaining === 0;
+        return remaining; // 返回未放入的剩余数量（0 = 全部拾取）
       };
       this.mobManager.update(dt, this.player, this.sky);
     }
@@ -673,9 +675,14 @@ export class Game {
           this.breakingProgress = 0;
           this.breakMesh.visible = false;
           this.controls.mouseLeft = false;
-          // 掉落物（简化：直接进入背包）
-          this.inventory.add(def.name, 1);
-          this.hotbar.update();
+          if (this.networkMode && this.net) {
+            // 联机：生成物理掉落物（服务器广播 drop_spawn，各端看到同一个），谁都能拾取
+            this.net.sendDropSpawn(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5, def.name, 1);
+          } else {
+            // 单机：简化直接进入背包
+            this.inventory.add(def.name, 1);
+            this.hotbar.update();
+          }
         }
       } else if (this.player.spectator) {
         this.controls.mouseLeft = false;

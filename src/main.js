@@ -34,7 +34,7 @@ net.on('world_info', async ({ seed, mode, time }) => {
 
 // 联机连接状态提示
 net.onStatusChange = (status, text) => {
-  menu.setMpStatus(text, status === 'connected' ? '#6f6' : '#f88');
+  menu.setMpStatus(text, status === 'connected' ? '#6f6' : (status === 'reconnecting' ? '#fa0' : '#f88'));
   console.log('[联机]', status, text);
   if (status === 'closed' && game.networkMode) {
     alert('与服务器断开连接，返回主菜单');

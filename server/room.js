@@ -16,6 +16,8 @@ export class Room {
   constructor() {
     this.players = new Map();   // id -> player
     this.blocks = new Map();    // "x,y,z" -> id  (方块账本主副本)
+    this.drops = new Map();     // dropId -> {x,y,z,name,count,spawnedAt}  (掉落物账本主副本)
+    this.nextDropId = 1;
     this.seed = null;
     this.time = 0.35;
     this.hostId = null;
@@ -58,7 +60,7 @@ export class Room {
     const p = this.players.get(id);
     if (!p) return;
     this.players.delete(id);
-    this.broadcast(MSG.PLAYER_LEAVE, { id });
+    this.broadcast(MSG.PLAYER_LEAVE, { id, name: p.name });
     if (this.hostId === id) {
       this.hostId = this.players.size ? this.players.keys().next().value : null;
     }
@@ -87,6 +89,10 @@ export class Room {
       const [x, y, z] = key.split(',').map(Number);
       this.sendTo(player, MSG.BLOCK_CHANGE, { x, y, z, id, by: 0 });
     }
+    // 回放当前掉落物：新玩家加入即见现存掉落物
+    for (const [id, d] of this.drops) {
+      this.sendTo(player, MSG.DROP_SPAWN, { id, x: d.x, y: d.y, z: d.z, name: d.name, count: d.count });
+    }
     this.broadcast(MSG.PLAYER_JOIN, { id: player.id, name: player.name, mode: player.mode, pos: player.pos }, player.id);
     console.log(`[+] ${player.name} 加入房间 seed=${this.seed}`);
   }
@@ -100,6 +106,8 @@ export class Room {
   handle(player, msg) {
     switch (msg.t) {
       case MSG.BLOCK_SET: this.onBlockSet(player, msg); break;
+      case MSG.DROP_SPAWN: this.onDropSpawn(player, msg); break;
+      case MSG.DROP_TAKEN: this.onDropTaken(player, msg); break;
       case MSG.PLAYER_STATE: this.onPlayerState(player, msg); break;
       case MSG.PLAYER_FULL: this.onPlayerFull(player, msg); break;
       case MSG.ATTACK_PLAYER: this.onAttack(player, msg); break;
@@ -118,6 +126,37 @@ export class Room {
     if (id === 0) this.blocks.delete(`${x},${y},${z}`);
     else this.blocks.set(`${x},${y},${z}`, id);
     this.broadcast(MSG.BLOCK_CHANGE, { x, y, z, id, by: player.id });
+  }
+
+  // 掉落物：客户端请求生成 -> 服务器分配唯一 id 并广播（含发起者，各端据此创建同一实体）
+  onDropSpawn(player, msg) {
+    const x = safeNum(msg.x), y = safeNum(msg.y), z = safeNum(msg.z);
+    const count = Math.min(64, Math.max(1, safeInt(msg.count, 1)));
+    const name = String(msg.name || '').slice(0, 32);
+    if (!name) return;
+    const id = this.nextDropId++;
+    this.drops.set(id, { x, y, z, name, count, spawnedAt: Date.now() });
+    this.broadcast(MSG.DROP_SPAWN, { id, x, y, z, name, count });
+    console.log(`[掉落] ${player.name} 生成 ${name}x${count} @(${x},${y},${z}) id=${id}`);
+  }
+
+  // 掉落物拾取：从账本删除并广播（重复/无效 id 直接忽略）
+  onDropTaken(player, msg) {
+    const id = safeInt(msg.id);
+    if (!this.drops.has(id)) return;
+    this.drops.delete(id);
+    this.broadcast(MSG.DROP_TAKEN, { id, by: player.id });
+  }
+
+  // 清理过期掉落物（5 分钟），广播移除（by=0 表示过期自然消失）
+  expireDrops() {
+    const now = Date.now();
+    for (const [id, d] of this.drops) {
+      if (now - d.spawnedAt > 300000) {
+        this.drops.delete(id);
+        this.broadcast(MSG.DROP_TAKEN, { id, by: 0 });
+      }
+    }
   }
 
   onPlayerState(player, msg) {

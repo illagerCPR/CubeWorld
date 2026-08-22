@@ -17,6 +17,10 @@ export const MSG = {
   BLOCK_SET: 'block_set',
   BLOCK_CHANGE: 'block_change',
 
+  // 掉落物（阶段 1）
+  DROP_SPAWN: 'drop_spawn',
+  DROP_TAKEN: 'drop_taken',
+
   // 玩家
   PLAYER_STATE: 'player_state',
   PLAYER_FULL: 'player_full',

@@ -18,6 +18,9 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server, path: '/ws' });
 
+// 掉落物过期清理：每 10s 扫一次，过期的广播 drop_taken
+const dropSweep = setInterval(() => { room.expireDrops(); }, 10000);
+
 function send(ws, data) {
   if (ws.readyState === 1) ws.send(JSON.stringify(data));
 }

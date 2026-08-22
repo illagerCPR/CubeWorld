@@ -49,6 +49,7 @@ export class MobManager {
     this.pendingExplosions = [];
     this.frame = 0;
     this.spawnEnabled = true; // 联机阶段 0 关闭本地怪物生成
+    this.onDropTaken = null;  // 联机拾取回调 (dropId) => void，由 Game 注入（通知服务器移除）
   }
 
   // 异步初始化：mob 用私有 skin atlas，不再注入全局 atlas
@@ -418,6 +419,7 @@ export class MobManager {
 
   spawnDrop(pos, name, count) {
     const drop = {
+      id: null, // 联机掉落物才有服务器分配的 id
       name,
       count,
       position: pos.clone().add(new THREE.Vector3(0, 0.5, 0)),
@@ -430,18 +432,63 @@ export class MobManager {
       pickupDelay: 1.0,
       mesh: null,
     };
-
-    // 创建掉落物 mesh（小方块）
-    const geo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-    const mat = new THREE.MeshLambertMaterial({ color: this.getDropColor(name) });
-    drop.mesh = new THREE.Mesh(geo, mat);
-    drop.mesh.position.copy(drop.position);
-    this.scene.add(drop.mesh);
+    this._createDropMesh(drop);
     this.droppedItems.push(drop);
+    return drop;
+  }
+
+  // 由服务器广播 drop_spawn 创建掉落物：id 服务器唯一；速度由 id 确定性派生，各端运动一致
+  spawnRemoteDrop(id, x, y, z, name, count) {
+    if (this.droppedItems.some(d => d.id === id)) return; // 去重（重连回放可能重复广播）
+    const drop = {
+      id,
+      name,
+      count,
+      position: new THREE.Vector3(x, y, z),
+      velocity: new THREE.Vector3(
+        (this._hashRand(id) - 0.5) * 2,
+        3,
+        (this._hashRand(id * 2 + 1) - 0.5) * 2
+      ),
+      age: 0,
+      pickupDelay: 1.0,
+      mesh: null,
+    };
+    this._createDropMesh(drop);
+    this.droppedItems.push(drop);
+  }
+
+  // 按 id 移除掉落物（drop_taken 广播落地），找不到则忽略
+  removeDropById(id) {
+    for (let i = this.droppedItems.length - 1; i >= 0; i--) {
+      const d = this.droppedItems[i];
+      if (d.id === id) {
+        if (d.mesh) this.scene.remove(d.mesh);
+        this.droppedItems.splice(i, 1);
+        return;
+      }
+    }
+  }
+
+  // 确定性伪随机 [0,1)，由整数 id 派生（联机各端掉落物初速度一致）
+  _hashRand(n) {
+    let h = (n * 2654435761) >>> 0;
+    h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995) >>> 0; h ^= h >>> 15;
+    return (h >>> 0) / 4294967296;
+  }
+
+  _createDropMesh(drop) {
+    const geo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+    const mat = new THREE.MeshLambertMaterial({ color: this.getDropColor(drop.name) });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(drop.position);
+    drop.mesh = mesh;
+    this.scene.add(mesh);
   }
 
   getDropColor(name) {
     const colors = {
+      // 怪物掉落
       rotten_flesh: 0x8a4a4a,
       bone: 0xeeeeee,
       arrow: 0x8a6a3a,
@@ -449,6 +496,23 @@ export class MobManager {
       string: 0xeeeeee,
       spider_eye: 0x4a2a2a,
       iron_ingot: 0xdddddd,
+      // 方块掉落（联机挖矿）
+      stone: 0x8a8a8a,
+      cobblestone: 0x777777,
+      dirt: 0x79553a,
+      grass_block: 0x5a8c3a,
+      sand: 0xe6d9a8,
+      gravel: 0x9a9a9a,
+      oak_log: 0x6b4f2a,
+      oak_planks: 0xb8945a,
+      oak_leaves: 0x4a7a2a,
+      glass: 0xcfecf0,
+      coal_ore: 0x333333,
+      iron_ore: 0xcc8866,
+      gold_ore: 0xddcc44,
+      diamond_ore: 0x66ddcc,
+      water: 0x3366cc,
+      torch: 0xddbb33,
     };
     return colors[name] || 0x888888;
   }
@@ -489,11 +553,14 @@ export class MobManager {
       const dist = drop.position.distanceTo(player.position);
       if (drop.pickupDelay <= 0 && dist < 1.5) {
         if (this.onPickup) {
-          const result = this.onPickup(drop.name, drop.count);
-          if (result) {
+          // onPickup 返回未放入的剩余数量（0 = 全部拾取）
+          const remaining = this.onPickup(drop.name, drop.count);
+          drop.count = remaining;
+          if (remaining <= 0) {
             // 全部拾取
             if (drop.mesh) this.scene.remove(drop.mesh);
             this.droppedItems.splice(i, 1);
+            if (drop.id != null && this.onDropTaken) this.onDropTaken(drop.id); // 联机：通知服务器移除
             continue;
           }
         }

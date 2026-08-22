@@ -95,8 +95,46 @@ await sleep(200);
 const after = C.queue.filter(m => m.t === 'time').length;
 assert('非 host set_time 被忽略', before === after);
 
+// --- 阶段 1：掉落物与拾取同步 ---
+A.ws.send(JSON.stringify({ t: 'drop_spawn', x: 10, y: 70, z: 10, name: 'stone', count: 1 }));
+await sleep(200);
+const cDrop = C.queue.find(m => m.t === 'drop_spawn' && m.name === 'stone');
+assert('C 收到 drop_spawn stone(含 id)', !!cDrop && cDrop.id > 0 && cDrop.x === 10 && cDrop.count === 1);
+const dropId = cDrop.id;
+
+// 无效 id 的 drop_taken 应被忽略（账本无此项，不广播）
+C.ws.send(JSON.stringify({ t: 'drop_taken', id: 99999 }));
+await sleep(150);
+assert('无效 drop_taken 被忽略', !C.queue.some(m => m.t === 'drop_taken'));
+
+// C 拾取 -> A 收到 drop_taken(by=C)
+C.ws.send(JSON.stringify({ t: 'drop_taken', id: dropId }));
+await sleep(200);
+const aTaken = A.queue.filter(m => m.t === 'drop_taken' && m.id === dropId);
+assert('A 收到 drop_taken by=C', aTaken.length === 1 && aTaken[0].by === C.selfId);
+
+// 重复取同一 id 不再广播（账本已删除）
+C.ws.send(JSON.stringify({ t: 'drop_taken', id: dropId }));
+await sleep(150);
+assert('重复 drop_taken 不再广播', A.queue.filter(m => m.t === 'drop_taken' && m.id === dropId).length === 1);
+
+// 新掉落 + 新玩家 E 加入应收到掉落物回放
+A.ws.send(JSON.stringify({ t: 'drop_spawn', x: 12, y: 70, z: 12, name: 'iron_ingot', count: 2 }));
+await sleep(150);
+const E = await connect('Eve');
+E.ws.send(JSON.stringify({ t: 'join_room' }));
+await sleep(250);
+const eDrop = E.queue.find(m => m.t === 'drop_spawn' && m.name === 'iron_ingot');
+assert('E 加入收到掉落物回放 iron_ingot', !!eDrop && eDrop.count === 2 && eDrop.id > 0);
+
+// --- 阶段 1：玩家离开广播带 name ---
+C.ws.close();
+await sleep(150);
+const leaveMsg = A.queue.filter(m => m.t === 'player_leave').find(m => m.id === C.selfId);
+assert('A 收到 player_leave(C) 带 name', !!leaveMsg && leaveMsg.name === 'Carol');
+
 // 断开
-A.ws.close(); C.ws.close();
+A.ws.close(); E.ws.close();
 await sleep(100);
 
 const failCount = results.filter(r => !r[1]).length;

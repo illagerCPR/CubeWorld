@@ -1,11 +1,13 @@
 # Project-MC 局域网联机设计文档
 
-> 版本：v0.2（阶段 0 已实现并通过验证）
-> 状态：阶段 0（MVP）完成 —— 2026-08-21
-> 新增：`server/`（index/room/protocol）、`src/net/NetworkManager.js`、`src/entity/RemotePlayer.js`、`src/ui/ChatBox.js`
-> 改动：`World.js`（setBlock 上报钩子）、`Game.js`（联机集成）、`MobManager.js`（spawnEnabled）、`MenuScreen.js`/`main.js`（联机入口）、`start.cmd`（server 子命令）
-> 验证：`server/test-mp.mjs` 协议 13/13 PASS；浏览器 host + Node 客户端双端链路验证通过
-> 开发中发现并修复：①服务器心跳误用协议层 pong（应用层 JSON ping 需客户端回 JSON pong，否则 30s 踢出）；②`set_time/time` 时间字段与消息类型键 `t` 冲突（改为 `time` 字段）；③方块同步需统一挂 `World.setBlock` 钩子（`bindWorld`）而非散点手动上报，保证爆炸/活塞也同步
+> 版本：v0.3（阶段 1 已实现并通过验证）
+> 状态：阶段 0（MVP）完成（2026-08-21）；阶段 1（掉落物/断线重连）完成（2026-08-22）
+> 阶段 0 新增：`server/`（index/room/protocol）、`src/net/NetworkManager.js`、`src/entity/RemotePlayer.js`、`src/ui/ChatBox.js`
+> 阶段 0 改动：`World.js`（setBlock 上报钩子）、`Game.js`（联机集成）、`MobManager.js`（spawnEnabled）、`MenuScreen.js`/`main.js`（联机入口）、`start.cmd`（server 子命令）
+> 阶段 0 验证：`server/test-mp.mjs` 协议 13/13 PASS；浏览器 host + Node 客户端双端链路验证通过
+> 阶段 1 新增能力：掉落物生成/拾取/过期同步（`drop_spawn`/`drop_taken`）、服务器掉落物账本、断线指数退避自动重连（原位续玩不重启）、玩家离开广播带昵称、首次加入方块/掉落物账本回放缓冲修复
+> 阶段 1 验证：`server/test-mp.mjs` 协议 19/19 PASS；浏览器 host + Node 客户端掉落物全链路（生成→广播→拾取→移除）+ 两轮服务器宕机/重启断线重连验证通过
+> 开发中发现并修复：①服务器心跳误用协议层 pong（应用层 JSON ping 需客户端回 JSON pong，否则 30s 踢出）；②`set_time/time` 时间字段与消息类型键 `t` 冲突（改为 `time` 字段）；③方块同步需统一挂 `World.setBlock` 钩子（`bindWorld`）而非散点手动上报，保证爆炸/活塞也同步；④首次加入时 `world_info` 后紧接的方块/掉落物账本回放可能先于世界就绪到达而被丢弃——增加 `_ready` 预就绪缓冲队列；⑤重连关闭旧 socket 时旧 onclose 会误触发重连调度——用 `this.ws !== ws` 守卫只处理当前 socket
 
 ---
 
@@ -155,6 +157,8 @@
 | `join_room` | `room?` | 加入默认房间（单房间实现） |
 | `leave_room` | — | 主动退出 |
 | `block_set` | `x, y, z, id` | 客户端请求修改方块（含挖掘/放置/爆炸产物） |
+| `drop_spawn` | `x, y, z, name, count` | 请求生成掉落物（服务器分配 id 并广播回执） |
+| `drop_taken` | `id` | 拾取掉落物（从账本删除并广播） |
 | `player_state` | `x,y,z,yaw,pitch,onGround,flying,inWater,selected` | 高频状态（20Hz） |
 | `player_full` | `health,food,saturation,mode,slot,inventory?` | 低频全量（加入时/变更时/重生后） |
 | `attack_player` | `targetId, damage` | 玩家攻击玩家 |
@@ -175,6 +179,8 @@
 | `player_join` | `id, name, pos, mode` | 新玩家进入 |
 | `player_leave` | `id` | 玩家离开 |
 | `block_change` | `x,y,z,id,by` | 仲裁后的方块修改广播（**服务器唯一权威**） |
+| `drop_spawn` | `id, x,y,z,name,count` | 掉落物生成广播（含发起者，各端创建同一实体） |
+| `drop_taken` | `id, by` | 掉落物拾取/过期移除广播（by=0 为过期自然消失） |
 | `player_state` | `id, ...(同 C2S 字段)` | 转发某玩家高频状态 |
 | `player_full` | `id, ...(同 C2S 字段)` | 转发某玩家低频全量 |
 | `player_died` | `id` | 某玩家死亡 |
@@ -215,8 +221,9 @@ class NetworkManager {
 
 关键点：
 - 高频 `player_state` 节流 50ms（20Hz），`player_full` 只在变更时发。
-- 断线重连：指数退避重试 + 提示"已断开/重连中"。
+- 断线重连：指数退避重试（1s→15s 封顶，8 次）+ 提示"已断开/重连中"；重连成功重新 `hello`+`join_room`，由于世界已就绪（`_ready`），`world_info` 走"续玩分支"（不重启，仅同步时间/模式 + 账本回放纠正）。主动 `close()` 不重连。
 - 消息容错：未知类型忽略；字段缺失按 0 处理，不让远端脏包崩游戏。
+- 首次加入缓冲：`world_info` 与账本回放之间世界未就绪，`block_change`/`drop_*` 先入 `_pending*` 队列，`onWorldStarted()` 后统一落地。
 
 ### 6.2 `World.setBlock` 挂钩与防回环
 
@@ -392,10 +399,17 @@ server/
 | M3 玩家可见 | A 看到 B 的人形模型，移动平滑无瞬移，昵称可见 |
 | M4 状态/交互 | 生命/食物/模式同步；A 打 B 扣血；死亡/重生广播；昼夜一致；聊天可用 |
 
-### 阶段 1
+### 阶段 1（已完成）
 
-- 掉落物与拾取同步（`drop_spawn` / `drop_taken` 广播）。
-- 断线重连 + 玩家离开清理。
+- [x] 掉落物与拾取同步（`drop_spawn` / `drop_taken` 广播）。
+  - 服务器维护掉落物账本（`Room.drops`，id 唯一、5 分钟过期自动清理）；新玩家加入回放现存掉落物。
+  - 客户端 `MobManager` 扩展：网络掉落物实体（速度由 id 确定性派生，各端运动一致；去重防重连回放重复）、拾取按剩余数量扣减、拾取后 `drop_taken` 上报。
+  - 联机模式挖矿改为生成物理掉落物（不再直接进背包），谁都能拾取；单机保持原「直接进背包」行为不变。
+- [x] 断线重连 + 玩家离开清理。
+  - 断线指数退避自动重连（1s/2s/4s/.../15s 封顶，最多 8 次）；重连成功后**原位续玩**（世界不重启，只同步时间/模式并刷新远端玩家 + 账本回放纠正），避免重进丢失背包/位置。
+  - 主动返回菜单（`net.close()`）不触发重连；重连彻底失败才提示并回菜单。
+  - `player_leave` 广播携带昵称，远端玩家实体移除 + 聊天系统提示「XXX 离开了游戏」。
+- [x] 首次加入账本回放缓冲：`world_info` 后紧接的方块/掉落物回放先缓存，世界就绪后统一落地（修复首次加入丢包）。
 
 ### 阶段 2
 
