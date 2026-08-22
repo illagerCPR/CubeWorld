@@ -19,7 +19,9 @@ export class NetworkManager {
     this._pendingPlayers = [];    // 世界就绪前的玩家加入缓存
     this._pendingBlocks = [];     // 世界就绪前的 block_change 缓存（修复首次加入丢包）
     this._pendingDrops = [];      // 世界就绪前的 drop_* 缓存
+    this._pendingMobs = [];       // 世界就绪前的 mob_spawn 缓存
     this._pendingOpen = [];       // 连接打开前的待发消息
+    this.isHost = false;          // 是否房间 host（host 端负责怪物自然生成）
     this._url = null;             // 服务器地址（重连用）
     this._reconnectAttempt = 0;   // 当前重连尝试次数
     this._reconnectTimer = null;  // 重连定时器
@@ -39,6 +41,7 @@ export class NetworkManager {
     this._pendingPlayers = [];
     this._pendingBlocks = [];
     this._pendingDrops = [];
+    this._pendingMobs = [];
     this._pendingOpen = [];
     this._connectSocket(false);
   }
@@ -101,7 +104,7 @@ export class NetworkManager {
     else this._pendingOpen.push({ type, data });
   }
 
-  // 世界就绪后调用（Game.start 完成后）：落地缓存的远端玩家/方块/掉落物
+  // 世界就绪后调用（Game.start 完成后）：落地缓存的远端玩家/方块/掉落物/怪物
   onWorldStarted() {
     this._ready = true;
     for (const info of this._pendingPlayers) this._addRemote(info);
@@ -113,6 +116,8 @@ export class NetworkManager {
       else this._takeDrop(d.msg);
     }
     this._pendingDrops = [];
+    for (const m of this._pendingMobs) this._spawnMob(m);
+    this._pendingMobs = [];
   }
 
   _addRemote(info) {
@@ -143,6 +148,11 @@ export class NetworkManager {
     this.game.mobManager.removeDropById(msg.id);
   }
 
+  _spawnMob(msg) {
+    if (!this.game.mobManager) return;
+    this.game.mobManager.createMobFromNet(msg.id, msg.type, msg.x, msg.y, msg.z);
+  }
+
   _handle(msg) {
     switch (msg.t) {
       case MSG.WELCOME:
@@ -152,12 +162,14 @@ export class NetworkManager {
       case MSG.WORLD_INFO:
         if (this._ready && this.game && this.game.world && this.game.running) {
           // 断线重连成功：世界已在运行，不重启，仅同步时间/模式并刷新远端玩家
+          this.isHost = (msg.hostId === this.selfId);
           if (this.game.sky) this.game.sky.time = msg.time;
           if (msg.mode && this.game.player) this.game.player.setMode(msg.mode);
           this.onWorldStarted();
           this._emit('system', '已重新连接服务器');
           this.sendPlayerFull();
         } else {
+          this.isHost = (msg.hostId === this.selfId);
           this._emit('world_info', msg);   // 首次进入：由 main.js 用该 seed 启动世界
         }
         break;
@@ -180,6 +192,21 @@ export class NetworkManager {
       case MSG.DROP_TAKEN:
         if (this._ready) this._takeDrop(msg);
         else this._pendingDrops.push({ type: 'take', msg });
+        break;
+      case MSG.MOB_SPAWN:
+        if (this._ready) this._spawnMob(msg);
+        else this._pendingMobs.push(msg);
+        break;
+      case MSG.MOB_ATTACK:
+        if (!this.game.mobManager) break;
+        this.game.mobManager.applyRemoteMobAttack(msg.id, msg.damage, msg.x, msg.y, msg.z);
+        break;
+      case MSG.MOB_DIED:
+        if (!this.game.mobManager) break;
+        this.game.mobManager.applyRemoteMobDeath(msg.id);
+        break;
+      case MSG.REDSTONE_STATE:
+        if (this.game.redstone) this.game.redstone.applyRemoteState(msg.x, msg.y, msg.z, msg.on);
         break;
       case MSG.PLAYER_STATE: {
         if (msg.id === this.selfId) break;
@@ -247,6 +274,14 @@ export class NetworkManager {
   sendDropSpawn(x, y, z, name, count) { this._send(MSG.DROP_SPAWN, { x, y, z, name, count }); }
   // 本地拾取掉落物，通知服务器移除并广播
   sendDropTaken(id) { this._send(MSG.DROP_TAKEN, { id }); }
+
+  // 联机怪物事件（host 生成 / 玩家攻击 / 怪物死亡）
+  sendMobSpawn(type, x, y, z) { this._send(MSG.MOB_SPAWN, { type, x, y, z }); }
+  sendMobAttack(id, damage, x, y, z) { this._send(MSG.MOB_ATTACK, { id, damage, x, y, z }); }
+  sendMobDied(id) { this._send(MSG.MOB_DIED, { id }); }
+
+  // 红石源状态（lever/button），低频广播让各端 poweredBlocks 对齐
+  sendRedstoneState(x, y, z, on) { this._send(MSG.REDSTONE_STATE, { x, y, z, on }); }
 
   // 每帧调用：节流上报本地玩家状态
   update(dt) {

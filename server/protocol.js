@@ -21,6 +21,14 @@ export const MSG = {
   DROP_SPAWN: 'drop_spawn',
   DROP_TAKEN: 'drop_taken',
 
+  // 怪物（阶段 2，事件同步：生成/受击/死亡广播）
+  MOB_SPAWN: 'mob_spawn',
+  MOB_ATTACK: 'mob_attack',
+  MOB_DIED: 'mob_died',
+
+  // 红石源状态（阶段 2，低频缓解：lever/button 状态广播）
+  REDSTONE_STATE: 'redstone_state',
+
   // 玩家
   PLAYER_STATE: 'player_state',
   PLAYER_FULL: 'player_full',

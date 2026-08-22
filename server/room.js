@@ -18,6 +18,7 @@ export class Room {
     this.blocks = new Map();    // "x,y,z" -> id  (方块账本主副本)
     this.drops = new Map();     // dropId -> {x,y,z,name,count,spawnedAt}  (掉落物账本主副本)
     this.nextDropId = 1;
+    this.nextMobId = 1;         // 怪物 id 分配（事件同步，服务器仅分配/中继不跑 AI）
     this.seed = null;
     this.time = 0.35;
     this.hostId = null;
@@ -72,7 +73,7 @@ export class Room {
     player.mode = msg.mode === 'creative' ? 'creative' : (msg.mode === 'spectator' ? 'spectator' : 'survival');
     this.hostId = player.id;
     this.sendTo(player, MSG.ROOM_CREATED, { roomId: 'lan' });
-    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: player.mode, time: this.time });
+    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: player.mode, time: this.time, hostId: this.hostId });
     this.broadcast(MSG.PLAYER_JOIN, { id: player.id, name: player.name, mode: player.mode, pos: player.pos }, player.id);
     console.log(`[+] ${player.name} 创建房间 seed=${this.seed} (host)`);
   }
@@ -83,7 +84,7 @@ export class Room {
       this.createRoom(player, { seed: 0, mode: 'survival' });
       return;
     }
-    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time });
+    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId });
     // 回放方块账本：新玩家加入即见世界现状
     for (const [key, id] of this.blocks) {
       const [x, y, z] = key.split(',').map(Number);
@@ -108,6 +109,10 @@ export class Room {
       case MSG.BLOCK_SET: this.onBlockSet(player, msg); break;
       case MSG.DROP_SPAWN: this.onDropSpawn(player, msg); break;
       case MSG.DROP_TAKEN: this.onDropTaken(player, msg); break;
+      case MSG.MOB_SPAWN: this.onMobSpawn(player, msg); break;
+      case MSG.MOB_ATTACK: this.onMobAttack(player, msg); break;
+      case MSG.MOB_DIED: this.onMobDied(player, msg); break;
+      case MSG.REDSTONE_STATE: this.onRedstoneState(player, msg); break;
       case MSG.PLAYER_STATE: this.onPlayerState(player, msg); break;
       case MSG.PLAYER_FULL: this.onPlayerFull(player, msg); break;
       case MSG.ATTACK_PLAYER: this.onAttack(player, msg); break;
@@ -157,6 +162,37 @@ export class Room {
         this.broadcast(MSG.DROP_TAKEN, { id, by: 0 });
       }
     }
+  }
+
+  // 怪物事件（阶段 2 方案①：服务器只分配 id + 中继，不跑 AI）
+  // host 端请求生成 -> 分配唯一 id 广播（含发起者，各端据此创建同一怪物实体）
+  onMobSpawn(player, msg) {
+    const type = String(msg.type || '').slice(0, 24);
+    const x = safeNum(msg.x), y = safeNum(msg.y), z = safeNum(msg.z);
+    if (!type) return;
+    const id = this.nextMobId++;
+    this.broadcast(MSG.MOB_SPAWN, { id, type, x, y, z });
+    console.log(`[怪] ${player.name} 生成 ${type} @(${x},${y},${z}) id=${id}`);
+  }
+
+  // 玩家攻击怪物：转发（except 发起者，发起者端已本地处理）
+  onMobAttack(player, msg) {
+    const id = safeInt(msg.id);
+    const damage = Math.max(0, safeNum(msg.damage, 1));
+    const x = safeNum(msg.x), y = safeNum(msg.y), z = safeNum(msg.z);
+    this.broadcast(MSG.MOB_ATTACK, { id, fromId: player.id, damage, x, y, z }, player.id);
+  }
+
+  // 怪物死亡：转发（except 发起者，掉落物由击杀端产出）
+  onMobDied(player, msg) {
+    const id = safeInt(msg.id);
+    this.broadcast(MSG.MOB_DIED, { id }, player.id);
+  }
+
+  // 红石源状态（lever/button）：转发 except 发起者，各端对齐 poweredBlocks
+  onRedstoneState(player, msg) {
+    const x = safeInt(msg.x), y = safeInt(msg.y), z = safeInt(msg.z);
+    this.broadcast(MSG.REDSTONE_STATE, { x, y, z, on: !!msg.on, by: player.id }, player.id);
   }
 
   onPlayerState(player, msg) {

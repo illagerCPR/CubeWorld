@@ -133,6 +133,28 @@ await sleep(150);
 const leaveMsg = A.queue.filter(m => m.t === 'player_leave').find(m => m.id === C.selfId);
 assert('A 收到 player_leave(C) 带 name', !!leaveMsg && leaveMsg.name === 'Carol');
 
+// --- 阶段 2：怪物事件同步（host 生成 / 受击 / 死亡广播） ---
+A.ws.send(JSON.stringify({ t: 'mob_spawn', type: 'zombie', x: 20, y: 70, z: 20 }));
+await sleep(200);
+const eMob = E.queue.find(m => m.t === 'mob_spawn' && m.type === 'zombie');
+assert('E 收到 mob_spawn zombie(含 id)', !!eMob && eMob.id > 0 && eMob.x === 20);
+const mobId = eMob.id;
+
+E.ws.send(JSON.stringify({ t: 'mob_attack', id: mobId, damage: 5, x: 21, y: 70, z: 21 }));
+await sleep(200);
+const aAttack = A.queue.find(m => m.t === 'mob_attack' && m.id === mobId);
+assert('A 收到 mob_attack 5', !!aAttack && aAttack.damage === 5 && aAttack.fromId === E.selfId);
+
+E.ws.send(JSON.stringify({ t: 'mob_died', id: mobId }));
+await sleep(200);
+assert('A 收到 mob_died', !!A.queue.find(m => m.t === 'mob_died' && m.id === mobId));
+
+// --- 阶段 2：红石源状态转发 ---
+A.ws.send(JSON.stringify({ t: 'redstone_state', x: 30, y: 65, z: 30, on: true }));
+await sleep(200);
+const eRs = E.queue.find(m => m.t === 'redstone_state' && m.x === 30);
+assert('E 收到 redstone_state on', !!eRs && eRs.on === true);
+
 // 断开
 A.ws.close(); E.ws.close();
 await sleep(100);

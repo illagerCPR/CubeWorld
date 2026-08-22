@@ -282,18 +282,24 @@ export class Game {
     this.deathScreen = new DeathScreen(this);
     this.commandPanel = new CommandPanel(this);
 
-    // 联机模式初始化：关闭怪物生成、绑定方块同步钩子、注册网络回调、创建聊天框
+    // 联机模式初始化：host 端跑怪物自然生成（事件同步）、绑定方块同步钩子、注册网络回调、创建聊天框
     if (this.networkMode && this.net) {
-      if (this.mobManager) this.mobManager.spawnEnabled = false;
+      // 阶段 2 怪物事件同步：host 端权威生成（mob_spawn 广播），非 host 端只接收广播创建
+      if (this.mobManager) {
+        this.mobManager.spawnEnabled = !!this.net.isHost;
+        this.mobManager.mobNet = this.net; // 生成/攻击/死亡事件上报接口
+      }
       this.net.bindWorld(this.world); // World.setBlock 统一上报（含防回环）
       // 联机拾取掉落物：通知服务器移除并广播
       if (this.mobManager) this.mobManager.onDropTaken = (id) => this.net.sendDropTaken(id);
+      // 红石源状态（lever/button）：低频广播让各端 poweredBlocks 对齐
+      if (this.redstone) this.redstone.onStateChange = (x, y, z, on) => this.net.sendRedstoneState(x, y, z, on);
       this.net.on('time', (t) => { if (this.sky) this.sky.time = t; });
       this.net.on('chat', ({ from, text }) => { if (this.chatBox) this.chatBox.add(`<${from}> ${text}`); });
       this.net.on('system', (text) => { if (this.chatBox) this.chatBox.add(text, '#aaa'); });
       this.net.on('attacked', ({ damage }) => { this.player.hurt(damage, 'player', true); });
       this.chatBox = new ChatBox(this, (text) => this.net.sendChat(text));
-      this.chatBox.add('已进入局域网世界（阶段1：建造+联机+掉落物），按 T 聊天', '#ff8');
+      this.chatBox.add('已进入局域网世界（阶段2：建造+联机+掉落物+怪物同步），按 T 聊天', '#ff8');
     }
 
     // 隐藏加载界面

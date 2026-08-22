@@ -1,13 +1,15 @@
 # Project-MC 局域网联机设计文档
 
-> 版本：v0.3（阶段 1 已实现并通过验证）
-> 状态：阶段 0（MVP）完成（2026-08-21）；阶段 1（掉落物/断线重连）完成（2026-08-22）
+> 版本：v0.4（阶段 2 已实现并通过验证）
+> 状态：阶段 0（MVP）完成（2026-08-21）；阶段 1（掉落物/断线重连）完成（2026-08-22）；阶段 2（怪物事件同步 + 红石状态缓解）完成（2026-08-22）
 > 阶段 0 新增：`server/`（index/room/protocol）、`src/net/NetworkManager.js`、`src/entity/RemotePlayer.js`、`src/ui/ChatBox.js`
 > 阶段 0 改动：`World.js`（setBlock 上报钩子）、`Game.js`（联机集成）、`MobManager.js`（spawnEnabled）、`MenuScreen.js`/`main.js`（联机入口）、`start.cmd`（server 子命令）
 > 阶段 0 验证：`server/test-mp.mjs` 协议 13/13 PASS；浏览器 host + Node 客户端双端链路验证通过
 > 阶段 1 新增能力：掉落物生成/拾取/过期同步（`drop_spawn`/`drop_taken`）、服务器掉落物账本、断线指数退避自动重连（原位续玩不重启）、玩家离开广播带昵称、首次加入方块/掉落物账本回放缓冲修复
 > 阶段 1 验证：`server/test-mp.mjs` 协议 19/19 PASS；浏览器 host + Node 客户端掉落物全链路（生成→广播→拾取→移除）+ 两轮服务器宕机/重启断线重连验证通过
-> 开发中发现并修复：①服务器心跳误用协议层 pong（应用层 JSON ping 需客户端回 JSON pong，否则 30s 踢出）；②`set_time/time` 时间字段与消息类型键 `t` 冲突（改为 `time` 字段）；③方块同步需统一挂 `World.setBlock` 钩子（`bindWorld`）而非散点手动上报，保证爆炸/活塞也同步；④首次加入时 `world_info` 后紧接的方块/掉落物账本回放可能先于世界就绪到达而被丢弃——增加 `_ready` 预就绪缓冲队列；⑤重连关闭旧 socket 时旧 onclose 会误触发重连调度——用 `this.ws !== ws` 守卫只处理当前 socket
+> 阶段 2 新增能力（怪物**方案①事件同步** + 红石缓解）：host 端权威生成怪物 → `mob_spawn` 广播各端创建；`mob_attack` 广播受击扣血 + 位置校正（减少 AI 漂移）；`mob_died` 广播死亡（掉落物由击杀端产出）；`redstone_state` 低频广播 lever/button 状态对齐各端红石网络；`world_info` 携带 `hostId`（客户端据 `isHost` 决定是否自然生成）
+> 阶段 2 验证：`server/test-mp.mjs` 协议 23/23 PASS；浏览器 host + Node 客户端怪物全链路（host 自然生成广播→远端创建、远端攻击扣血、死亡广播→各端移除）
+> 开发中发现并修复：①服务器心跳误用协议层 pong（应用层 JSON ping 需客户端回 JSON pong，否则 30s 踢出）；②`set_time/time` 时间字段与消息类型键 `t` 冲突（改为 `time` 字段）；③方块同步需统一挂 `World.setBlock` 钩子（`bindWorld`）而非散点手动上报，保证爆炸/活塞也同步；④首次加入时 `world_info` 后紧接的方块/掉落物账本回放可能先于世界就绪到达而被丢弃——增加 `_ready` 预就绪缓冲队列；⑤重连关闭旧 socket 时旧 onclose 会误触发重连调度——用 `this.ws !== ws` 守卫只处理当前 socket；⑥`start.cmd server` 子进程继承 `PORT=5173` 误占用 Vite 端口——`:server` 分支启动前 `set "PORT="`
 
 ---
 
@@ -159,6 +161,10 @@
 | `block_set` | `x, y, z, id` | 客户端请求修改方块（含挖掘/放置/爆炸产物） |
 | `drop_spawn` | `x, y, z, name, count` | 请求生成掉落物（服务器分配 id 并广播回执） |
 | `drop_taken` | `id` | 拾取掉落物（从账本删除并广播） |
+| `mob_spawn` | `type, x, y, z` | host 请求生成怪物（服务器分配 id 并广播回执） |
+| `mob_attack` | `id, damage, x, y, z` | 玩家攻击怪物（x,y,z 供位置校正） |
+| `mob_died` | `id` | 怪物死亡（掉落物由击杀端产出） |
+| `redstone_state` | `x, y, z, on` | 红石源状态变化（lever/button 低频广播） |
 | `player_state` | `x,y,z,yaw,pitch,onGround,flying,inWater,selected` | 高频状态（20Hz） |
 | `player_full` | `health,food,saturation,mode,slot,inventory?` | 低频全量（加入时/变更时/重生后） |
 | `attack_player` | `targetId, damage` | 玩家攻击玩家 |
@@ -181,6 +187,10 @@
 | `block_change` | `x,y,z,id,by` | 仲裁后的方块修改广播（**服务器唯一权威**） |
 | `drop_spawn` | `id, x,y,z,name,count` | 掉落物生成广播（含发起者，各端创建同一实体） |
 | `drop_taken` | `id, by` | 掉落物拾取/过期移除广播（by=0 为过期自然消失） |
+| `mob_spawn` | `id, type, x,y,z` | 怪物生成广播（host 权威，各端创建同一实体） |
+| `mob_attack` | `id, fromId, damage, x,y,z` | 怪物受击广播（except 发起者，含位置校正） |
+| `mob_died` | `id` | 怪物死亡广播（except 发起者） |
+| `redstone_state` | `x,y,z,on,by` | 红石源状态广播（except 发起者） |
 | `player_state` | `id, ...(同 C2S 字段)` | 转发某玩家高频状态 |
 | `player_full` | `id, ...(同 C2S 字段)` | 转发某玩家低频全量 |
 | `player_died` | `id` | 某玩家死亡 |
@@ -350,6 +360,8 @@ TNT/爆炸：`MobManager.processExplosions` → `world.setBlock(..., 0)` → 上
 | ② 主机权威怪物流 | 把 `Mob.js` AI 抽成不依赖 DOM 的共享模块（`Mob` 只依赖 `world/physics`，抽离可行性高），服务器跑怪物流，客户端只渲染 | 一致性好 | 需做服务器端 AI 循环 + 快照同步，工作量 +300 行左右 |
 | ③ 关怪 | 局域网玩纯建造 | 零成本 | 无打怪玩法 |
 
+> **选型结论（已实施：方案①事件同步）**：实际代码评估中方案②的真实成本远超预估——`MobTypes` 依赖浏览器渲染模块（`SVGTextures`）、`World` 含 THREE 残留，抽离共享世界 + 服务器 AI 循环 + 快照同步约为方案①两倍工作量且确定性一致性风险高。方案①契合"轻量主机 + 各端自跑"架构，配合**受击位置校正**（`mob_attack` 带攻击者端位置，其它端对齐）可把 AI 漂移控制在可接受范围，符合局域网信任场景。已知局限：非攻击致死（燃烧/掉虚空）各端可能各自产生掉落、远端怪可能因各端 DESPAWN_DISTANCE 差异而数量不完全一致，均接受。
+
 ### 9.3 红石状态（阶段 2+）
 
 - 各端独立跑 `RedstoneSystem`：给定相同世界状态，红石网络会收敛到相同结果，**无需逐 tick 同步**。
@@ -411,10 +423,14 @@ server/
   - `player_leave` 广播携带昵称，远端玩家实体移除 + 聊天系统提示「XXX 离开了游戏」。
 - [x] 首次加入账本回放缓冲：`world_info` 后紧接的方块/掉落物回放先缓存，世界就绪后统一落地（修复首次加入丢包）。
 
-### 阶段 2
+### 阶段 2（已完成）
 
-- 怪物同步方案选型实施（§9.2）。
-- 红石状态缓解（§9.3）。
+- [x] 怪物同步方案选型实施（§9.2，选定**方案①事件同步**）。
+  - host 端权威自然生成（`isHost` 由 `world_info.hostId` 判定）：`trySpawn` 命中 → `mob_spawn` 广播 → 服务器分配唯一 id → 各端 `createMobFromNet` 创建同一实体（去重）。
+  - 玩家攻击：`attackMob` 本地扣血/击退后广播 `mob_attack`（带攻击者端位置）→ 其它端 `applyRemoteMobAttack` 扣血 + 受击反馈 + 位置校正。
+  - 死亡：击杀端在 `mob.dead` 当帧 `dropLoot`（掉落物走阶段 1 机制）+ 广播 `mob_died`；其它端 `applyRemoteMobDeath` 仅播死亡动画不产掉落（防双份）。`diedHandled` 防重复广播/重复掉落。
+- [x] 红石状态缓解（§9.3）。
+  - lever/button 交互与按钮自动关闭触发 `onStateChange` → `redstone_state` 广播 → 其它端 `applyRemoteState` 对齐 `poweredBlocks`/`buttonTimers`，红石网络随之收敛。torch/红石块为恒定电源（方块 id 表达状态，走方块同步）。
 
 ### 阶段 3
 

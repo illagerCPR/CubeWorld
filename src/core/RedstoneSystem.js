@@ -26,6 +26,7 @@ export class RedstoneSystem {
     this.poweredBlocks = new Map(); // "x,y,z" -> boolean
     this.pendingUpdates = new Set(); // 待处理的坐标
     this.buttonTimers = new Map(); // "x,y,z" -> 剩余激活时间
+    this.onStateChange = null;    // 红石源状态回调 (x,y,z,on) => void，由 Game 注入（联机广播）
   }
 
   key(x, y, z) { return `${x},${y},${z}`; }
@@ -38,8 +39,10 @@ export class RedstoneSystem {
     if (def.name === LEVER) {
       const k = this.key(x, y, z);
       const current = this.poweredBlocks.get(k) || false;
-      this.poweredBlocks.set(k, !current);
+      const next = !current;
+      this.poweredBlocks.set(k, next);
       this.scheduleUpdate(x, y, z);
+      if (this.onStateChange) this.onStateChange(x, y, z, next);
       return true;
     }
     
@@ -48,10 +51,28 @@ export class RedstoneSystem {
       this.poweredBlocks.set(k, true);
       this.buttonTimers.set(k, 1.0); // 1秒后自动关闭
       this.scheduleUpdate(x, y, z);
+      if (this.onStateChange) this.onStateChange(x, y, z, true);
       return true;
     }
     
     return false;
+  }
+
+  // 联机远端红石源状态落地（lever/button 对齐，红石网络随之收敛）
+  applyRemoteState(x, y, z, on) {
+    const k = this.key(x, y, z);
+    const bid = this.world.getBlock(x, y, z);
+    const def = BlockRegistry.getById(bid);
+    if (on) {
+      this.poweredBlocks.set(k, true);
+      if (def && (def.name === STONE_BUTTON || def.name === OAK_BUTTON)) {
+        this.buttonTimers.set(k, 1.0);
+      }
+    } else {
+      this.poweredBlocks.set(k, false);
+      this.buttonTimers.delete(k);
+    }
+    this.scheduleUpdate(x, y, z);
   }
 
   // 安排红石更新（标记周围方块需要重新计算信号）
@@ -106,6 +127,7 @@ export class RedstoneSystem {
         this.poweredBlocks.set(k, false);
         const [x, y, z] = k.split(',').map(Number);
         this.scheduleUpdate(x, y, z);
+        if (this.onStateChange) this.onStateChange(x, y, z, false); // 按钮自动关闭也要广播
       } else {
         this.buttonTimers.set(k, newTime);
       }

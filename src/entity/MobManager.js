@@ -50,6 +50,7 @@ export class MobManager {
     this.frame = 0;
     this.spawnEnabled = true; // 联机阶段 0 关闭本地怪物生成
     this.onDropTaken = null;  // 联机拾取回调 (dropId) => void，由 Game 注入（通知服务器移除）
+    this.mobNet = null;       // 联机怪物事件接口（sendMobSpawn/sendMobAttack/sendMobDied），由 Game 注入
   }
 
   // 异步初始化：mob 用私有 skin atlas，不再注入全局 atlas
@@ -162,7 +163,59 @@ export class MobManager {
 
     const mob = new Mob(typeName, this.world);
     mob.position.set(x + 0.5, y, z + 0.5);
+    if (this.mobNet) {
+      // 联机：host 端生成 → 广播 mob_spawn，实体由广播回执创建（各端同 id 一致）
+      this.mobNet.sendMobSpawn(typeName, mob.position.x, mob.position.y, mob.position.z);
+    } else {
+      this.spawnMob(mob);
+    }
+  }
+
+  // 由服务器 mob_spawn 广播创建怪物实体（host 权威生成，各端据此创建；去重防重连重复）
+  createMobFromNet(netId, typeName, x, y, z) {
+    if (this.mobs.some(m => m.netId === netId)) return;
+    if (!MobTypes[typeName]) return;
+    const mob = new Mob(typeName, this.world);
+    mob.netId = netId;
+    mob.position.set(x, y, z);
     this.spawnMob(mob);
+  }
+
+  findMobByNetId(netId) {
+    for (const m of this.mobs) if (m.netId === netId) return m;
+    return null;
+  }
+
+  // 其它端攻击：本端同步扣血 + 受击反馈 + 位置校正（减少各端 AI 漂移）
+  applyRemoteMobAttack(netId, damage, x, y, z) {
+    const mob = this.findMobByNetId(netId);
+    if (!mob || mob.dead) return;
+    mob.health = Math.max(0, mob.health - damage);
+    mob.hitFlash = HIT_FLASH_DURATION;
+    // 血条显示 + 立即刷新
+    if (mob.healthBarSprite) {
+      mob.healthBarFadeTimer = HEALTH_BAR_FADE;
+      mob.healthBarSprite.visible = true;
+      if (mob.healthBarSprite.material) mob.healthBarSprite.material.opacity = 1;
+      this._updateHealthBar(mob);
+    }
+    // 位置校正：向攻击者端位置对齐
+    mob.position.set(x, y, z);
+    if (mob.health <= 0) {
+      mob.dead = true;
+      // 远端攻击致死：死亡广播与掉落由攻击端负责，本端只播死亡动画
+      mob.diedHandled = true;
+      mob.remoteDeath = true;
+    }
+  }
+
+  // 击杀端广播 mob_died：本端同步死亡（不产掉落、不重复广播）
+  applyRemoteMobDeath(netId) {
+    const mob = this.findMobByNetId(netId);
+    if (!mob || mob.dead) return;
+    mob.dead = true;
+    mob.diedHandled = true;
+    mob.remoteDeath = true;
   }
 
   spawnMob(mob) {
@@ -270,7 +323,6 @@ export class MobManager {
         }
         if (mob.healthBarSprite) mob.healthBarSprite.visible = false;
         if (t >= 1) {
-          this.dropLoot(mob);
           this._removeMobResources(mob);
           this.mobs.splice(i, 1);
         }
@@ -338,9 +390,14 @@ export class MobManager {
         }
       }
 
-      // 死亡：触发死亡动画（而非立刻移除）
+      // 死亡：击杀端产出掉落 + 广播；触发死亡动画（而非立刻移除）
       const dist = mob.position.distanceTo(player.position);
       if (mob.dead) {
+        if (!mob.diedHandled) {
+          mob.diedHandled = true; // 只处理一次（防多端重复广播/重复掉落）
+          if (mob.netId != null && this.mobNet) this.mobNet.sendMobDied(mob.netId);
+          if (!mob.remoteDeath) this.dropLoot(mob); // 击杀端（本地死亡）才产掉落；远端死亡由击杀端产出
+        }
         mob.dyingAnim = { progress: 0, total: DEATH_ANIM_DURATION };
         if (mob.healthBarSprite) mob.healthBarSprite.visible = false;
       } else if (dist > DESPAWN_DISTANCE) {
@@ -610,6 +667,10 @@ export class MobManager {
       // 击退（强化版：水平 6.5、上抛 5，更接近原版击退距离）
       closest.knockback.add(rayDir.clone().multiplyScalar(6.5));
       closest.knockback.y = 5;
+      // 联机：上报攻击事件（含位置校正），其它端同步扣血/受击/对齐位置
+      if (closest.netId != null && this.mobNet) {
+        this.mobNet.sendMobAttack(closest.netId, damage, closest.position.x, closest.position.y, closest.position.z);
+      }
       return true;
     }
     return false;
