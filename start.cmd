@@ -86,6 +86,8 @@ for /f "tokens=5" %%P in ('netstat -ano ^| findstr "LISTENING" ^| findstr ":%POR
 goto :eof
 
 :server
+rem clear the inherited PORT=5173 from top of this script so the LAN server binds 3001, not 5173
+set "PORT="
 if not exist "server\node_modules\ws" (
     echo Installing LAN server dependencies ...
     pushd server
