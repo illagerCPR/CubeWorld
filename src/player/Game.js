@@ -25,6 +25,7 @@ import { matchRecipe } from '../core/Crafting.js';
 import { MobManager } from '../entity/MobManager.js';
 import { RedstoneSystem } from '../core/RedstoneSystem.js';
 import { SaveSystem } from '../core/SaveSystem.js';
+import { playerColorCss } from '../net/playerColor.js';
 
 // 触发方块/物品定义注册
 import '../blocks/BlockDefs.js';
@@ -295,11 +296,19 @@ export class Game {
       // 红石源状态（lever/button）：低频广播让各端 poweredBlocks 对齐
       if (this.redstone) this.redstone.onStateChange = (x, y, z, on) => this.net.sendRedstoneState(x, y, z, on);
       this.net.on('time', (t) => { if (this.sky) this.sky.time = t; });
-      this.net.on('chat', ({ from, text }) => { if (this.chatBox) this.chatBox.add(`<${from}> ${text}`); });
-      this.net.on('system', (text) => { if (this.chatBox) this.chatBox.add(text, '#aaa'); });
+      this.net.on('chat', ({ from, fromId, text }) => {
+        if (!this.chatBox) return;
+        if (fromId === 0) { this.chatBox.add(text, '#aaa'); return; } // 服务器系统回复
+        this.chatBox.addSegments([{ text: `<${from}> `, color: playerColorCss(fromId) }, { text, color: '#fff' }]);
+      });
+      this.net.on('system', (m) => {
+        if (!this.chatBox) return;
+        if (m && m.parts) this.chatBox.addSegments(m.parts);
+        else this.chatBox.add(typeof m === 'string' ? m : (m && m.text) || String(m), '#aaa');
+      });
       this.net.on('attacked', ({ damage }) => { this.player.hurt(damage, 'player', true); });
       this.chatBox = new ChatBox(this, (text) => this.net.sendChat(text));
-      this.chatBox.add('已进入局域网世界（阶段2：建造+联机+掉落物+怪物同步），按 T 聊天', '#ff8');
+      this.chatBox.add(`已进入局域网世界 · 房间「${this.net.room || 'default'}」 · 阶段3（多房间+世界落盘+名字颜色），按 T 聊天`, '#ff8');
     }
 
     // 隐藏加载界面

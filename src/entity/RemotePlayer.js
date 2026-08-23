@@ -1,5 +1,6 @@
-// RemotePlayer.js -- 远端玩家实体：方块人模型 + 位置插值 + 昵称标签
+// RemotePlayer.js -- 远端玩家实体：方块人模型 + 位置插值 + 昵称标签（阶段 3：昵称按玩家 id 着色）
 import * as THREE from 'three';
+import { playerColorHue, playerColorCss } from '../net/playerColor.js';
 
 // 简化方块人部件（局部坐标原点在脚 y=0，单位：格）
 const PARTS = [
@@ -11,11 +12,9 @@ const PARTS = [
   { box: [0.02, 0, -0.15, 0.28, 0.6, 0.15], role: 'leg' },
 ];
 
-// 由玩家 id 派生稳定颜色（区分不同玩家）
+// 由玩家 id 派生稳定颜色（与聊天/昵称共用同一套色板，区分不同玩家）
 function playerColor(id) {
-  const hues = [210, 120, 300, 20, 40, 170, 0, 90, 260, 60];
-  const h = hues[Math.abs(id) % hues.length];
-  return new THREE.Color().setHSL(h / 360, 0.6, 0.45);
+  return new THREE.Color().setHSL(playerColorHue(id) / 360, 0.6, 0.45);
 }
 
 export class RemotePlayer {
@@ -64,7 +63,7 @@ export class RemotePlayer {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
     ctx.strokeText(name, 64, 12);
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = playerColorCss(this.id);
     ctx.fillText(name, 64, 12);
     const tex = new THREE.CanvasTexture(cv);
     tex.minFilter = THREE.NearestFilter; tex.magFilter = THREE.NearestFilter;

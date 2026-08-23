@@ -1,4 +1,4 @@
-// test-mp.mjs -- 局域网服务器协议端到端验证脚本（临时，测完删除）
+// test-mp.mjs -- 局域网服务器协议端到端验证脚本（阶段 0~3 回归，临时，测完删除）
 // 用法：node server/test-mp.mjs  （需已启动 node server/index.mjs）
 // 说明：id 从 welcome 动态读取，不依赖绝对 id；房间状态由本脚本自建（先 create_room）
 import WebSocket from 'ws';
@@ -42,11 +42,12 @@ assert('A 收到 world_info seed=12345', !!aWorld && aWorld.seed === 12345);
 
 // B 加入
 const B = await connect('Bob');
-assert('B 收到 welcome（含 A 在线）', !!B && B.queue.find(m => m.t === 'welcome').players.some(p => p.id === A.selfId));
+assert('B 收到 welcome', !!B && !!B.queue.find(m => m.t === 'welcome'));
 B.ws.send(JSON.stringify({ t: 'join_room' }));
 await sleep(250);
 const bWorld = B.queue.find(m => m.t === 'world_info');
 assert('B 收到 world_info seed=12345', !!bWorld && bWorld.seed === 12345);
+assert('B 收到 A 的 player_join 回放（进房后回放已有玩家）', !!B.queue.find(m => m.t === 'player_join' && m.id === A.selfId));
 assert('A 收到 player_join Bob', !!A.queue.find(m => m.t === 'player_join' && m.id === B.selfId && m.name === 'Bob'));
 
 // A 改方块 -> B 收到
@@ -155,8 +156,50 @@ await sleep(200);
 const eRs = E.queue.find(m => m.t === 'redstone_state' && m.x === 30);
 assert('E 收到 redstone_state on', !!eRs && eRs.on === true);
 
+// --- 阶段 3：多房间隔离 + 世界落盘协议 + 服务器命令 ---
+// F 创建房间 alpha（seed=555）
+const F = await connect('Frank');
+F.ws.send(JSON.stringify({ t: 'create_room', seed: 555, mode: 'survival', room: 'alpha' }));
+await sleep(250);
+const fWorld = F.queue.find(m => m.t === 'world_info');
+assert('F 创建房间 alpha seed=555', !!fWorld && fWorld.seed === 555 && fWorld.room === 'alpha');
+
+// G 加入 alpha
+const G = await connect('Grace');
+G.ws.send(JSON.stringify({ t: 'join_room', room: 'alpha' }));
+await sleep(250);
+const gWorld = G.queue.find(m => m.t === 'world_info');
+assert('G 加入 alpha 收到 seed=555', !!gWorld && gWorld.seed === 555 && gWorld.room === 'alpha');
+assert('G 收到 alpha 内已有玩家 F 的 player_join 回放', !!G.queue.find(m => m.t === 'player_join' && m.id === F.selfId));
+assert('F 收到 G 加入 alpha 的 player_join', !!F.queue.find(m => m.t === 'player_join' && m.id === G.selfId));
+
+// alpha 内改方块 -> G 收到
+F.ws.send(JSON.stringify({ t: 'block_set', x: 50, y: 64, z: 50, id: 3 }));
+await sleep(200);
+assert('G 收到 alpha 内 block_change(50,64,50)', !!G.queue.find(m => m.t === 'block_change' && m.x === 50 && m.y === 64 && m.z === 50));
+
+// 房间隔离：默认房间的 E 收不到 alpha 的方块改动；G 收不到默认房间的方块回放
+assert('默认房间 E 未收到 alpha 方块改动', !E.queue.some(m => m.t === 'block_change' && m.x === 50));
+assert('G 未收到默认房间方块(10,64,20)回放', !G.queue.some(m => m.t === 'block_change' && m.x === 10 && m.y === 64 && m.z === 20));
+
+// 加入不存在房间 beta -> 自动创建，首个加入者成为 host
+const H = await connect('Harry');
+H.ws.send(JSON.stringify({ t: 'join_room', room: 'beta' }));
+await sleep(250);
+const hWorld = H.queue.find(m => m.t === 'world_info');
+assert('H 加入 beta 自动创建且成为 host', !!hWorld && Number.isInteger(hWorld.seed) && hWorld.hostId === H.selfId);
+
+// 服务器命令 /seed 与 /rooms（从 F 发起，F 在 alpha）
+F.ws.send(JSON.stringify({ t: 'chat', text: '/seed' }));
+await sleep(200);
+const seedReply = F.queue.find(m => m.t === 'chat' && m.fromId === 0 && m.text.includes('seed=555'));
+assert('F 收到 /seed 回复(seed=555)', !!seedReply);
+F.ws.send(JSON.stringify({ t: 'chat', text: '/rooms' }));
+await sleep(200);
+assert('F 收到 /rooms 回复(含 alpha)', !!F.queue.find(m => m.t === 'chat' && m.fromId === 0 && m.text.includes('alpha')));
+
 // 断开
-A.ws.close(); E.ws.close();
+A.ws.close(); E.ws.close(); F.ws.close(); G.ws.close(); H.ws.close();
 await sleep(100);
 
 const failCount = results.filter(r => !r[1]).length;

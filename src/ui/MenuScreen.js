@@ -94,9 +94,14 @@ export class MenuScreen {
         <div style="font-size:15px; font-weight:bold; margin-bottom:8px;">🌐 局域网联机</div>
         <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center; font-size:13px;">
           <label>昵称</label>
-          <input type="text" id="mp-name" maxlength="16" style="padding:5px 8px; background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; width:100px; font-size:13px;" placeholder="玩家" />
+          <input type="text" id="mp-name" maxlength="16" style="padding:5px 8px; background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; width:90px; font-size:13px;" placeholder="玩家" />
           <label>服务器</label>
           <input type="text" id="mp-url" style="padding:5px 8px; background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; flex:1; font-size:13px;" value="ws://127.0.0.1:3001/ws" />
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center; font-size:13px;">
+          <label>房间名</label>
+          <input type="text" id="mp-room" maxlength="24" style="padding:5px 8px; background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; width:120px; font-size:13px;" value="默认世界" />
+          <span style="font-size:11px; color:#aaa;">同名房间共享世界（服务器落盘，重启不丢）；开新世界换个房间名</span>
         </div>
         <div style="display:flex; gap:10px; align-items:center;">
           <button id="mp-host" style="padding:8px 16px; font-size:13px; background:#2a5a8a; color:#fff; border:2px solid #1a3a5a; cursor:pointer; font-weight:bold;">创建房间</button>
@@ -105,7 +110,8 @@ export class MenuScreen {
         </div>
         <div style="font-size:11px; color:#aaa; margin-top:6px; line-height:1.6;">
           先运行 <b>node server/index.mjs</b> 开启服务器；创建房间决定世界种子，其它电脑填开房机 IP 加入。<br/>
-          联机支持：方块共建/破坏、玩家可见与移动、互殴、聊天(T)。联机模式不保存本地存档。
+          联机支持：方块共建/破坏、玩家可见与移动、互殴、聊天(T)。联机模式不保存本地存档。<br/>
+          服务器按<b>房间名</b>把世界存到磁盘（<b>server/world/</b>），重启服务器后同名房间自动恢复原世界。
         </div>
       </div>
     `;
@@ -172,10 +178,11 @@ export class MenuScreen {
   _mpConnect(kind) {
     const name = this.el.querySelector('#mp-name')?.value.trim() || '玩家';
     const url = this.el.querySelector('#mp-url')?.value.trim() || 'ws://127.0.0.1:3001/ws';
+    const room = this.el.querySelector('#mp-room')?.value.trim() || 'default';
     this.setMpStatus('连接中...', '#9cf');
     this.net.connect(url, name);
-    if (kind === 'host') this.net.createRoom(this._readSeed(), this.selectedMode);
-    else this.net.joinRoom();
+    if (kind === 'host') this.net.createRoom(this._readSeed(), this.selectedMode, room);
+    else this.net.joinRoom(room);
   }
 
   setMpStatus(text, color = '#9cf') {

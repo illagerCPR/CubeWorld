@@ -1,6 +1,7 @@
 // NetworkManager.js -- 局域网联机网络层：连接/重连、消息路由、方块/玩家/掉落物/聊天同步
 import { MSG } from '../../server/protocol.js';
 import { RemotePlayer } from '../entity/RemotePlayer.js';
+import { playerColorCss } from './playerColor.js';
 
 const RECONNECT_MAX = 8; // 断线自动重连最大尝试次数
 
@@ -22,6 +23,7 @@ export class NetworkManager {
     this._pendingMobs = [];       // 世界就绪前的 mob_spawn 缓存
     this._pendingOpen = [];       // 连接打开前的待发消息
     this.isHost = false;          // 是否房间 host（host 端负责怪物自然生成）
+    this.room = 'default';        // 当前房间名（阶段 3：同名房间共享同一世界）
     this._url = null;             // 服务器地址（重连用）
     this._reconnectAttempt = 0;   // 当前重连尝试次数
     this._reconnectTimer = null;  // 重连定时器
@@ -160,13 +162,14 @@ export class NetworkManager {
         for (const p of (msg.players || [])) this._queueOrAdd(p);
         break;
       case MSG.WORLD_INFO:
+        this.room = msg.room || this.room;
         if (this._ready && this.game && this.game.world && this.game.running) {
           // 断线重连成功：世界已在运行，不重启，仅同步时间/模式并刷新远端玩家
           this.isHost = (msg.hostId === this.selfId);
           if (this.game.sky) this.game.sky.time = msg.time;
           if (msg.mode && this.game.player) this.game.player.setMode(msg.mode);
           this.onWorldStarted();
-          this._emit('system', '已重新连接服务器');
+          this._emit('system', `已重新连接服务器（房间 ${this.room}）`);
           this.sendPlayerFull();
         } else {
           this.isHost = (msg.hostId === this.selfId);
@@ -175,11 +178,11 @@ export class NetworkManager {
         break;
       case MSG.PLAYER_JOIN:
         this._queueOrAdd(msg);
-        this._emit('system', `${msg.name} 加入了游戏`);
+        this._emit('system', { parts: [{ text: msg.name, color: playerColorCss(msg.id) }, { text: ' 加入了游戏' }] });
         break;
       case MSG.PLAYER_LEAVE:
         this._removeRemote(msg.id);
-        this._emit('system', `${msg.name || '玩家'} 离开了游戏`);
+        this._emit('system', { parts: [{ text: msg.name || '玩家', color: playerColorCss(msg.id) }, { text: ' 离开了游戏' }] });
         break;
       case MSG.BLOCK_CHANGE:
         if (this._ready) this.applyRemoteBlock(msg.x, msg.y, msg.z, msg.id);
@@ -311,8 +314,8 @@ export class NetworkManager {
   sendGamemode(mode) { this._send(MSG.GAMEMODE, { mode }); }
   sendSetTime(t) { this._send(MSG.SET_TIME, { time: t }); }
   sendChat(text) { this._send(MSG.CHAT, { text }); }
-  createRoom(seed, mode) { this._sendQueued(MSG.CREATE_ROOM, { seed, mode }); }
-  joinRoom() { this._sendQueued(MSG.JOIN_ROOM, {}); }
+  createRoom(seed, mode, room) { this._sendQueued(MSG.CREATE_ROOM, { seed, mode, room }); }
+  joinRoom(room) { this._sendQueued(MSG.JOIN_ROOM, { room }); }
 
   close() {
     this._explicitClose = true; // 主动关闭：不触发自动重连

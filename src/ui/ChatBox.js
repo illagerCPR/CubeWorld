@@ -21,10 +21,23 @@ export class ChatBox {
     this._render();
   }
 
+  // 分段消息：parts = [{ text, color }, ...]，逐段转义 + 着色（用于"玩家名着色"）
+  addSegments(parts) {
+    this.messages.push({ parts });
+    if (this.messages.length > 8) this.messages.shift();
+    this._render();
+  }
+
   _render() {
-    this.el.innerHTML = this.messages.map(m =>
-      `<div style="color:${m.color}; font-size:13px; text-shadow:1px 1px 0 #000; line-height:1.4; background:rgba(0,0,0,0.35); padding:2px 6px; border-radius:3px;">${this._esc(m.text)}</div>`
-    ).join('');
+    this.el.innerHTML = this.messages.map(m => {
+      let inner;
+      if (m.parts) {
+        inner = m.parts.map(p => `<span style="color:${p.color || '#fff'}">${this._esc(p.text)}</span>`).join('');
+      } else {
+        inner = `<span style="color:${m.color || '#fff'}">${this._esc(m.text)}</span>`;
+      }
+      return `<div style="font-size:13px; text-shadow:1px 1px 0 #000; line-height:1.4; background:rgba(0,0,0,0.35); padding:2px 6px; border-radius:3px;">${inner}</div>`;
+    }).join('');
   }
 
   _esc(s) {

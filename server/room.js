@@ -1,5 +1,6 @@
-// room.js -- 房间管理：玩家集合 + 方块账本 + 消息路由（MVP 单房间实现）
-// 职责：方块仲裁(last-write-wins)、玩家状态中继、host 权限（改模式/设时间）
+// room.js -- 房间管理：玩家集合 + 方块账本 + 消息路由（多房间，世界按房间名隔离）
+// 职责：方块仲裁(last-write-wins)、玩家状态中继、host 权限（改模式/设时间）、世界落盘回调
+// 阶段 3：每个房间独立持有世界（seed/blocks/drops/时间），变更即落盘，服务器重启后可恢复
 import { MSG } from './protocol.js';
 
 // 安全整数/浮点转换，防脏包
@@ -13,7 +14,10 @@ function safeNum(v, fallback = 0) {
 }
 
 export class Room {
-  constructor() {
+  // name: 房间名（同名房间共享同一世界）；onSave: (room) => void 世界变更落盘回调（index.mjs 注入）
+  constructor(name = 'default', onSave = null) {
+    this.name = String(name).trim() || 'default';
+    this.onSave = onSave;
     this.players = new Map();   // id -> player
     this.blocks = new Map();    // "x,y,z" -> id  (方块账本主副本)
     this.drops = new Map();     // dropId -> {x,y,z,name,count,spawnedAt}  (掉落物账本主副本)
@@ -25,17 +29,41 @@ export class Room {
     this.nextId = 1;
   }
 
-  addPlayer(ws, name) {
-    const id = this.nextId++;
-    const p = {
-      id, ws, name,
-      mode: 'survival',
-      health: 20, food: 20, saturation: 5,
-      pos: { x: 0.5, y: 66, z: 0.5, yaw: 0, pitch: 0 },
-      onGround: false, flying: false, inWater: false,
-      selected: 0, alive: true,
-    };
-    this.players.set(id, p);
+  // 从磁盘快照恢复房间世界状态（服务器重启后复活），过期掉落物丢弃；旧 host 已不在线，由新进玩家接管
+  restore(snap) {
+    this.seed = safeInt(snap.seed, this.seed);
+    this.time = safeNum(snap.time, this.time);
+    this.nextDropId = Math.max(1, safeInt(snap.nextDropId, 1));
+    this.nextMobId = Math.max(1, safeInt(snap.nextMobId, 1));
+    this.blocks = new Map();
+    for (const [k, id] of (snap.blocks || [])) {
+      if (typeof k === 'string') this.blocks.set(k, safeInt(id, 0));
+    }
+    this.drops = new Map();
+    const now = Date.now();
+    for (const d of (snap.drops || [])) {
+      if (!d || typeof d.id !== 'number' || !d.name) continue;
+      if (now - safeNum(d.spawnedAt, now) > 300000) continue; // 过期掉落物不恢复
+      this.drops.set(d.id, {
+        x: safeNum(d.x), y: safeNum(d.y), z: safeNum(d.z),
+        name: String(d.name).slice(0, 32),
+        count: Math.min(64, Math.max(1, safeInt(d.count, 1))),
+        spawnedAt: safeNum(d.spawnedAt, now),
+      });
+    }
+    this.hostId = null;
+  }
+
+  // 世界状态变更后落盘（回调由 index.mjs 注入为 store.saveRoom）
+  save() { if (this.onSave) this.onSave(this); }
+
+  addPlayer(p) {
+    p.mode = 'survival';
+    p.health = 20; p.food = 20; p.saturation = 5;
+    p.pos = { x: 0.5, y: 66, z: 0.5, yaw: 0, pitch: 0 };
+    p.onGround = false; p.flying = false; p.inWater = false;
+    p.selected = 0; p.alive = true;
+    this.players.set(p.id, p);
     return p;
   }
 
@@ -65,26 +93,35 @@ export class Room {
     if (this.hostId === id) {
       this.hostId = this.players.size ? this.players.keys().next().value : null;
     }
-    console.log(`[!] ${p.name} 离开，剩余 ${this.players.size} 人`);
+    console.log(`[!] ${p.name} 离开房间「${this.name}」，剩余 ${this.players.size} 人`);
   }
 
   createRoom(player, msg) {
-    this.seed = safeInt(msg.seed, Math.floor(Math.random() * 2147483647));
+    // 已有世界的房间（重复开房/从磁盘恢复）沿用原 seed，仅首次开房时由 host 决定种子
+    if (this.seed === null) this.seed = safeInt(msg.seed, Math.floor(Math.random() * 2147483647));
     player.mode = msg.mode === 'creative' ? 'creative' : (msg.mode === 'spectator' ? 'spectator' : 'survival');
     this.hostId = player.id;
-    this.sendTo(player, MSG.ROOM_CREATED, { roomId: 'lan' });
-    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: player.mode, time: this.time, hostId: this.hostId });
+    this.sendTo(player, MSG.ROOM_CREATED, { roomId: this.name });
+    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: player.mode, time: this.time, hostId: this.hostId, room: this.name });
     this.broadcast(MSG.PLAYER_JOIN, { id: player.id, name: player.name, mode: player.mode, pos: player.pos }, player.id);
-    console.log(`[+] ${player.name} 创建房间 seed=${this.seed} (host)`);
+    this.save();
+    console.log(`[+] ${player.name} 创建房间「${this.name}」seed=${this.seed} (host)`);
   }
 
   joinRoom(player, msg) {
-    // 房间不存在（尚未创建）时首个加入者自动成为 host
+    // 房间世界不存在（尚未创建/无存档）时，首个加入者自动成为 host 并随机生成世界
     if (this.seed === null) {
-      this.createRoom(player, { seed: 0, mode: 'survival' });
+      this.createRoom(player, { seed: Math.floor(Math.random() * 2147483647), mode: 'survival' });
       return;
     }
-    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId });
+    // 无 host 时（如房间从磁盘恢复且暂无玩家在线）首个加入者接管 host
+    if (this.hostId === null || !this.players.has(this.hostId)) this.hostId = player.id;
+    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId, room: this.name });
+    // 回放现存玩家：加入者立即可见房间内已有玩家
+    for (const p of this.players.values()) {
+      if (p.id === player.id) continue;
+      this.sendTo(player, MSG.PLAYER_JOIN, { id: p.id, name: p.name, mode: p.mode, pos: p.pos });
+    }
     // 回放方块账本：新玩家加入即见世界现状
     for (const [key, id] of this.blocks) {
       const [x, y, z] = key.split(',').map(Number);
@@ -95,7 +132,7 @@ export class Room {
       this.sendTo(player, MSG.DROP_SPAWN, { id, x: d.x, y: d.y, z: d.z, name: d.name, count: d.count });
     }
     this.broadcast(MSG.PLAYER_JOIN, { id: player.id, name: player.name, mode: player.mode, pos: player.pos }, player.id);
-    console.log(`[+] ${player.name} 加入房间 seed=${this.seed}`);
+    console.log(`[+] ${player.name} 加入房间「${this.name}」seed=${this.seed} (${this.players.size}人)`);
   }
 
   modeOfHost() {
@@ -131,6 +168,7 @@ export class Room {
     if (id === 0) this.blocks.delete(`${x},${y},${z}`);
     else this.blocks.set(`${x},${y},${z}`, id);
     this.broadcast(MSG.BLOCK_CHANGE, { x, y, z, id, by: player.id });
+    this.save();
   }
 
   // 掉落物：客户端请求生成 -> 服务器分配唯一 id 并广播（含发起者，各端据此创建同一实体）
@@ -142,6 +180,7 @@ export class Room {
     const id = this.nextDropId++;
     this.drops.set(id, { x, y, z, name, count, spawnedAt: Date.now() });
     this.broadcast(MSG.DROP_SPAWN, { id, x, y, z, name, count });
+    this.save();
     console.log(`[掉落] ${player.name} 生成 ${name}x${count} @(${x},${y},${z}) id=${id}`);
   }
 
@@ -151,17 +190,21 @@ export class Room {
     if (!this.drops.has(id)) return;
     this.drops.delete(id);
     this.broadcast(MSG.DROP_TAKEN, { id, by: player.id });
+    this.save();
   }
 
   // 清理过期掉落物（5 分钟），广播移除（by=0 表示过期自然消失）
   expireDrops() {
     const now = Date.now();
+    let changed = false;
     for (const [id, d] of this.drops) {
       if (now - d.spawnedAt > 300000) {
         this.drops.delete(id);
         this.broadcast(MSG.DROP_TAKEN, { id, by: 0 });
+        changed = true;
       }
     }
+    if (changed) this.save();
   }
 
   // 怪物事件（阶段 2 方案①：服务器只分配 id + 中继，不跑 AI）
@@ -250,6 +293,7 @@ export class Room {
     if (player.id !== this.hostId) return; // 仅 host 可设时间
     this.time = Math.min(1, Math.max(0, safeNum(msg.time, this.time)));
     this.broadcast(MSG.TIME, { time: this.time });
+    this.save();
     console.log(`[时间] host=${this.hostId} 设定 time=${this.time}`);
   }
 

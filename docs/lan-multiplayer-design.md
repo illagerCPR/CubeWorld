@@ -1,7 +1,7 @@
 # Project-MC 局域网联机设计文档
 
-> 版本：v0.4（阶段 2 已实现并通过验证）
-> 状态：阶段 0（MVP）完成（2026-08-21）；阶段 1（掉落物/断线重连）完成（2026-08-22）；阶段 2（怪物事件同步 + 红石状态缓解）完成（2026-08-22）
+> 版本：v0.5（阶段 3 已实现并通过验证）
+> 状态：阶段 0（MVP）完成（2026-08-21）；阶段 1（掉落物/断线重连）完成（2026-08-22）；阶段 2（怪物事件同步 + 红石状态缓解）完成（2026-08-22）；阶段 3（多房间 + 世界落盘 + 玩家名着色）完成（2026-08-23）
 > 阶段 0 新增：`server/`（index/room/protocol）、`src/net/NetworkManager.js`、`src/entity/RemotePlayer.js`、`src/ui/ChatBox.js`
 > 阶段 0 改动：`World.js`（setBlock 上报钩子）、`Game.js`（联机集成）、`MobManager.js`（spawnEnabled）、`MenuScreen.js`/`main.js`（联机入口）、`start.cmd`（server 子命令）
 > 阶段 0 验证：`server/test-mp.mjs` 协议 13/13 PASS；浏览器 host + Node 客户端双端链路验证通过
@@ -9,7 +9,9 @@
 > 阶段 1 验证：`server/test-mp.mjs` 协议 19/19 PASS；浏览器 host + Node 客户端掉落物全链路（生成→广播→拾取→移除）+ 两轮服务器宕机/重启断线重连验证通过
 > 阶段 2 新增能力（怪物**方案①事件同步** + 红石缓解）：host 端权威生成怪物 → `mob_spawn` 广播各端创建；`mob_attack` 广播受击扣血 + 位置校正（减少 AI 漂移）；`mob_died` 广播死亡（掉落物由击杀端产出）；`redstone_state` 低频广播 lever/button 状态对齐各端红石网络；`world_info` 携带 `hostId`（客户端据 `isHost` 决定是否自然生成）
 > 阶段 2 验证：`server/test-mp.mjs` 协议 23/23 PASS；浏览器 host + Node 客户端怪物全链路（host 自然生成广播→远端创建、远端攻击扣血、死亡广播→各端移除）
-> 开发中发现并修复：①服务器心跳误用协议层 pong（应用层 JSON ping 需客户端回 JSON pong，否则 30s 踢出）；②`set_time/time` 时间字段与消息类型键 `t` 冲突（改为 `time` 字段）；③方块同步需统一挂 `World.setBlock` 钩子（`bindWorld`）而非散点手动上报，保证爆炸/活塞也同步；④首次加入时 `world_info` 后紧接的方块/掉落物账本回放可能先于世界就绪到达而被丢弃——增加 `_ready` 预就绪缓冲队列；⑤重连关闭旧 socket 时旧 onclose 会误触发重连调度——用 `this.ws !== ws` 守卫只处理当前 socket；⑥`start.cmd server` 子进程继承 `PORT=5173` 误占用 Vite 端口——`:server` 分支启动前 `set "PORT="`
+> 阶段 3 新增能力（服务器能力增强）：**多房间**（同名房间共享同一世界，世界按房间名隔离；`welcome` 不再带玩家列表，进房后由 `joinRoom` 回放已有玩家）；**世界落盘**（`server/world/<房间名>.json`，方块/掉落物/种子/时间/计数器随变更保存，服务器重启后同名房间自动恢复，过期掉落物不恢复）；**换房/新建世界**（主菜单「房间名」决定进哪个世界，新房间名=新世界，游戏内 `/rooms` `/seed` 命令查看）；**玩家名着色**（昵称标签/聊天/进出提示按玩家 id 稳定配色，新增 `src/net/playerColor.js`）
+> 阶段 3 验证：`server/test-mp.mjs` 协议 **34/34 PASS**（新增多房间隔离/自动建房/命令断言）+ `server/test-store.mjs` 落盘往返 **15/15 PASS** + 服务器重启后同名房间世界恢复 e2e **4/4 PASS** + 浏览器双端冒烟（开房/加入/着色）通过
+> 开发中发现并修复：①服务器心跳误用协议层 pong（应用层 JSON ping 需客户端回 JSON pong，否则 30s 踢出）；②`set_time/time` 时间字段与消息类型键 `t` 冲突（改为 `time` 字段）；③方块同步需统一挂 `World.setBlock` 钩子（`bindWorld`）而非散点手动上报，保证爆炸/活塞也同步；④首次加入时 `world_info` 后紧接的方块/掉落物账本回放可能先于世界就绪到达而被丢弃——增加 `_ready` 预就绪缓冲队列；⑤重连关闭旧 socket 时旧 onclose 会误触发重连调度——用 `this.ws !== ws` 守卫只处理当前 socket；⑥`start.cmd server` 子进程继承 `PORT=5173` 误占用 Vite 端口——`:server` 分支启动前 `set "PORT="`；⑦多房间化后 `welcome` 无法携带玩家列表（hello 时尚未进房）——改为 `joinRoom` 回放已有玩家，且磁盘恢复的房间无 host 时由首个加入者接管；⑧`store.saveRoom` 序列化掉落物时漏掉 `id` 字段导致恢复被丢弃——改为 `[...drops.entries()]` 携带 id
 
 ---
 
@@ -155,8 +157,8 @@
 | `t` | 字段 | 说明 |
 |---|---|---|
 | `hello` | `name, version` | 连接握手，登记昵称 |
-| `create_room` | `name, seed, mode, slot?` | 开房：决定世界 seed（唯一来源） |
-| `join_room` | `room?` | 加入默认房间（单房间实现） |
+| `create_room` | `name, seed, mode, room?` | 开房：决定世界 seed（唯一来源）；`room` 指定房间名（缺省 `default`） |
+| `join_room` | `room?` | 加入指定房间（同名房间共享同一世界；房间不存在则自动创建并随机 seed，首个加入者成为 host） |
 | `leave_room` | — | 主动退出 |
 | `block_set` | `x, y, z, id` | 客户端请求修改方块（含挖掘/放置/爆炸产物） |
 | `drop_spawn` | `x, y, z, name, count` | 请求生成掉落物（服务器分配 id 并广播回执） |
@@ -179,8 +181,8 @@
 
 | `t` | 字段 | 说明 |
 |---|---|---|
-| `welcome` | `selfId, players: [{id,name,pos}]` | 握手回执 + 当前在线列表 |
-| `world_info` | `seed, mode, time` | 客户端据此生成世界（进入房间后下发） |
+| `welcome` | `selfId, players: []` | 握手回执（**players 恒为空**：hello 时尚未进房，进房后由 `joinRoom` 回放已有玩家） |
+| `world_info` | `seed, mode, time, hostId, room` | 客户端据此生成世界（进入房间后下发）；`room` 为房间名 |
 | `room_created` | `roomId` | 开房确认 |
 | `player_join` | `id, name, pos, mode` | 新玩家进入 |
 | `player_leave` | `id` | 玩家离开 |
@@ -374,8 +376,9 @@ TNT/爆炸：`MobManager.processExplosions` → `world.setBlock(..., 0)` → 上
 
 ```
 server/
-  index.mjs        # 入口：node:http 监听 + ws upgrade，房间生命周期
-  room.js          # Room 类：seed、players Map、modifiedBlocks 主副本、time
+  index.mjs        # 入口：node:http 监听 + ws upgrade，房间生命周期（RoomManager 多房间）
+  room.js          # Room 类：seed、players Map、modifiedBlocks 主副本、time、restore 恢复
+  store.js         # 世界落盘：server/world/<房间名>.json 读写、房间名安全化
   protocol.js      # 消息类型常量 + 轻量字段校验（防脏包）
   package.json     # 依赖：ws（^8）
 ```
@@ -395,7 +398,9 @@ server/
   - `attack_player` → 校验目标在线 → 扣服务器记录的 health → 广播 `attack_player`（若死亡发 `player_died`）。
   - `set_time`（仅 host）→ 更新 `time` → 广播。
 - 心跳：每 15s ping，30s 无 pong 踢出并广播 `player_leave`。
-- 单房间实现（MVP），房间内任意加入；多房间为阶段 3 扩展。
+- 多房间（阶段 3）：`index.mjs` 持 `RoomManager = Map<房间名, Room>`，`create_room/join_room` 带 `room` 字段选房；同名房间共享同一世界，世界按房间名隔离互不可见。
+- 世界落盘（阶段 3）：`store.js` 把房间世界写入 `server/world/<房间名>.json`（方块账本/掉落物/seed/时间/计数器），方块/掉落物变更即保存，SIGINT/SIGTERM 全量保存；服务器重启后同名房间经 `Room.restore` 恢复，过期掉落物不恢复、无 host 时首个加入者接管。
+- 服务器聊天命令（阶段 3）：`/rooms` 列出房间、`/seed` 查看当前世界种子、`/help` 帮助（仅回给发起者，`fromId=0`）。
 
 ---
 
@@ -432,9 +437,25 @@ server/
 - [x] 红石状态缓解（§9.3）。
   - lever/button 交互与按钮自动关闭触发 `onStateChange` → `redstone_state` 广播 → 其它端 `applyRemoteState` 对齐 `poweredBlocks`/`buttonTimers`，红石网络随之收敛。torch/红石块为恒定电源（方块 id 表达状态，走方块同步）。
 
-### 阶段 3
+### 阶段 3（已完成）
 
-- 服务器世界落盘/换房、多房间、玩家名颜色、观战、插值优化、服务器配置面板。
+- [x] 多房间（同名房间共享同一世界，按房间名隔离）。
+  - 服务器 `RoomManager = Map<房间名, Room>`；`create_room`/`join_room` 带 `room` 字段，缺省 `default`；同名房间返回同一 `Room`（种子/方块/掉落物共享），不同房间完全隔离（互不广播、互不回放）。
+  - 加入不存在房间自动创建（随机 seed，首个加入者成为 host）；磁盘恢复的房间无 host 时首个加入者接管。
+  - `welcome.players` 恒为空（hello 时尚未进房），进房后由 `joinRoom` 向新玩家回放房间内已有玩家（`player_join`），客户端缓冲直至世界就绪。
+- [x] 世界落盘（重启不丢世界）。
+  - 新增 `server/store.js`：`saveRoom`/`loadRooms`/`roomFileName`，数据写 `server/world/<房间名>.json`（方块账本/掉落物/seed/时间/nextDropId/nextMobId）。
+  - 方块、掉落物（生成/拾取/过期）、时间变更即落盘；SIGINT/SIGTERM 全量落盘；重启后同名房间 `Room.restore` 恢复，过期掉落物（>5min）不恢复。
+- [x] 换房/新建世界。
+  - 主菜单「局域网联机」新增**房间名**输入框：同一房间名 = 进同一世界（含落盘恢复）；换一个房间名 = 换世界/新建世界（host 在创建时决定该房 seed）。
+  - 服务器聊天命令 `/rooms`（列出房间）、`/seed`（当前种子）、`/help`。
+- [x] 玩家名着色。
+  - 新增 `src/net/playerColor.js`（`playerColorHue`/`playerColorCss`，按玩家 id 稳定配色，id=0 为服务器系统色）。
+  - 应用点：远端玩家昵称标签（`RemotePlayer._makeNameSprite` 填充色）、聊天消息 `<名字>`（`ChatBox.addSegments` 分段转义着色）、进出提示（「X 加入了/离开了游戏」名字着色）。
+
+### 阶段 4（规划）
+
+- 观战、远端玩家插值优化、服务器配置面板。
 
 ---
 

@@ -23,8 +23,9 @@ game.onExit = () => {
   menu.show();
 };
 
-// 联机：收到世界信息后用服务器 seed 启动本地世界
-net.on('world_info', async ({ seed, mode, time }) => {
+// 联机：收到世界信息后用服务器 seed 启动本地世界（msg.room 用于房间展示）
+net.on('world_info', async ({ seed, mode, time, room }) => {
+  net.room = room || net.room || 'default';
   menu.hide();
   await game.start(mode, seed, null, 0, false, true);
   game.sky.time = time;
