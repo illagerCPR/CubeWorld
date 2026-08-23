@@ -45,4 +45,7 @@ export const MSG = {
   CHAT: 'chat',
   PING: 'ping',
   PONG: 'pong',
+
+  // 服务器管理（阶段 4）：踢出玩家（客户端停止自动重连）
+  KICKED: 'kicked',
 };

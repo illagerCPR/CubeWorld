@@ -248,6 +248,14 @@ export class NetworkManager {
       case MSG.PING:
         this._send(MSG.PONG, { seq: msg.seq });   // 回应用层心跳，防服务器踢出
         break;
+      case MSG.KICKED:
+        // 服务器管理面板踢出：停止自动重连并断开
+        this._explicitClose = true;
+        if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+        if (this.ws) { try { this.ws.close(); } catch {} }
+        this.connected = false;
+        if (this.onStatusChange) this.onStatusChange('closed', msg.reason || '已被服务器移出');
+        break;
       default: break;
     }
   }
@@ -289,6 +297,7 @@ export class NetworkManager {
   // 每帧调用：节流上报本地玩家状态
   update(dt) {
     if (!this.connected || !this.game.world) return;
+    if (this.game.spectating) return; // 观战中不上报位置（避免观战者被吸附到目标处广播出去）
     this._stateTimer -= dt;
     if (this._stateTimer > 0) return;
     this._stateTimer = this._stateInterval;

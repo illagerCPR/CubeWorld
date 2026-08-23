@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Project-MC 服务器管理面板</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: #1b1f27; color: #e6e6e6;
+         font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .sub { color: #8a93a3; font-size: 13px; margin-bottom: 20px; }
+  .card { background: #242a36; border: 1px solid #3a4252; border-radius: 8px;
+          padding: 16px 18px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 16px; color: #8fd3ff; }
+  .grid { display: flex; gap: 24px; flex-wrap: wrap; }
+  .cfg-item { margin-bottom: 10px; }
+  .cfg-item label { display: block; font-size: 13px; color: #b8c0cc; margin-bottom: 4px; }
+  .cfg-item input { width: 200px; padding: 6px 8px; background: #1b1f27; color: #e6e6e6;
+                    border: 1px solid #4a5264; border-radius: 4px; }
+  button { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer;
+           font-weight: bold; color: #fff; }
+  .btn-primary { background: #2f6f9f; }
+  .btn-danger { background: #9f3a3a; }
+  .btn-sm { padding: 3px 10px; font-size: 12px; }
+  .btn-warn { background: #8a6f2f; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #333c4c; }
+  th { color: #8a93a3; font-weight: normal; }
+  .room-title { font-size: 15px; font-weight: bold; color: #ffd88f; margin-bottom: 8px; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px;
+         background: #3a4252; color: #c8d0dc; margin-left: 6px; }
+  .tag-host { background: #7a4a2f; color: #ffd88f; }
+  .empty { color: #7a8394; font-style: italic; }
+  .toast { position: fixed; right: 24px; bottom: 24px; padding: 10px 18px; border-radius: 6px;
+           background: #2f6f9f; color: #fff; opacity: 0; transition: opacity .3s; }
+  .toast.err { background: #9f3a3a; }
+  textarea { width: 100%; min-height: 40px; padding: 8px; background: #1b1f27; color: #e6e6e6;
+             border: 1px solid #4a5264; border-radius: 4px; font-family: inherit; }
+</style>
+</head>
+<body>
+  <h1>🖥 Project-MC 服务器管理面板</h1>
+  <div class="sub" id="server-line">加载中…</div>
+
+  <div class="card">
+    <h2>服务器配置</h2>
+    <div class="grid">
+      <div class="cfg-item">
+        <label>掉落物过期毫秒 (dropTtlMs)</label>
+        <input id="cfg-dropTtlMs" type="number" step="1000">
+      </div>
+      <div class="cfg-item">
+        <label>心跳间隔毫秒 (heartbeatMs)</label>
+        <input id="cfg-heartbeatMs" type="number" step="1000">
+      </div>
+      <div class="cfg-item">
+        <label>每房间最大玩家数 (maxPlayersPerRoom)</label>
+        <input id="cfg-maxPlayers" type="number" step="1">
+      </div>
+      <div class="cfg-item" style="align-self:flex-end;">
+        <button class="btn-primary" onclick="saveConfig()">保存配置</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>广播系统消息（发送给所有房间）</h2>
+    <textarea id="broadcast-text" placeholder="输入要向所有玩家显示的系统消息…"></textarea>
+    <div style="margin-top:8px;">
+      <button class="btn-primary" onclick="broadcast()">广播</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>房间与玩家</h2>
+    <div id="rooms"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  let status = null;
+
+  async function api(path, method = 'GET', body) {
+    const opt = { method, headers: {} };
+    if (body !== undefined) {
+      opt.headers['Content-Type'] = 'application/json';
+      opt.body = JSON.stringify(body);
+    }
+    const r = await fetch(path, opt);
+    return r.json();
+  }
+
+  function toast(msg, isErr) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (isErr ? ' err' : '');
+    t.style.opacity = 1;
+    setTimeout(() => { t.style.opacity = 0; }, 2500);
+  }
+
+  function fmtPos(pos) {
+    if (!pos) return '-';
+    const r = (v) => (Number.isFinite(v) ? v.toFixed(1) : '-');
+    return `${r(pos.x)}, ${r(pos.y)}, ${r(pos.z)}`;
+  }
+
+  function renderRooms() {
+    const el = document.getElementById('rooms');
+    if (!status || !status.rooms || !status.rooms.length) {
+      el.innerHTML = '<div class="empty">暂无房间（尚无玩家创建/加入）</div>';
+      return;
+    }
+    el.innerHTML = status.rooms.map((room) => `
+      <div class="room-title">房间「${room.name}」
+        <span class="tag">seed=${room.seed}</span>
+        <span class="tag">方块改动 ${room.blocks}</span>
+        <span class="tag">掉落物 ${room.drops}</span>
+      </div>
+      ${room.players.length ? `<table>
+        <tr><th>玩家</th><th>模式</th><th>生命/饥饿</th><th>位置</th><th></th></tr>
+        ${room.players.map((p) => `
+          <tr>
+            <td>${p.name}${p.host ? '<span class="tag tag-host">HOST</span>' : ''}</td>
+            <td>${p.mode}</td>
+            <td>${p.health}/${p.food}</td>
+            <td>${fmtPos(p.pos)}</td>
+            <td><button class="btn-danger btn-sm" onclick="kick(${p.id})">踢出</button></td>
+          </tr>`).join('')}
+      </table>` : '<div class="empty">房间内暂无玩家在线</div>'}
+      <div style="margin-top:8px;">
+        <button class="btn-warn btn-sm" onclick="clearDrops('${room.name.replace(/'/g, "\\'")}')">清空掉落物</button>
+        <button class="btn-danger btn-sm" onclick="deleteRoom('${room.name.replace(/'/g, "\\'")}')">删除房间（重置世界）</button>
+      </div>
+    `).join('');
+  }
+
+  async function refresh() {
+    try {
+      status = await api('/api/status');
+      const up = Math.floor((Date.now() / 1000) - status.bootTime);
+      const mm = String(Math.floor(up / 60)).padStart(2, '0');
+      const ss = String(up % 60).padStart(2, '0');
+      document.getElementById('server-line').textContent =
+        `运行中 ${mm}:${ss} · 房间 ${status.rooms.length} · 在线 ${status.onlinePlayers}`;
+      document.getElementById('cfg-dropTtlMs').value = status.config.dropTtlMs;
+      document.getElementById('cfg-heartbeatMs').value = status.config.heartbeatMs;
+      document.getElementById('cfg-maxPlayers').value = status.config.maxPlayersPerRoom;
+      renderRooms();
+    } catch (e) {
+      document.getElementById('server-line').textContent = '无法连接服务器 API';
+    }
+  }
+
+  async function saveConfig() {
+    const patch = {
+      dropTtlMs: Number(document.getElementById('cfg-dropTtlMs').value),
+      heartbeatMs: Number(document.getElementById('cfg-heartbeatMs').value),
+      maxPlayersPerRoom: Number(document.getElementById('cfg-maxPlayers').value),
+    };
+    const r = await api('/api/config', 'POST', patch);
+    toast('配置已保存并生效', !!r.error);
+    refresh();
+  }
+
+  async function broadcast() {
+    const text = document.getElementById('broadcast-text').value.trim();
+    if (!text) return toast('请输入消息内容', true);
+    const r = await api('/api/broadcast', 'POST', { text });
+    document.getElementById('broadcast-text').value = '';
+    toast('已广播', !!r.error);
+  }
+
+  async function kick(id) {
+    if (!confirm(`确定踢出玩家 id=${id}？`)) return;
+    const r = await api('/api/kick', 'POST', { playerId: id });
+    toast('已踢出', !!r.error);
+    refresh();
+  }
+
+  async function clearDrops(room) {
+    const r = await api('/api/room/' + encodeURIComponent(room) + '/clear-drops', 'POST', {});
+    toast(`已清空掉落物 (${r.removed ?? 0} 个)`, !!r.error);
+    refresh();
+  }
+
+  async function deleteRoom(room) {
+    if (!confirm(`确定删除房间「${room}」？将踢出所有玩家并重置世界存档！`)) return;
+    const r = await api('/api/room/' + encodeURIComponent(room) + '/delete', 'POST', {});
+    toast('房间已删除', !!r.error);
+    refresh();
+  }
+
+  refresh();
+  setInterval(refresh, 3000);
+</script>
+</body>
+</html>

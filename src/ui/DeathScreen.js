@@ -25,11 +25,17 @@ export class DeathScreen {
     panel.appendChild(title);
 
     this.respawnBtn = this._mkBtn('重生', '#4a8a4a', '#2a5a2a');
+    this.spectateBtn = this._mkBtn('观战其他玩家', '#4a6a8a', '#2a4a6a');
     this.exitBtn = this._mkBtn('返回标题画面', '#8a4a4a', '#5a2a2a');
     panel.appendChild(this.respawnBtn);
+    panel.appendChild(this.spectateBtn);
     panel.appendChild(this.exitBtn);
 
     this.respawnBtn.addEventListener('click', () => this.hide());
+    // 观战：进入旁观模式（第一人称跟随其他存活玩家），不重生
+    this.spectateBtn.addEventListener('click', () => {
+      if (this.game.enterSpectate) this.game.enterSpectate();
+    });
     this.exitBtn.addEventListener('click', () => {
       this.game.returnToMenu(false);
     });
@@ -63,5 +69,11 @@ export class DeathScreen {
     if (this.game.respawn) this.game.respawn();
     if (this.game.paused !== undefined) this.game.paused = false;
     if (this.game.controls) this.game.controls.enabled = true;
+  }
+
+  // 进入观战：隐藏死亡屏但不重生（Game.enterSpectate 负责切换旁观模式）
+  hideForSpectate() {
+    this.visible = false;
+    this.el.style.display = 'none';
   }
 }

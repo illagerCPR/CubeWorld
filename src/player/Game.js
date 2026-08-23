@@ -70,6 +70,8 @@ export class Game {
     this.net = null;            // NetworkManager 实例（由 main.js 注入）
     this.remotePlayers = new Map(); // id -> RemotePlayer 远端玩家
     this.chatBox = null;        // 联机聊天框
+    this.spectating = false;    // 是否处于观战模式（死亡后旁观其他玩家）
+    this.spectateTargetId = null; // 当前观战跟随的玩家 id（null=自由飞行）
     
     this.blockSvgMap = BlockSVGDefinitions;
     this.itemSvgMap = ItemSVGDefinitions;
@@ -151,6 +153,8 @@ export class Game {
     this.networkMode = networkMode;
     this.paused = false;
     this.running = false;
+    this.spectating = false;        // 阶段4：新世界默认不观战
+    this.spectateTargetId = null;
     // 显示加载界面
     const loadingEl = document.getElementById('loading');
     if (loadingEl) {
@@ -332,14 +336,14 @@ export class Game {
   setupKeyBindings() {
     document.addEventListener('keydown', (e) => {
       if (e.code === 'KeyE') {
-        if (this.paused || (this.deathScreen && this.deathScreen.visible)) return;
+        if (this.paused || this.spectating || (this.deathScreen && this.deathScreen.visible)) return;
         if (this.inventoryScreen) {
           this.inventoryScreen.toggle(2);
         }
       }
       // C 键：命令面板（仅在启用命令的存档可用）
       if (e.code === 'KeyC') {
-        if (!this.running || !this.cheatsEnabled) return;
+        if (!this.running || this.spectating || !this.cheatsEnabled) return;
         if (this.deathScreen && this.deathScreen.visible) return;
         if (this.pauseMenu && this.pauseMenu.visible) return;
         if (this.commandPanel) this.commandPanel.toggle();
@@ -352,10 +356,18 @@ export class Game {
           if (this.hotbar) { this.hotbar.update(); this.hotbar.flashName(); }
         }
       }
-      // F5 手动保存（联机模式不保存本地槽位）
+      // F5 手动保存（联机模式不保存本地槽位）；观战模式下 F5 切换观战目标
       if (e.code === 'F5') {
         e.preventDefault();
-        if (this.running && this.world && !this.networkMode) SaveSystem.save(this);
+        if (this.spectating) {
+          this.cycleSpectateTarget();
+          this._spectateHint();
+        } else if (this.running && this.world && !this.networkMode) SaveSystem.save(this);
+      }
+      // R 键：观战模式重生退出观战
+      if (e.code === 'KeyR' && this.spectating) {
+        this.respawn();
+        return;
       }
       // ESC 兜底：pointer lock 未激活时也切换暂停菜单（pointerlockchange 不会触发）
       if (e.code === 'Escape') {
@@ -422,34 +434,45 @@ export class Game {
     }
 
     // 玩家移动
-    const move = this.controls.getMoveVector();
-    const speed = this.player.flying ? 12 : (this.player.survival ? 4.3 : 5.6);
-    const sprint = this.controls.isSprinting() ? 1.3 : 1;
-    
-    if (this.player.flying || this.player.spectator) {
-      this.player.velocity.x = move.x * speed * sprint;
-      this.player.velocity.z = move.z * speed * sprint;
-      let vy = 0;
-      if (this.controls.isJumping()) vy = speed * 0.6;
-      if (this.controls.isSneaking()) vy = -speed * 0.6;
-      this.player.velocity.y = vy;
-    } else if (this.player.inWater) {
-      // 游泳：水平速度降低，Space 上浮 / Shift 下潜
-      const swimSpeed = speed * 0.5 * sprint;
-      this.player.velocity.x = move.x * swimSpeed;
-      this.player.velocity.z = move.z * swimSpeed;
-      if (this.controls.isJumping()) this.player.velocity.y = 4.0;
-      else if (this.controls.isSneaking()) this.player.velocity.y = -4.0;
-      // 其余交给 Physics 的水中重力与阻力
+    // 观战模式：跟随目标时本地实体吸附到目标（无碰撞）+ 相机贴合目标视角；无目标时 spectator 自由飞行（穿墙）
+    let specTarget = this.spectating ? this.remotePlayers.get(this.spectateTargetId) : null;
+    if (specTarget && specTarget.dead) { this.spectateTargetId = null; specTarget = null; } // 目标死亡/离开 → 回自由
+    if (specTarget) {
+      // 观战跟随：吸附 + 相机贴合 + 天空跟随（区块加载以吸附后的位置为中心，正好加载目标周围）
+      this.player.position.copy(specTarget.group.position);
+      this.player.velocity.set(0, 0, 0);
+      this.updateSpectateCamera();
+      this.sky.update(dt, this.player.position);
     } else {
-      this.player.velocity.x = move.x * speed * sprint;
-      this.player.velocity.z = move.z * speed * sprint;
-      if (this.controls.isJumping()) this.physics.jump(this.player);
+      const move = this.controls.getMoveVector();
+      const speed = this.player.flying ? 12 : (this.player.survival ? 4.3 : 5.6);
+      const sprint = this.controls.isSprinting() ? 1.3 : 1;
+      
+      if (this.player.flying || this.player.spectator) {
+        this.player.velocity.x = move.x * speed * sprint;
+        this.player.velocity.z = move.z * speed * sprint;
+        let vy = 0;
+        if (this.controls.isJumping()) vy = speed * 0.6;
+        if (this.controls.isSneaking()) vy = -speed * 0.6;
+        this.player.velocity.y = vy;
+      } else if (this.player.inWater) {
+        // 游泳：水平速度降低，Space 上浮 / Shift 下潜
+        const swimSpeed = speed * 0.5 * sprint;
+        this.player.velocity.x = move.x * swimSpeed;
+        this.player.velocity.z = move.z * swimSpeed;
+        if (this.controls.isJumping()) this.player.velocity.y = 4.0;
+        else if (this.controls.isSneaking()) this.player.velocity.y = -4.0;
+        // 其余交给 Physics 的水中重力与阻力
+      } else {
+        this.player.velocity.x = move.x * speed * sprint;
+        this.player.velocity.z = move.z * speed * sprint;
+        if (this.controls.isJumping()) this.physics.jump(this.player);
+      }
+      
+      this.physics.collide(this.player, dt);
+      this.player.updateCamera();
+      this.sky.update(dt, this.player.position);
     }
-    
-    this.physics.collide(this.player, dt);
-    this.player.updateCamera();
-    this.sky.update(dt, this.player.position);
     
     // 水下视野雾效
     const fog = this.renderer.scene.fog;
@@ -483,8 +506,15 @@ export class Game {
     // 射线选择
     this.updateRaycast();
     
-    // 鼠标交互
-    this.handleMouseInput(dt);
+    // 鼠标交互（观战模式不操作方块/物品）
+    if (this.spectating) {
+      this.controls.mouseLeft = false;
+      this.controls.mouseRight = false;
+      this.breakingProgress = 0;
+      if (this.breakMesh) this.breakMesh.visible = false;
+    } else {
+      this.handleMouseInput(dt);
+    }
     
     // HUD
     this.hud.update(this.player);
@@ -815,9 +845,65 @@ export class Game {
     this.player.invulnerable = 0;
     this.player.position.set(0.5, this.world.getHeightAt(0, 0) + 2, 0.5);
     this.player.velocity.set(0, 0, 0);
+    // 观战结束：重置观战状态并恢复正常模式
+    if (this.spectating) {
+      this.spectating = false;
+      this.spectateTargetId = null;
+      if (this._preSpectateMode && this.player.spectator) this.player.setMode(this._preSpectateMode);
+      this._preSpectateMode = null;
+    }
     if (this.networkMode && this.net) {
       this.net.sendRespawn(this.player.position.x, this.player.position.y, this.player.position.z);
     }
+  }
+
+  // 进入观战模式（死亡后）：旁观模式自由飞行，相机可第一人称跟随存活玩家
+  enterSpectate() {
+    if (!this.running || this.spectating) return;
+    this.spectating = true;
+    this.spectateTargetId = null;
+    this._preSpectateMode = this.player.gamemode === 'spectator' ? 'survival' : this.player.gamemode;
+    this.player.setMode('spectator'); // 旁观：穿墙自由飞行
+    if (this.deathScreen) this.deathScreen.hideForSpectate();
+    this.paused = false;
+    if (this.controls) { this.controls.enabled = true; }
+    if (document.pointerLockElement) document.exitPointerLock();
+    // 自动跟随第一个存活玩家（若有）
+    this.cycleSpectateTarget();
+    this._spectateHint();
+  }
+
+  // 观战目标循环：在存活远端玩家间切换（targetId 循环）
+  cycleSpectateTarget() {
+    const alive = [...this.remotePlayers.values()].filter((rp) => !rp.dead);
+    if (!alive.length) { this.spectateTargetId = null; return; }
+    const ids = alive.map((rp) => rp.id);
+    const idx = ids.indexOf(this.spectateTargetId);
+    this.spectateTargetId = ids[(idx + 1) % ids.length];
+  }
+
+  // 观战提示（聊天栏显示当前跟随目标 / 操作说明）
+  _spectateHint() {
+    if (!this.chatBox) return;
+    const rp = this.spectateTargetId != null ? this.remotePlayers.get(this.spectateTargetId) : null;
+    const who = rp ? `跟随 ${rp.name}` : '自由飞行（无存活玩家）';
+    this.chatBox.add(`观战中 · ${who} · F5 切换目标 / R 重生`, '#aac');
+  }
+
+  // 每帧观战相机：跟随目标时第一人称视角贴合目标；无目标则自由飞行（spectator 已穿墙）
+  updateSpectateCamera() {
+    if (!this.spectating) return;
+    const rp = this.spectateTargetId != null ? this.remotePlayers.get(this.spectateTargetId) : null;
+    if (!rp || rp.dead) {
+      if (this.spectateTargetId != null) this.spectateTargetId = null; // 目标死亡/离开，回到自由
+      return;
+    }
+    const cam = this.renderer.camera;
+    cam.position.copy(rp.group.position);
+    cam.position.y += 1.62; // 视点高度
+    cam.rotation.order = 'YXZ';
+    cam.rotation.y = rp.yaw;
+    cam.rotation.x = rp.pitch;
   }
 
   getAttackDamage() {

@@ -15,9 +15,11 @@ function safeNum(v, fallback = 0) {
 
 export class Room {
   // name: 房间名（同名房间共享同一世界）；onSave: (room) => void 世界变更落盘回调（index.mjs 注入）
-  constructor(name = 'default', onSave = null) {
+  // config: 服务器配置引用（读取 dropTtlMs 等），管理面板可实时改
+  constructor(name = 'default', onSave = null, config = null) {
     this.name = String(name).trim() || 'default';
     this.onSave = onSave;
+    this.config = config;
     this.players = new Map();   // id -> player
     this.blocks = new Map();    // "x,y,z" -> id  (方块账本主副本)
     this.drops = new Map();     // dropId -> {x,y,z,name,count,spawnedAt}  (掉落物账本主副本)
@@ -28,6 +30,9 @@ export class Room {
     this.hostId = null;
     this.nextId = 1;
   }
+
+  // 掉落物过期毫秒（默认 5 分钟；管理面板配置 dropTtlMs 实时生效）
+  dropTtlMs() { return (this.config && this.config.dropTtlMs) || 300000; }
 
   // 从磁盘快照恢复房间世界状态（服务器重启后复活），过期掉落物丢弃；旧 host 已不在线，由新进玩家接管
   restore(snap) {
@@ -41,9 +46,10 @@ export class Room {
     }
     this.drops = new Map();
     const now = Date.now();
+    const ttl = this.dropTtlMs();
     for (const d of (snap.drops || [])) {
       if (!d || typeof d.id !== 'number' || !d.name) continue;
-      if (now - safeNum(d.spawnedAt, now) > 300000) continue; // 过期掉落物不恢复
+      if (now - safeNum(d.spawnedAt, now) > ttl) continue; // 过期掉落物不恢复
       this.drops.set(d.id, {
         x: safeNum(d.x), y: safeNum(d.y), z: safeNum(d.z),
         name: String(d.name).slice(0, 32),
@@ -58,13 +64,20 @@ export class Room {
   save() { if (this.onSave) this.onSave(this); }
 
   addPlayer(p) {
+    // 管理面板配置的房间人数上限（超出拒绝入房）
+    const cap = (this.config && this.config.maxPlayersPerRoom) || 10;
+    if (this.players.size >= cap) {
+      this.sendTo(p, MSG.KICKED, { reason: `房间「${this.name}」已满（上限 ${cap} 人）` });
+      setTimeout(() => { try { p.ws.close(); } catch {} }, 50);
+      return false;
+    }
     p.mode = 'survival';
     p.health = 20; p.food = 20; p.saturation = 5;
     p.pos = { x: 0.5, y: 66, z: 0.5, yaw: 0, pitch: 0 };
     p.onGround = false; p.flying = false; p.inWater = false;
     p.selected = 0; p.alive = true;
     this.players.set(p.id, p);
-    return p;
+    return true;
   }
 
   playerList() {
@@ -94,6 +107,46 @@ export class Room {
       this.hostId = this.players.size ? this.players.keys().next().value : null;
     }
     console.log(`[!] ${p.name} 离开房间「${this.name}」，剩余 ${this.players.size} 人`);
+  }
+
+  // 管理面板操作（阶段 4）--------
+
+  // 踢出玩家：发送 kicked 消息（客户端停止自动重连），再从房间移除
+  kickPlayer(id, reason = '被服务器管理员移出') {
+    const p = this.players.get(id);
+    if (!p) return false;
+    this.sendTo(p, MSG.KICKED, { reason });
+    this.removePlayer(id);
+    // 让 kicked 消息有时间送达再断开底层连接
+    setTimeout(() => { try { p.ws.close(); } catch {} }, 50);
+    return true;
+  }
+
+  // 清空该房间全部掉落物（广播 drop_taken by=0 让各端移除），返回移除数量
+  clearDrops() {
+    const n = this.drops.size;
+    for (const id of this.drops.keys()) {
+      this.broadcast(MSG.DROP_TAKEN, { id, by: 0 });
+    }
+    this.drops.clear();
+    if (n) this.save();
+    return n;
+  }
+
+  // 房间状态快照（管理面板展示）
+  info() {
+    return {
+      name: this.name,
+      seed: this.seed,
+      time: this.time,
+      hostId: this.hostId,
+      blocks: this.blocks.size,
+      drops: this.drops.size,
+      players: [...this.players.values()].map((p) => ({
+        id: p.id, name: p.name, mode: p.mode,
+        health: p.health, food: p.food, pos: p.pos, host: p.id === this.hostId,
+      })),
+    };
   }
 
   createRoom(player, msg) {
@@ -193,12 +246,13 @@ export class Room {
     this.save();
   }
 
-  // 清理过期掉落物（5 分钟），广播移除（by=0 表示过期自然消失）
+  // 清理过期掉落物（默认 5 分钟，取配置值），广播移除（by=0 表示过期自然消失）
   expireDrops() {
     const now = Date.now();
+    const ttl = this.dropTtlMs();
     let changed = false;
     for (const [id, d] of this.drops) {
-      if (now - d.spawnedAt > 300000) {
+      if (now - d.spawnedAt > ttl) {
         this.drops.delete(id);
         this.broadcast(MSG.DROP_TAKEN, { id, by: 0 });
         changed = true;
