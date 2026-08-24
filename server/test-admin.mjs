@@ -46,7 +46,7 @@ function waitFor(p, pred, timeout = 3000) {
     const hit = p.inbox.find(pred);
     if (hit) return resolve(hit);
     const t = setTimeout(() => resolve(null), timeout);
-    p.waiters.push((m) => { if (pred(m)) { clearTimeout(t); return true; } return false; });
+    p.waiters.push((m) => { if (pred(m)) { clearTimeout(t); resolve(m); return true; } return false; });
   });
 }
 
@@ -190,6 +190,37 @@ await fetch(API + '/config', {
   ok('房间内玩家收到系统广播', !!chat && chat.fromId === 0 && chat.text.includes('服务器即将维护'), JSON.stringify(chat || {}));
   a.ws.close();
   await sleep(100);
+}
+
+// --- 用例 7：管理面板鉴权（阶段5） ---
+{
+  console.log('[7] 管理面板鉴权 adminToken');
+  // 开启鉴权（当前未开启，无需口令即可设置）
+  const set = await (await fetch(API + '/config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ adminToken: 's3cret' }),
+  })).json();
+  ok('开启鉴权成功（adminToken 返回掩码）', set.ok === true && set.config.adminToken === '****', JSON.stringify(set.config));
+
+  const noAuth = await fetch(API + '/status');
+  ok('无口令访问 /api/status -> 401', noAuth.status === 401);
+  const badAuth = await fetch(API + '/status', { headers: { 'Authorization': 'Bearer wrong' } });
+  ok('错误口令访问 -> 401', badAuth.status === 401);
+  const okAuth = await fetch(API + '/status', { headers: { 'Authorization': 'Bearer s3cret' } });
+  ok('正确口令访问 -> 200', okAuth.status === 200);
+  const cfg = await (await fetch(API + '/config', { headers: { 'Authorization': 'Bearer s3cret' } })).json();
+  ok('config 中 adminToken 被掩码', cfg.config.adminToken === '****', JSON.stringify(cfg.config.adminToken));
+  const kickNoAuth = await fetch(API + '/kick', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  ok('无口令踢人 -> 401', kickNoAuth.status === 401);
+
+  // 关闭鉴权（用口令清空），否则后续清理请求会 401
+  const clear = await (await fetch(API + '/config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer s3cret' },
+    body: JSON.stringify({ adminToken: '' }),
+  })).json();
+  ok('用正确口令关闭鉴权', clear.ok === true && clear.config.adminToken === '');
+  const again = await fetch(API + '/status');
+  ok('关闭鉴权后无口令恢复访问', again.status === 200);
 }
 
 // 清理：删除测试房间

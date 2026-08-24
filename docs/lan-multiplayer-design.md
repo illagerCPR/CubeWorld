@@ -1,7 +1,7 @@
 # Project-MC 局域网联机设计文档
 
-> 版本：v0.6（阶段 4 已实现并通过验证）
-> 状态：阶段 0（MVP）完成（2026-08-21）；阶段 1（掉落物/断线重连）完成（2026-08-22）；阶段 2（怪物事件同步 + 红石状态缓解）完成（2026-08-22）；阶段 3（多房间 + 世界落盘 + 玩家名着色）完成（2026-08-23）；阶段 4（插值优化 + 观战 + 服务器管理面板）完成（2026-08-23）
+> 版本：v0.7（阶段 5 已实现并通过验证）
+> 状态：阶段 0（MVP）完成（2026-08-21）；阶段 1（掉落物/断线重连）完成（2026-08-22）；阶段 2（怪物事件同步 + 红石状态缓解）完成（2026-08-22）；阶段 3（多房间 + 世界落盘 + 玩家名着色）完成（2026-08-23）；阶段 4（插值优化 + 观战 + 服务器管理面板）完成（2026-08-23）；阶段 5（世界内换房/重建 + 时间戳对齐插值 + 管理面板鉴权）完成（2026-08-24）
 > 阶段 0 新增：`server/`（index/room/protocol）、`src/net/NetworkManager.js`、`src/entity/RemotePlayer.js`、`src/ui/ChatBox.js`
 > 阶段 0 改动：`World.js`（setBlock 上报钩子）、`Game.js`（联机集成）、`MobManager.js`（spawnEnabled）、`MenuScreen.js`/`main.js`（联机入口）、`start.cmd`（server 子命令）
 > 阶段 0 验证：`server/test-mp.mjs` 协议 13/13 PASS；浏览器 host + Node 客户端双端链路验证通过
@@ -13,6 +13,8 @@
 > 阶段 3 验证：`server/test-mp.mjs` 协议 **34/34 PASS**（新增多房间隔离/自动建房/命令断言）+ `server/test-store.mjs` 落盘往返 **15/15 PASS** + 服务器重启后同名房间世界恢复 e2e **4/4 PASS** + 浏览器双端冒烟（开房/加入/着色）通过
 > 阶段 4 新增能力（体验与管理）：**远端玩家插值优化**（`RemotePlayer` 重构为关节模型：速度自适应平滑 + 远距瞬移快照（防 respawn/传送"飞天滑行"）+ 行走摆动动画 + 头部俯仰，`pitch` 现已随 `player_state` 透传并应用）；**观战**（死亡屏新增「观战其他玩家」→ 旁观模式穿墙自由飞行，相机第一人称跟随房间内存活玩家，F5 循环切换目标、R 重生恢复原模式，观战不上报本地位置）；**服务器管理面板**（`http://<host>:3001/` Web 页 + `/api/*`：状态总览/配置读写（`dropTtlMs`/`heartbeatMs`/`maxPlayersPerRoom`，落盘 `server/config.json`）/系统广播/踢出玩家（新协议 `kicked`，客户端停止自动重连）/清空掉落物/删除房间重置世界；新增 `server/config.js` + `server/admin.html`）
 > 阶段 4 验证：`server/test-mp.mjs` 协议 **34/34 PASS** + `server/test-store.mjs` **15/15 PASS** + 新增 `server/test-admin.mjs` 管理面板回归 **18/18 PASS**（人数上限/踢出/清掉落物/删房重建/配置非法值过滤/广播）+ 浏览器冒烟（行走动画 joints 生效、观战相机跟随+目标切换+重生、管理面板渲染+踢出后不自动重连）通过
+> 阶段 5 新增能力（体验/流畅/安全）：**世界内换房/重建世界**（联机中 `/room <名>` 直接切换房间、`/rebuild` 重建当前世界（仅 host），保持 WebSocket 连接、客户端用新 seed 重启本地世界，新增协议 `switch_room`/`world_reset` 与 `world_info.restart` 标记）；**时间戳对齐插值**（`player_state` 广播带服务器 `ts`，`RemotePlayer` 改为样本缓冲 + 时钟偏移估计 + 固定 120ms 延迟的线性插值重放，消除指数平滑的拖影/橡皮筋，观战视角随之更稳）；**管理面板鉴权**（配置新增 `adminToken`，开启后 `/api/*` 须带 `Authorization: Bearer <token>`，`admin.html` 增加登录弹层与口令设置项，token 明文不随接口返回）
+> 阶段 5 验证：`server/test-mp.mjs` 协议 **34/34 PASS** + `server/test-store.mjs` **15/15 PASS** + `server/test-admin.mjs` 管理面板回归 **26/26 PASS**（新增鉴权 8 项）+ 新增 `server/test-stage5.mjs` 换房/重建/时间戳回归 **16/16 PASS** + 浏览器冒烟（双端进房、换房后 host 变新房 host 且连接不断、`/rebuild` 种子变化、远端时间戳插值平滑跟随、管理面板登录弹层与口令校验）通过
 > 开发中发现并修复：①服务器心跳误用协议层 pong（应用层 JSON ping 需客户端回 JSON pong，否则 30s 踢出）；②`set_time/time` 时间字段与消息类型键 `t` 冲突（改为 `time` 字段）；③方块同步需统一挂 `World.setBlock` 钩子（`bindWorld`）而非散点手动上报，保证爆炸/活塞也同步；④首次加入时 `world_info` 后紧接的方块/掉落物账本回放可能先于世界就绪到达而被丢弃——增加 `_ready` 预就绪缓冲队列；⑤重连关闭旧 socket 时旧 onclose 会误触发重连调度——用 `this.ws !== ws` 守卫只处理当前 socket；⑥`start.cmd server` 子进程继承 `PORT=5173` 误占用 Vite 端口——`:server` 分支启动前 `set "PORT="`；⑦多房间化后 `welcome` 无法携带玩家列表（hello 时尚未进房）——改为 `joinRoom` 回放已有玩家，且磁盘恢复的房间无 host 时由首个加入者接管；⑧`store.saveRoom` 序列化掉落物时漏掉 `id` 字段导致恢复被丢弃——改为 `[...drops.entries()]` 携带 id；⑨观战若在 update() 早期 `return` 会冻结怪物/红石/区块——改为只 gate 玩家移动/物理段（`specTarget` 分支），世界模拟照常跑；⑩被踢出的玩家若沿用断线自动重连会立刻回房——新增 `kicked` 消息置 `_explicitClose`，客户端停止自动重连
 
 ---
@@ -162,6 +164,8 @@
 | `create_room` | `name, seed, mode, room?` | 开房：决定世界 seed（唯一来源）；`room` 指定房间名（缺省 `default`） |
 | `join_room` | `room?` | 加入指定房间（同名房间共享同一世界；房间不存在则自动创建并随机 seed，首个加入者成为 host） |
 | `leave_room` | — | 主动退出 |
+| `switch_room` | `room` | 阶段5：世界内换房（保持连接，客户端用新 seed 重启本地世界；房间不存在自动创建，首个加入者成 host） |
+| `world_reset` | — | 阶段5：重建当前房间世界（仅 host 采纳；新 seed + 清空方块/掉落，广播 `world_info(restart)`） |
 | `block_set` | `x, y, z, id` | 客户端请求修改方块（含挖掘/放置/爆炸产物） |
 | `drop_spawn` | `x, y, z, name, count` | 请求生成掉落物（服务器分配 id 并广播回执） |
 | `drop_taken` | `id` | 拾取掉落物（从账本删除并广播） |
@@ -184,7 +188,7 @@
 | `t` | 字段 | 说明 |
 |---|---|---|
 | `welcome` | `selfId, players: []` | 握手回执（**players 恒为空**：hello 时尚未进房，进房后由 `joinRoom` 回放已有玩家） |
-| `world_info` | `seed, mode, time, hostId, room` | 客户端据此生成世界（进入房间后下发）；`room` 为房间名 |
+| `world_info` | `seed, mode, time, hostId, room, restart?` | 客户端据此生成世界（进入房间后下发）；`room` 为房间名；`restart=true`（阶段5）表示换房/重建：客户端保持连接用新 seed 重启本地世界 |
 | `room_created` | `roomId` | 开房确认 |
 | `player_join` | `id, name, pos, mode` | 新玩家进入 |
 | `player_leave` | `id` | 玩家离开 |
@@ -195,7 +199,7 @@
 | `mob_attack` | `id, fromId, damage, x,y,z` | 怪物受击广播（except 发起者，含位置校正） |
 | `mob_died` | `id` | 怪物死亡广播（except 发起者） |
 | `redstone_state` | `x,y,z,on,by` | 红石源状态广播（except 发起者） |
-| `player_state` | `id, ...(同 C2S 字段)` | 转发某玩家高频状态 |
+| `player_state` | `id, ...(同 C2S 字段), ts` | 转发某玩家高频状态；`ts`（阶段5）为服务器时间戳（毫秒），客户端据此做时间对齐插值 |
 | `player_full` | `id, ...(同 C2S 字段)` | 转发某玩家低频全量 |
 | `player_died` | `id` | 某玩家死亡 |
 | `respawn` | `id, x,y,z,health,food` | 某玩家重生位置 |
@@ -323,8 +327,9 @@ TNT/爆炸：`MobManager.processExplosions` → `world.setBlock(..., 0)` → 上
 
 ### 7.2 玩家
 
-- 高频 `player_state`（20Hz）：位置/朝向/姿态布尔。远端插值。
-- 阶段 4 插值细节（`RemotePlayer`）：速度自适应平滑（快则收敛快、静则停靠）+ 远距瞬移快照（>4 格直接 set，防 respawn 滑行）+ 行走摆动动画（水平速度驱动腿/手臂 pivot）+ 头部俯仰（`pitch` 透传应用）。
+- 高频 `player_state`（20Hz）：位置/朝向/姿态布尔 + 服务器 `ts`。远端插值。
+- 阶段 4 插值细节（`RemotePlayer`）：关节模型（head/arm/leg pivot）+ 远距瞬移快照（>4 格直接 set 并丢弃旧样本）+ 行走摆动动画（水平速度驱动腿/手臂 pivot）+ 头部俯仰（`pitch` 透传应用）。
+- 阶段 5 时间戳对齐插值（`RemotePlayer.applyState/update`）：收到带 `ts` 的状态压入样本缓冲（上限 40）；平滑估计时钟偏移 `offset = ts - now`（首样本直接采用，之后 0.9/0.1 递推）；每帧渲染时刻 `renderTime = now + offset - 0.12s`，取缓冲中包围 `renderTime` 的两个样本做线性插值（位置直插、yaw 最短角、pitch 直插），速度由当前段位移/时间得出驱动走路动画；`renderTime` 晚于最新样本时停在最后两样本（f 钳到 1，静止停靠），早于最旧样本时停在首样本——**b 恒取 `buf[i+1]` 且 i 钳到 `len-2`**，防止越界崩溃（曾引发整条游戏主循环停摆）。
 - 低频 `player_full`：健康/食物/模式/手持物品槽位（变更触发）。
 - 互殴：`attack_player` 广播扣血 + 受击反馈；死亡/重生走独立消息。
 - 手持物品：`player_full.selected` 变化广播，远端玩家模型切换手持物（MVP 可仅同步数字，渲染可选）。
@@ -383,9 +388,10 @@ server/
   index.mjs        # 入口：node:http 监听 + ws upgrade，房间生命周期（RoomManager 多房间）+ /api 管理接口 + 管理页
   room.js          # Room 类：seed、players Map、modifiedBlocks 主副本、time、restore 恢复、踢人/清掉落物/info
   store.js         # 世界落盘：server/world/<房间名>.json 读写、房间名安全化
-  config.js        # 服务器配置：默认值 + 校验 + 读写 server/config.json（阶段 4）
-  admin.html       # 服务器管理面板页面（房间/玩家/配置/世界管理，阶段 4）
+  config.js        # 服务器配置：默认值 + 校验 + 读写 server/config.json（阶段 4；阶段 5 增 adminToken）
+  admin.html       # 服务器管理面板页面（房间/玩家/配置/世界管理，阶段 4；阶段 5 增登录弹层）
   protocol.js      # 消息类型常量 + 轻量字段校验（防脏包）
+  test-stage5.mjs  # 阶段 5 回归：换房/重建世界/PLAYER_STATE 时间戳（16 项）
   package.json     # 依赖：ws（^8）
 ```
 
@@ -406,9 +412,10 @@ server/
 - 心跳：每 `heartbeatMs`（默认 15s，可配置）ping，超时未收到 pong 踢出并广播 `player_leave`。
 - 多房间（阶段 3）：`index.mjs` 持 `RoomManager = Map<房间名, Room>`，`create_room/join_room` 带 `room` 字段选房；同名房间共享同一世界，世界按房间名隔离互不可见。
 - 世界落盘（阶段 3）：`store.js` 把房间世界写入 `server/world/<房间名>.json`（方块账本/掉落物/seed/时间/计数器），方块/掉落物变更即保存，SIGINT/SIGTERM 全量保存；服务器重启后同名房间经 `Room.restore` 恢复，过期掉落物不恢复、无 host 时首个加入者接管。
-- 服务器聊天命令（阶段 3）：`/rooms` 列出房间、`/seed` 查看当前世界种子、`/help` 帮助（仅回给发起者，`fromId=0`）。
-- 管理面板（阶段 4）：`http://<host>:3001/` 返回 `admin.html`（自包含页面，轮询 `/api/status`），JSON 接口 `/api/status`（房间/玩家/配置状态）、`/api/config`（GET/POST 读写配置，落盘 `server/config.json`）、`/api/broadcast`（全房间系统广播）、`/api/kick`（按玩家 id 踢出，发 `kicked` 让客户端停止自动重连）、`/api/room/<name>/clear-drops`（清空掉落物）、`/api/room/<name>/delete`（踢出所有玩家 + 删磁盘存档 + 内存移除 = 重置世界）。
-- 可配置项（阶段 4，`server/config.js` 校验范围，非法值忽略）：`dropTtlMs`（掉落物过期毫秒，默认 300000）、`heartbeatMs`（心跳间隔毫秒，默认 15000）、`maxPlayersPerRoom`（每房间人数上限，默认 10；`Room.addPlayer` 超限即发 `kicked` 拒绝入房）。
+- 服务器聊天命令（阶段 3+5）：`/rooms` 列出房间、`/seed` 查看当前世界种子、`/room <名>` 世界内换房、`/rebuild`（别名 `/reset` `/regen`，仅 host）重建当前世界、`/help` 帮助（仅回给发起者，`fromId=0`）。
+- 世界内换房/重建（阶段 5）：`switch_room` 保持 WebSocket 连接，离开旧房间 + 加入新房间（满员则拒绝并留在原房），回 `world_info(restart:true)`；`world_reset`（仅 host）新种子 + 清空方块/掉落，广播 `world_info(restart:true)` 并重放 `player_join` 让各端重建远端玩家。客户端 `NetworkManager` 收到 `restart` 后 `_ready=false` 缓存消息 → `main.js` 以新 seed 重启本地世界（`game.start`）→ `onWorldStarted()` 落地缓存，全程不中断连接。
+- 管理面板（阶段 4+5）：`http://<host>:3001/` 返回 `admin.html`（自包含页面，轮询 `/api/status`），JSON 接口 `/api/status`（房间/玩家/配置状态）、`/api/config`（GET/POST 读写配置，落盘 `server/config.json`）、`/api/broadcast`（全房间系统广播）、`/api/kick`（按玩家 id 踢出，发 `kicked` 让客户端停止自动重连）、`/api/room/<name>/clear-drops`（清空掉落物）、`/api/room/<name>/delete`（踢出所有玩家 + 删磁盘存档 + 内存移除 = 重置世界）。
+- 可配置项（阶段 4+5，`server/config.js` 校验，非法值忽略）：`dropTtlMs`（掉落物过期毫秒，默认 300000）、`heartbeatMs`（心跳间隔毫秒，默认 15000）、`maxPlayersPerRoom`（每房间人数上限，默认 10；`Room.addPlayer`/`isFull` 超限拒绝入房或拒绝换房）、`adminToken`（阶段 5 管理面板口令，默认空=不鉴权；非空时所有 `/api/*` 须带 `Authorization: Bearer <token>`，接口返回时掩码为 `****`）。
 
 ---
 
@@ -479,11 +486,30 @@ server/
   - 可配置：`dropTtlMs`、`heartbeatMs`、`maxPlayersPerRoom`（`Room.addPlayer` 超限拒绝入房）。
   - 验证：`server/test-admin.mjs` **18/18 PASS**（人数上限/踢出/清掉落物/删房重建/配置非法值过滤/广播）。
 
-### 阶段 5（规划）
+### 阶段 5（已完成）
 
-- 联机世界内直接换房/重建世界（当前需回主菜单改房间名）。
-- 客户端视角插值/时间戳对齐（当前为指数平滑）。
-- 管理面板鉴权（当前局域网信任环境无鉴权）。
+- [x] 联机世界内直接换房/重建世界。
+  - 新协议 `switch_room`（C2S `{room}`）/ `world_reset`（C2S，仅 host）；`world_info` 新增 `restart` 标记。
+  - `server/index.mjs`：`switchRoom()` 保持连接换房（目标房满则拒绝留在原房）、`room.resetWorld()` 新种子+清空账本并广播。
+  - `server/room.js`：`joinRoom(player, msg, {restart})` 透传标记（含新建房走 `createRoom` 分支）；`resetWorld()`；`isFull()`。
+  - 客户端：`NetworkManager._handle(WORLD_INFO)` 对 `restart` 走 `_ready=false` + `restart_world` 事件；`main.js` 新增 `restart_world` 处理器以新 seed 重启本地世界；`Game` 欢迎语提示 `/room` `/rebuild`；修复 `ChatBox` 全局 T 键监听器泄漏（换房/重建反复 `start()` 不再堆积监听器）。
+  - 聊天命令 `/room <名>`、`/rebuild`（`/reset`/`/regen` 别名，仅 host）。
+- [x] 客户端视角插值/时间戳对齐。
+  - `server/room.js` 的 `player_state` 广播携带 `ts: Date.now()`。
+  - `RemotePlayer`：样本缓冲（≤40）+ 时钟偏移平滑估计 + 固定 120ms 插值延迟，按 `renderTime` 线性插值重放；`i` 钳到 `len-2` 防止越界崩溃（曾致主循环停摆，已修并冒烟验证）。
+- [x] 管理面板鉴权。
+  - `server/config.js` 新增字符串字段 `adminToken`（≤64 字符，空=关闭）。
+  - `server/index.mjs`：`authOk(req)` 校验 `Authorization: Bearer <token>`（未开则放行），`maskedConfig()` 对外掩码口令；`/api/*` 未授权回 401。
+  - `server/admin.html`：登录弹层（401 时出现，口令存 localStorage）、`api()` 自动带 Bearer、配置卡新增口令输入（`****` 未改不提交）、退出登录。
+  - 验证：`server/test-admin.mjs` 新增鉴权 8 项 → **26/26 PASS**；新增 `server/test-stage5.mjs` 换房/重建/时间戳 **16/16 PASS**；浏览器双端冒烟（换房后 host 变新房 host 且连接不断、`/rebuild` 种子变化、远端时间戳插值平滑跟随、管理面板登录弹层 + 401/200）通过。
+
+### 阶段 6（规划）
+
+- 手持物品外观同步 / 快捷栏槽位可见（当前仅同步槽位数字，远端模型未渲染手持物）。
+- 玩家背包/掉落于死亡时同步（当前死亡只重生成，不掉落物品）。
+- 观战者视角平滑（当前观战相机直接贴合目标插值位置，网络抖动下可能微跳）。
+- 管理面板鉴权增强（token 过期/多账号/操作日志）。
+- 时间戳插值自适应延迟（当前固定 120ms，可改为按 RTT/抖动自适应）。
 
 ---
 

@@ -173,3 +173,31 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
 - Windows 开发环境，PowerShell 5.1。链式命令用 `;` + `if ($?)`，不要用 `&&`。
 - 路径含空格的可执行文件用 call 操作符 `& "..."`。
 - `Read` 工具对长文件有重复返回前几行的 bug，长文件请改 `Get-Content ... | Select-Object -Skip N -First M` 或 `Select-String`。
+
+## 局域网联机（LAN 多人，阶段 0-5 已完成）
+
+- **架构 thin-host（方案C）**：Node 服务器 = 房间管理 + 方块/掉落物账本 + 消息中继 + 时间权威；每个客户端本地自模拟世界（确定性生成 `TerrainGenerator(seed)`，不用 Math.random），只同步增量。消息键 `t`（type），`server/protocol.js` 集中定义；S2C 表见 `docs/lan-multiplayer-design.md` §7。
+- **端口**：服务器 TCP **3001**（`.\start.cmd server`），前端 5173（`.\start.cmd start`），管理面板 `http://127.0.0.1:3001/`。
+- **多房间（阶段3）**：`RoomManager = Map<房间名, Room>`，同名房间 = 同世界，种子首次创建固定。`welcome.players` 恒为 `[]`，已有玩家经 join_room 里 `player_join` 重放。世界落盘 `server/store.js`（`server/world/<房间名>.json`，`server/*.json` 已 gitignore），重启恢复（hostId=null → 首个加入者成 host）。**换房（阶段5）**：游戏中 `/room <名>` 或 `switch_room` 直接换（保持连接，目标满则拒），客户端用新 seed 重启本地世界。
+- **怪物/红石（阶段2）**：方案①事件同步——host 权威生成 + 攻击位置纠正，掉落只由击杀侧发；红石方块状态同步 + 周期性状态缓解。
+- **玩家名着色**：`src/net/playerColor.js`（HUES 调色板）。
+- **断线重连（阶段1）**：心跳 pong、断线自动重连（保位置/物品）；被踢 `kicked` → `_explicitClose` 停止自动重连。
+- **远端插值（阶段4-①+5）**：`src/entity/RemotePlayer.js` 关节模型（head/arm/leg pivot 组），**阶段5 时间戳对齐插值**（样本缓冲 + 时钟偏移 + 120ms 延迟线性插值，见下方备忘），距离>4 快照，行走摆臂 + 头部俯仰。
+- **死亡观战（阶段4-②）**：`Game.spectating/spectateTargetId`，死亡界面 `hideForSpectate()`（勿用 `hide()`，会重生），F5 切目标、R 重生，观战不广播位置（`NetworkManager.update` 早退）。
+- **管理面板（阶段4-③+5）**：`server/admin.html` 自包含页 3s 轮询；`/api/status|config|broadcast|kick|room/<name>/clear-drops|delete`；配置持久化 `server/config.json` 热生效（dropTtlMs/heartbeatMs/maxPlayersPerRoom/adminToken，范围校验非法值忽略）；adminToken 非空时 API 需 `Authorization: Bearer`。
+- **联机测试**：起真实 server 后跑 `node server/test-mp.mjs`（34/34）、`server/test-store.mjs`（15/15）、`server/test-admin.mjs`（26/26）、`server/test-stage5.mjs`（16/16），须保持全绿。浏览器冒烟用 playwright-cli 三会话 `-s=host/-s=join/-s=three`。
+
+## 任务进度（Roadmap）
+
+已完成并推送 master（`https://github.com/illagerCPR/Web-MC.git`）：阶段 0 房间服务器+网络层+方块/玩家/聊天同步（`893fb49`）→ 阶段 1 掉落物/拾取同步+断线重连（`4d9a2ea`）→ 阶段 2 怪物事件同步+红石缓解（`7048df0`）→ 阶段 3 多房间+世界落盘+换房/新建+玩家名颜色（`ce98e23`）→ 阶段 4 插值优化+死亡观战+配置面板（`74418d1`）→ 阶段 5 世界内换房/重建+时间戳对齐插值+管理面板鉴权（待提交）。设计文档 v0.7、README 已同步。
+
+剩余规划（见 `docs/lan-multiplayer-design.md` §11，待用户确认范围）：
+
+- **阶段 6（规划）**：手持物品外观同步/快捷栏槽位可见；玩家死亡掉落物同步；观战者视角平滑；管理面板鉴权增强（token 过期/操作日志）；时间戳插值自适应延迟（当前固定 120ms）。
+
+### 阶段 5 关键实现备忘（防回退）
+
+- **换房/重建协议**：`switch_room`（C2S，保持连接换房，目标满则拒）、`world_reset`（C2S，仅 host）；`world_info` 加 `restart` 标记（含新建房走 `createRoom` 分支也要带）。客户端 `NetworkManager` 收到 restart → `_ready=false` + `restart_world` 事件 → `main.js` 用新 seed 重启本地世界 → `onWorldStarted()` 落地缓存，全程不断连接。聊天命令 `/room <名>` `/rebuild`。
+- **时间戳插值**：`player_state` 广播带 `ts: Date.now()`；`RemotePlayer` 样本缓冲(≤40) + 时钟偏移平滑(0.9/0.1) + 固定 120ms 延迟，`renderTime = now + offset - delay` 线性插值重放。**高陷阱：包围 renderTime 的下标 i 必须钳到 `len-2`**（`b = buf[i+1]` 不能越界），否则 `b.ts` 抛错会让整条 `Game.loop` 停摆（曾真出过）。SNAP>4 快照并清空缓冲防传送回拉。
+- **面板鉴权**：`config.js` 的 `adminToken`（字符串 ≤64，空=关）；`index.mjs` `authOk(req)` 校验 `Authorization: Bearer <token>`，`maskedConfig()` 掩码回显；`admin.html` 登录弹层 + localStorage 存口令，配置卡口令框 `****` 未改不提交。未授权 401。
+- **ChatBox 全局 T 键监听器必须在 dispose 移除**（`this._onKey` 引用保存并 `removeEventListener`），否则换房/重建反复 `start()` 会堆积监听器导致一次 T 开多个输入框。

@@ -164,13 +164,20 @@ export class NetworkManager {
       case MSG.WORLD_INFO:
         this.room = msg.room || this.room;
         if (this._ready && this.game && this.game.world && this.game.running) {
-          // 断线重连成功：世界已在运行，不重启，仅同步时间/模式并刷新远端玩家
-          this.isHost = (msg.hostId === this.selfId);
-          if (this.game.sky) this.game.sky.time = msg.time;
-          if (msg.mode && this.game.player) this.game.player.setMode(msg.mode);
-          this.onWorldStarted();
-          this._emit('system', `已重新连接服务器（房间 ${this.room}）`);
-          this.sendPlayerFull();
+          if (msg.restart) {
+            // 阶段5：世界内换房 / 重建世界 —— 重启本地世界（保持连接），期间缓存远端数据
+            this._ready = false;
+            this.isHost = (msg.hostId === this.selfId);
+            this._emit('restart_world', msg);
+          } else {
+            // 断线重连成功：世界已在运行，不重启，仅同步时间/模式并刷新远端玩家
+            this.isHost = (msg.hostId === this.selfId);
+            if (this.game.sky) this.game.sky.time = msg.time;
+            if (msg.mode && this.game.player) this.game.player.setMode(msg.mode);
+            this.onWorldStarted();
+            this._emit('system', `已重新连接服务器（房间 ${this.room}）`);
+            this.sendPlayerFull();
+          }
         } else {
           this.isHost = (msg.hostId === this.selfId);
           this._emit('world_info', msg);   // 首次进入：由 main.js 用该 seed 启动世界
@@ -325,6 +332,10 @@ export class NetworkManager {
   sendChat(text) { this._send(MSG.CHAT, { text }); }
   createRoom(seed, mode, room) { this._sendQueued(MSG.CREATE_ROOM, { seed, mode, room }); }
   joinRoom(room) { this._sendQueued(MSG.JOIN_ROOM, { room }); }
+
+  // 阶段5：世界内换房 / 重建世界（保持连接，服务器回 WORLD_INFO(restart) 后重启本地世界）
+  sendSwitchRoom(room) { this._send(MSG.SWITCH_ROOM, { room }); }
+  sendWorldReset() { this._send(MSG.WORLD_RESET, {}); }
 
   close() {
     this._explicitClose = true; // 主动关闭：不触发自动重连

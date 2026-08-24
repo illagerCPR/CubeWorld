@@ -63,6 +63,12 @@ export class Room {
   // 世界状态变更后落盘（回调由 index.mjs 注入为 store.saveRoom）
   save() { if (this.onSave) this.onSave(this); }
 
+  // 房间是否已满（管理面板配置 maxPlayersPerRoom）
+  isFull() {
+    const cap = (this.config && this.config.maxPlayersPerRoom) || 10;
+    return this.players.size >= cap;
+  }
+
   addPlayer(p) {
     // 管理面板配置的房间人数上限（超出拒绝入房）
     const cap = (this.config && this.config.maxPlayersPerRoom) || 10;
@@ -155,21 +161,23 @@ export class Room {
     player.mode = msg.mode === 'creative' ? 'creative' : (msg.mode === 'spectator' ? 'spectator' : 'survival');
     this.hostId = player.id;
     this.sendTo(player, MSG.ROOM_CREATED, { roomId: this.name });
-    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: player.mode, time: this.time, hostId: this.hostId, room: this.name });
+    // restart=true 表示世界内换房到新房间：客户端需重启本地世界（新 seed）
+    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: player.mode, time: this.time, hostId: this.hostId, room: this.name, restart: !!msg.restart });
     this.broadcast(MSG.PLAYER_JOIN, { id: player.id, name: player.name, mode: player.mode, pos: player.pos }, player.id);
     this.save();
     console.log(`[+] ${player.name} 创建房间「${this.name}」seed=${this.seed} (host)`);
   }
 
-  joinRoom(player, msg) {
+  // opts.restart=true 表示世界内换房/重建：客户端收到 WORLD_INFO 后重启本地世界（保持连接）
+  joinRoom(player, msg, opts = {}) {
     // 房间世界不存在（尚未创建/无存档）时，首个加入者自动成为 host 并随机生成世界
     if (this.seed === null) {
-      this.createRoom(player, { seed: Math.floor(Math.random() * 2147483647), mode: 'survival' });
+      this.createRoom(player, { seed: Math.floor(Math.random() * 2147483647), mode: 'survival', restart: !!opts.restart });
       return;
     }
     // 无 host 时（如房间从磁盘恢复且暂无玩家在线）首个加入者接管 host
     if (this.hostId === null || !this.players.has(this.hostId)) this.hostId = player.id;
-    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId, room: this.name });
+    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId, room: this.name, restart: !!opts.restart });
     // 回放现存玩家：加入者立即可见房间内已有玩家
     for (const p of this.players.values()) {
       if (p.id === player.id) continue;
@@ -191,6 +199,23 @@ export class Room {
   modeOfHost() {
     const h = this.players.get(this.hostId);
     return h ? h.mode : 'survival';
+  }
+
+  // 重建当前房间世界（阶段5，仅 host 可触发）：新种子 + 清空方块/掉落/时间，
+  // 广播 WORLD_INFO(restart) 让所有端重启本地世界，并重放 PLAYER_JOIN 让各端重建远端玩家
+  resetWorld() {
+    this.seed = Math.floor(Math.random() * 2147483647);
+    this.blocks.clear();
+    this.drops.clear();
+    this.time = 0.35;
+    this.nextMobId = 1;
+    this.nextDropId = 1;
+    this.broadcast(MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId, room: this.name, restart: true });
+    for (const p of this.players.values()) {
+      this.broadcast(MSG.PLAYER_JOIN, { id: p.id, name: p.name, mode: p.mode, pos: p.pos }, p.id);
+    }
+    this.save();
+    console.log(`[世界] 房间「${this.name}」已重建 seed=${this.seed} (${this.players.size}人)`);
   }
 
   // 玩家消息路由
@@ -300,6 +325,7 @@ export class Room {
     this.broadcast(MSG.PLAYER_STATE, {
       id: player.id, x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch,
       onGround: player.onGround, flying: player.flying, inWater: player.inWater,
+      ts: Date.now(), // 阶段5：服务器时间戳，客户端做时间对齐的缓冲插值
     }, player.id);
   }
 

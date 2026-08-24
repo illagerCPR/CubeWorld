@@ -1,5 +1,6 @@
 // RemotePlayer.js -- 远端玩家实体：方块人模型 + 位置插值 + 昵称标签
-// 阶段 3：昵称按玩家 id 着色；阶段 4：插值优化（速度自适应平滑 + 远距瞬移快照 + 行走动画 + 头部俯仰）
+// 阶段 3：昵称按玩家 id 着色；阶段 4：插值优化（关节模型 + 行走动画 + 头部俯仰 + 远距瞬移快照）
+// 阶段 5：时间戳对齐插值——缓冲服务器带 ts 的状态样本，按"渲染时刻=本地时间+时钟偏移-延迟"线性插值，消除指数平滑的拖影
 import * as THREE from 'three';
 import { playerColorHue, playerColorCss } from '../net/playerColor.js';
 
@@ -14,10 +15,8 @@ const PARTS = [
   { box: [0.02, 0, -0.15, 0.28, 0.6, 0.15], role: 'leg', pivot: [0.13, 0.6, 0] },
 ];
 
-// 远距瞬移阈值：超过则直接快照（respawn/传送时避免"飞天滑行"）
+// 远距瞬移阈值：插值目标距当前渲染位置超过该值视为传送，直接快照并丢弃旧样本
 const SNAP_DIST = 4;
-// 插值基准速率（每帧收敛比例由速度自适应放大）
-const BASE_K = 10;
 
 // 由玩家 id 派生稳定颜色（与聊天/昵称共用同一套色板，区分不同玩家）
 function playerColor(id) {
@@ -75,11 +74,13 @@ export class RemotePlayer {
     this.flying = false;
     this.inWater = false;
     this.onGround = false;
-    // 行走动画状态：摆动相位 + 估算水平速度
+    // 阶段5 时间戳插值：状态样本缓冲 + 时钟偏移估计 + 固定插值延迟
+    this._buffer = [];        // {ts, x,y,z,yaw,pitch,flying,inWater,onGround}，按 ts 升序
+    this._clockOffset = 0;    // 服务器时钟 - 本地时钟（平滑估计，秒）
+    this._interpDelay = 0.12; // 插值延迟（秒）：始终回放"0.12s 前"的状态，平滑网络抖动
+    // 行走动画状态：摆动相位 + 估算水平速度（由缓冲段位移算出）
     this._walkPhase = 0;
     this._speed = 0;
-    this._lastTarget = this._target.clone();
-    this._lastTargetTime = 0;
   }
 
   _makeNameSprite(name) {
@@ -101,23 +102,24 @@ export class RemotePlayer {
     return sp;
   }
 
-  // 高频状态（位置/朝向/姿态）
+  // 高频状态（位置/朝向/姿态）：压入带时间戳的样本缓冲（不直接驱动位置，由 update 插值回放）
   applyState(s) {
-    // 速度估算：目标位置变化量 / 本地到达时间差（网络 20Hz）
     const now = performance.now() / 1000;
-    const dt = Math.max(0.01, Math.min(0.5, now - this._lastTargetTime));
-    const dx = s.x - this._lastTarget.x;
-    const dz = s.z - this._lastTarget.z;
-    this._speed = Math.hypot(dx, dz) / dt;
-    this._lastTarget.set(s.x, s.y, s.z);
-    this._lastTargetTime = now;
-
-    this._target.set(s.x, s.y, s.z);
-    this._targetYaw = s.yaw || 0;
-    this._targetPitch = s.pitch || 0;
-    this.flying = !!s.flying;
-    this.inWater = !!s.inWater;
-    this.onGround = !!s.onGround;
+    const hasTs = typeof s.ts === 'number' && s.ts > 0;
+    const ts = hasTs ? s.ts / 1000 : now; // 服务器 ts 单位毫秒；无 ts（旧服务器）退化为本地到达时间
+    if (hasTs) {
+      // 平滑估计时钟偏移：offset = 服务器时钟 - 本地时钟
+      const off = ts - now;
+      if (this._clockOffset === 0) this._clockOffset = off;
+      else this._clockOffset = this._clockOffset * 0.9 + off * 0.1;
+    }
+    this._buffer.push({
+      ts,
+      x: s.x, y: s.y, z: s.z,
+      yaw: s.yaw || 0, pitch: s.pitch || 0,
+      flying: !!s.flying, inWater: !!s.inWater, onGround: !!s.onGround,
+    });
+    if (this._buffer.length > 40) this._buffer.shift();
   }
 
   applyFull(s) {
@@ -138,9 +140,13 @@ export class RemotePlayer {
     this.dead = false;
     this.group.visible = true;
     if (this.nameSprite) this.nameSprite.visible = true;
+    this._buffer.length = 0; // 重生=瞬移，丢弃旧样本避免轨迹回拉
     this._target.set(s.x, s.y, s.z);
-    this._targetYaw = this.yaw;
+    this._targetYaw = s.yaw || this.yaw;
+    this._targetPitch = s.pitch || this.pitch;
     this.group.position.copy(this._target);
+    this.yaw = this._targetYaw;
+    this.pitch = this._targetPitch;
   }
 
   update(dt) {
@@ -155,23 +161,44 @@ export class RemotePlayer {
       for (const m of this.parts) { m.material.emissive.setRGB(0, 0, 0); m.material.emissiveIntensity = 0; }
     }
 
-    // 远距瞬移：目标距当前过远时直接快照，避免"飞天滑行"（respawn/传送）
-    if (this.group.position.distanceTo(this._target) > SNAP_DIST) {
-      this.group.position.copy(this._target);
-      this.yaw = this._targetYaw;
-      this.pitch = this._targetPitch;
-    } else {
-      // 速度自适应插值：速度越快收敛越快（减少拖尾），静止时平滑停靠
-      const k = 1 - Math.exp(-dt * (BASE_K + Math.min(30, this._speed * 1.5)));
-      this.group.position.lerp(this._target, k);
-
+    // 阶段5 时间戳对齐插值：从缓冲找包围"渲染时刻"的两个样本，线性插值出目标位姿
+    const buf = this._buffer;
+    if (buf.length) {
+      const now = performance.now() / 1000;
+      const renderTime = now + this._clockOffset - this._interpDelay;
+      // 裁剪过旧的样本（至少保留两个作边界），避免缓冲无限增长
+      while (buf.length > 2 && buf[1].ts < renderTime - 0.5) buf.shift();
+      let a = buf[0], b = buf[buf.length - 1];
+      if (buf.length >= 2) {
+        // 找 renderTime 落在 [a.ts, b.ts] 的那一对；i 最多到 len-2，保证 b 恒有定义
+        // （renderTime 晚于最新样本时停在最后两样本，f 被钳到 1 = 停在最新位置）
+        let i = 0;
+        const maxI = buf.length - 2;
+        while (i < maxI && buf[i + 1].ts < renderTime) i++;
+        a = buf[i]; b = buf[i + 1];
+      }
+      const span = b.ts - a.ts;
+      let f = span > 0 ? (renderTime - a.ts) / span : 0;
+      f = Math.max(0, Math.min(1, f));
+      this._target.set(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, a.z + (b.z - a.z) * f);
       // yaw 最短角插值
-      let d = this._targetYaw - this.yaw;
-      while (d > Math.PI) d -= Math.PI * 2;
-      while (d < -Math.PI) d += Math.PI * 2;
-      this.yaw += d * k;
-      this.pitch += (this._targetPitch - this.pitch) * k;
+      let dy = b.yaw - a.yaw;
+      while (dy > Math.PI) dy -= Math.PI * 2;
+      while (dy < -Math.PI) dy += Math.PI * 2;
+      this._targetYaw = a.yaw + dy * f;
+      this._targetPitch = a.pitch + (b.pitch - a.pitch) * f;
+      // 移动速度（当前段位移/时间）驱动走路动画；缓冲耗尽时自然归 0（静止停靠）
+      this._speed = span > 0.001 ? Math.hypot(b.x - a.x, b.z - a.z) / span : 0;
+      this.flying = b.flying; this.inWater = b.inWater; this.onGround = b.onGround;
     }
+
+    // 落位：传送（respawn/远距移动）直接快照并丢弃旧样本，否则置于插值目标
+    if (this.group.position.distanceTo(this._target) > SNAP_DIST) {
+      this._buffer.length = 0;
+    }
+    this.group.position.copy(this._target);
+    this.yaw = this._targetYaw;
+    this.pitch = this._targetPitch;
     this.group.rotation.y = this.yaw;
 
     // 头部俯仰（绕颈部 pivot）

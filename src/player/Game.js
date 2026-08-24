@@ -312,7 +312,7 @@ export class Game {
       });
       this.net.on('attacked', ({ damage }) => { this.player.hurt(damage, 'player', true); });
       this.chatBox = new ChatBox(this, (text) => this.net.sendChat(text));
-      this.chatBox.add(`已进入局域网世界 · 房间「${this.net.room || 'default'}」 · 阶段3（多房间+世界落盘+名字颜色），按 T 聊天`, '#ff8');
+      this.chatBox.add(`已进入局域网世界 · 房间「${this.net.room || 'default'}」 · 按 T 聊天（/room 换房 /rebuild 重建世界 host）`, '#ff8');
     }
 
     // 隐藏加载界面

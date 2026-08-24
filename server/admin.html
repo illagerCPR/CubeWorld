@@ -60,6 +60,10 @@
       <div class="cfg-item" style="align-self:flex-end;">
         <button class="btn-primary" onclick="saveConfig()">保存配置</button>
       </div>
+      <div class="cfg-item">
+        <label>管理口令 (adminToken) <span style="color:#7a8394">（留空=关闭鉴权）</span></label>
+        <input id="cfg-adminToken" type="password" placeholder="留空则关闭鉴权">
+      </div>
     </div>
   </div>
 
@@ -78,17 +82,72 @@
 
   <div class="toast" id="toast"></div>
 
+  <!-- 阶段5：管理面板鉴权登录弹层（服务器开启 adminToken 后 401 时出现） -->
+  <div id="login" style="display:none; position:fixed; inset:0; background:rgba(10,12,16,0.85); z-index:60;
+       align-items:center; justify-content:center;">
+    <div style="background:#242a36; border:1px solid #3a4252; border-radius:8px; padding:24px 28px; width:340px;">
+      <h2 style="margin:0 0 8px; font-size:18px;">🔒 管理员登录</h2>
+      <p style="margin:0 0 14px; color:#8a93a3; font-size:13px;">服务器管理面板已开启鉴权，请输入管理口令</p>
+      <input id="login-token" type="password" placeholder="管理口令" style="width:100%; padding:8px 10px;
+             background:#1b1f27; color:#e6e6e6; border:1px solid #4a5264; border-radius:4px; margin-bottom:10px;">
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn-danger" onclick="doLogout()">清除口令</button>
+        <button class="btn-primary" onclick="doLogin()">登录</button>
+      </div>
+      <div id="login-err" style="color:#f88; font-size:13px; margin-top:10px;"></div>
+    </div>
+  </div>
+
 <script>
   let status = null;
+  const TOKEN_KEY = 'pmc-admin-token';
+  let authDenied = false; // 服务器 401 后不再自动轮询刷新，等用户登录
+
+  function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
 
   async function api(path, method = 'GET', body) {
     const opt = { method, headers: {} };
+    const tk = getToken();
+    if (tk) opt.headers['Authorization'] = 'Bearer ' + tk;
     if (body !== undefined) {
       opt.headers['Content-Type'] = 'application/json';
       opt.body = JSON.stringify(body);
     }
     const r = await fetch(path, opt);
+    if (r.status === 401) {
+      showLogin();
+      const e = new Error('unauthorized');
+      e.unauthorized = true;
+      throw e;
+    }
     return r.json();
+  }
+
+  // 登录弹层：显示并聚焦输入框
+  function showLogin() {
+    authDenied = true;
+    const d = document.getElementById('login');
+    d.style.display = 'flex';
+    document.getElementById('login-token').focus();
+  }
+
+  async function doLogin() {
+    const v = document.getElementById('login-token').value.trim();
+    if (!v) return;
+    localStorage.setItem(TOKEN_KEY, v);
+    document.getElementById('login-token').value = '';
+    document.getElementById('login-err').textContent = '';
+    document.getElementById('login').style.display = 'none';
+    authDenied = false;
+    await refresh();
+  }
+
+  // 清除本地口令并回到未登录状态（下次刷新要求重新输入）
+  function doLogout() {
+    localStorage.removeItem(TOKEN_KEY);
+    authDenied = false;
+    document.getElementById('login').style.display = 'none';
+    refresh();
   }
 
   function toast(msg, isErr) {
@@ -136,6 +195,7 @@
   }
 
   async function refresh() {
+    if (authDenied) return; // 401 等待登录，不反复请求
     try {
       status = await api('/api/status');
       const up = Math.floor((Date.now() / 1000) - status.bootTime);
@@ -146,9 +206,13 @@
       document.getElementById('cfg-dropTtlMs').value = status.config.dropTtlMs;
       document.getElementById('cfg-heartbeatMs').value = status.config.heartbeatMs;
       document.getElementById('cfg-maxPlayers').value = status.config.maxPlayersPerRoom;
+      // adminToken 返回掩码 '****'：设为输入框值；用户不改则不提交（见 saveConfig）
+      const tkEl = document.getElementById('cfg-adminToken');
+      tkEl.value = status.config.adminToken === '****' ? '****' : '';
+      tkEl.placeholder = status.config.adminToken === '****' ? '已设置（改此框可换新口令，清空并保存=关闭）' : '留空则关闭鉴权';
       renderRooms();
     } catch (e) {
-      document.getElementById('server-line').textContent = '无法连接服务器 API';
+      if (!e.unauthorized) document.getElementById('server-line').textContent = '无法连接服务器 API';
     }
   }
 
@@ -158,7 +222,13 @@
       heartbeatMs: Number(document.getElementById('cfg-heartbeatMs').value),
       maxPlayersPerRoom: Number(document.getElementById('cfg-maxPlayers').value),
     };
+    // adminToken：值为 '****'（未改动，保持原样）时不提交；否则提交（新口令或清空关闭）
+    const tk = document.getElementById('cfg-adminToken').value.trim();
+    if (tk !== '****') patch.adminToken = tk;
     const r = await api('/api/config', 'POST', patch);
+    // 保存后若设置了新口令，立即存本地以便后续请求带上；清空则移除本地口令
+    if (tk && tk !== '****') localStorage.setItem(TOKEN_KEY, tk);
+    else if (!tk) localStorage.removeItem(TOKEN_KEY);
     toast('配置已保存并生效', !!r.error);
     refresh();
   }

@@ -33,6 +33,15 @@ net.on('world_info', async ({ seed, mode, time, room }) => {
   net.sendPlayerFull();
 });
 
+// 阶段5：世界内换房 / 重建世界 —— 保持连接，用新 seed 重启本地世界（不回主菜单）
+net.on('restart_world', async ({ seed, mode, time, room }) => {
+  net.room = room || net.room || 'default';
+  await game.start(mode, seed, null, 0, false, true);
+  game.sky.time = time;
+  net.onWorldStarted();
+  net.sendPlayerFull();
+});
+
 // 联机连接状态提示
 net.onStatusChange = (status, text) => {
   menu.setMpStatus(text, status === 'connected' ? '#6f6' : (status === 'reconnecting' ? '#fa0' : '#f88'));

@@ -8,6 +8,8 @@ export const MSG = {
   CREATE_ROOM: 'create_room',
   JOIN_ROOM: 'join_room',
   LEAVE_ROOM: 'leave_room',
+  SWITCH_ROOM: 'switch_room',   // 阶段5：世界内直接换房（无需回主菜单）
+  WORLD_RESET: 'world_reset',   // 阶段5：重建当前房间世界（仅 host）
   ROOM_CREATED: 'room_created',
   WORLD_INFO: 'world_info',
   PLAYER_JOIN: 'player_join',

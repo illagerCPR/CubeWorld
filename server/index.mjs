@@ -40,7 +40,7 @@ function getRoom(name) {
   return room;
 }
 
-// 服务器聊天命令（/rooms /seed /help），结果只回给发起者
+// 服务器聊天命令（/rooms /seed /room /rebuild /help），结果只回给发起者
 function handleCommand(player, text) {
   const args = text.slice(1).trim().split(/\s+/);
   const cmd = args[0] || '';
@@ -52,12 +52,48 @@ function handleCommand(player, text) {
     reply = `现有房间: ${list || '无'}`;
   } else if (cmd === 'seed') {
     reply = `当前房间「${room.name}」seed=${room.seed} 方块改动${room.blocks.size} 掉落${room.drops.size}`;
+  } else if (cmd === 'room') {
+    const target = args.slice(1).join(' ').trim();
+    if (!target) reply = '用法: /room <房间名> 切换到其它房间（无需回主菜单）';
+    else {
+      switchRoom(player, target);
+      return; // 切换结果经 WORLD_INFO/聊天消息告知
+    }
+  } else if (cmd === 'rebuild' || cmd === 'reset' || cmd === 'regen') {
+    if (player.id !== room.hostId) reply = '只有房主(HOST)可以重建世界';
+    else {
+      room.resetWorld();
+      return; // 重建结果经 WORLD_INFO(restart) 广播告知
+    }
   } else if (cmd === 'help') {
-    reply = '命令: /rooms 列出房间  /seed 查看当前世界种子  /help 帮助';
+    reply = '命令: /rooms 列出房间  /seed 当前世界  /room <名> 切换房间  /rebuild 重建世界(host)  /help 帮助';
   } else {
     reply = `未知命令 /${cmd}（/help 查看）`;
   }
   room.sendTo(player, MSG.CHAT, { from: '系统', fromId: 0, text: reply });
+}
+
+// 世界内换房（阶段5）：保持 WebSocket 连接，离开当前房间并加入目标房间，客户端重启本地世界
+function switchRoom(player, roomName) {
+  const key = String(roomName || '').trim() || 'default';
+  if (!player.room) return;
+  if (key === player.room.name) {
+    player.room.sendTo(player, MSG.CHAT, { from: '系统', fromId: 0, text: `你已在房间「${key}」` });
+    return;
+  }
+  const target = getRoom(key);
+  if (target.isFull()) {
+    player.room.sendTo(player, MSG.CHAT, { from: '系统', fromId: 0, text: `房间「${key}」已满，无法切换（继续留在当前房间）` });
+    return;
+  }
+  const oldRoom = player.room;
+  oldRoom.removePlayer(player.id);
+  player.room = null;
+  if (!target.addPlayer(player)) return; // 理论不会触发（已先检查满）
+  player.room = target;
+  target.joinRoom(player, {}, { restart: true });
+  target.sendTo(player, MSG.CHAT, { from: '系统', fromId: 0, text: `已切换到房间「${target.name}」seed=${target.seed}` });
+  console.log(`[换房] ${player.name}: ${oldRoom.name} -> ${target.name}`);
 }
 
 // 服务器管理面板（阶段 4）：HTTP 路由 + JSON API
@@ -89,6 +125,20 @@ const adminHtml = (() => {
   } catch { return '<h1>管理面板文件缺失</h1>'; }
 })();
 
+// 阶段5 管理面板鉴权：adminToken 非空时开启，API 请求须带 Authorization: Bearer <token>
+function authOk(req) {
+  const token = serverConfig.adminToken;
+  if (!token) return true; // 未开启鉴权（局域网信任环境默认关闭）
+  return (req.headers['authorization'] || '') === 'Bearer ' + token;
+}
+
+// 对外返回配置时掩码 adminToken，避免泄露明文口令
+function maskedConfig() {
+  const c = { ...serverConfig };
+  if (c.adminToken) c.adminToken = '****';
+  return c;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://' + req.headers.host);
   const p = url.pathname;
@@ -103,26 +153,31 @@ const server = http.createServer(async (req, res) => {
   // JSON API
   if (p.startsWith('/api/')) {
     try {
+      // 阶段5 鉴权：开启 adminToken 后所有 API 都要求 Bearer 口令（未开则放行）
+      if (!authOk(req)) {
+        sendJson(res, 401, { error: '未授权：请先登录管理面板' });
+        return;
+      }
       if (p === '/api/status' && req.method === 'GET') {
         const onlinePlayers = [...rooms.values()].reduce((n, r) => n + r.players.size, 0);
         sendJson(res, 200, {
           bootTime: BOOT_TIME,
           onlinePlayers,
           rooms: [...rooms.values()].map((r) => r.info()),
-          config: { ...serverConfig },
+          config: maskedConfig(),
         });
         return;
       }
       if (p === '/api/config' && req.method === 'GET') {
-        sendJson(res, 200, { config: { ...serverConfig } });
+        sendJson(res, 200, { config: maskedConfig() });
         return;
       }
       if (p === '/api/config' && req.method === 'POST') {
         const body = await readBody(req);
         Object.assign(serverConfig, config.applyConfig(serverConfig, body));
         config.saveConfig(serverConfig);
-        console.log(`[配置] 已更新: dropTtlMs=${serverConfig.dropTtlMs} heartbeatMs=${serverConfig.heartbeatMs} maxPlayersPerRoom=${serverConfig.maxPlayersPerRoom}`);
-        sendJson(res, 200, { ok: true, config: { ...serverConfig } });
+        console.log(`[配置] 已更新: dropTtlMs=${serverConfig.dropTtlMs} heartbeatMs=${serverConfig.heartbeatMs} maxPlayersPerRoom=${serverConfig.maxPlayersPerRoom} adminToken=${serverConfig.adminToken ? '****' : '(未开启)'}`);
+        sendJson(res, 200, { ok: true, config: maskedConfig() });
         return;
       }
       if (p === '/api/broadcast' && req.method === 'POST') {
@@ -245,8 +300,14 @@ wss.on('connection', (ws, req) => {
       player.room = null;
       player = null;
       ws.close();
+    } else if (msg.t === MSG.SWITCH_ROOM) {
+      // 阶段5：世界内换房（保持连接，客户端重启本地世界）
+      switchRoom(player, String(msg.room || ''));
+    } else if (msg.t === MSG.WORLD_RESET) {
+      // 阶段5：重建当前房间世界（仅 host；非 host 直接忽略）
+      if (player.room && player.room.hostId === player.id) player.room.resetWorld();
     } else if (msg.t === MSG.CHAT && String(msg.text || '').startsWith('/')) {
-      // 服务器聊天命令：/rooms /seed /help
+      // 服务器聊天命令：/rooms /seed /room /rebuild /help
       handleCommand(player, String(msg.text || '').slice(0, 120));
     } else {
       if (process.env.DEBUG) console.log(`[msg] ${msg.t} from id=${player.id}`);
@@ -267,5 +328,5 @@ server.listen(PORT, HOST, () => {
   console.log('局域网内其它电脑用 ws://<本机IP>:' + PORT + '/ws 加入');
   console.log(`管理面板: http://127.0.0.1:${PORT}/ （房间/玩家/配置/世界管理）`);
   console.log(`已加载磁盘房间存档: ${store.loadRooms().length} 个`);
-  console.log(`配置: 掉落物过期 ${serverConfig.dropTtlMs}ms 心跳 ${serverConfig.heartbeatMs}ms 每房上限 ${serverConfig.maxPlayersPerRoom}人`);
+  console.log(`配置: 掉落物过期 ${serverConfig.dropTtlMs}ms 心跳 ${serverConfig.heartbeatMs}ms 每房上限 ${serverConfig.maxPlayersPerRoom}人 管理口令 ${serverConfig.adminToken ? '已开启' : '未开启(局域网信任)'}`);
 });

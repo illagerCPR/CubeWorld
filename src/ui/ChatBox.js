@@ -12,7 +12,14 @@ export class ChatBox {
       pointer-events: none; z-index: 40; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
     `;
     document.body.appendChild(this.el);
-    this._bindKeys();
+    // T 键打开输入框：保存引用以便 dispose 时移除，防止换房/重建世界反复 start() 堆积监听器
+    this._onKey = (e) => {
+      if (e.code === 'KeyT' && this.game.networkMode && this.game.running && !e.repeat) {
+        e.preventDefault();
+        this.open();
+      }
+    };
+    document.addEventListener('keydown', this._onKey);
   }
 
   add(text, color = '#fff') {
@@ -80,17 +87,9 @@ export class ChatBox {
 
   toggle() { if (this.input) this.close(); else this.open(); }
 
-  _bindKeys() {
-    document.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyT' && this.game.networkMode && this.game.running && !e.repeat) {
-        e.preventDefault();
-        this.open();
-      }
-    });
-  }
-
   dispose() {
     this.close();
+    document.removeEventListener('keydown', this._onKey);
     this.el.remove();
   }
 }
