@@ -72,6 +72,10 @@ export class Game {
     this.chatBox = null;        // 联机聊天框
     this.spectating = false;    // 是否处于观战模式（死亡后旁观其他玩家）
     this.spectateTargetId = null; // 当前观战跟随的玩家 id（null=自由飞行）
+    // 阶段6 观战相机平滑：跟随目标时对位置/朝向做指数平滑，切换目标/目标瞬移时不跳变
+    this._specSmoothed = null;    // Vector3，平滑后的观战位置
+    this._specSmoothYaw = 0;
+    this._specSmoothPitch = 0;
     
     this.blockSvgMap = BlockSVGDefinitions;
     this.itemSvgMap = ItemSVGDefinitions;
@@ -155,6 +159,9 @@ export class Game {
     this.running = false;
     this.spectating = false;        // 阶段4：新世界默认不观战
     this.spectateTargetId = null;
+    this._specSmoothed = null;      // 阶段6：观战平滑状态重置
+    this._specSmoothYaw = 0;
+    this._specSmoothPitch = 0;
     // 显示加载界面
     const loadingEl = document.getElementById('loading');
     if (loadingEl) {
@@ -438,8 +445,23 @@ export class Game {
     let specTarget = this.spectating ? this.remotePlayers.get(this.spectateTargetId) : null;
     if (specTarget && specTarget.dead) { this.spectateTargetId = null; specTarget = null; } // 目标死亡/离开 → 回自由
     if (specTarget) {
-      // 观战跟随：吸附 + 相机贴合 + 天空跟随（区块加载以吸附后的位置为中心，正好加载目标周围）
-      this.player.position.copy(specTarget.group.position);
+      // 观战跟随：吸附（平滑）+ 相机贴合 + 天空跟随（区块加载以吸附后的位置为中心，正好加载目标周围）
+      // 阶段6 平滑：对目标插值位置再做指数平滑（帧率无关系数），切换目标/目标瞬移时不跳变
+      const targetPos = specTarget.group.position;
+      if (!this._specSmoothed) {
+        this._specSmoothed = targetPos.clone();
+        this._specSmoothYaw = specTarget.yaw;
+        this._specSmoothPitch = specTarget.pitch;
+      } else {
+        const k = 1 - Math.pow(0.0001, dt); // ~0.9 @60fps，帧率无关
+        this._specSmoothed.lerp(targetPos, k);
+        let dy = specTarget.yaw - this._specSmoothYaw;
+        while (dy > Math.PI) dy -= Math.PI * 2;
+        while (dy < -Math.PI) dy += Math.PI * 2;
+        this._specSmoothYaw += dy * k;
+        this._specSmoothPitch += (specTarget.pitch - this._specSmoothPitch) * k;
+      }
+      this.player.position.copy(this._specSmoothed);
       this.player.velocity.set(0, 0, 0);
       this.updateSpectateCamera();
       this.sky.update(dt, this.player.position);
@@ -831,7 +853,13 @@ export class Game {
       this.player.health = 0;
       if (this.deathScreen && !this.deathScreen.visible) {
         this.deathScreen.show();
-        if (this.networkMode && this.net) this.net.sendPlayerDied();
+        if (this.networkMode && this.net) {
+          // 阶段6：死亡上报（含背包掉落列表）→ 服务器生成世界掉落物广播；随后清空背包
+          this.net.sendPlayerDied();
+          this.inventory.slots = new Array(this.inventory.size).fill(null);
+          this.inventory.hotbarSelected = 0;
+          if (this.hotbar) this.hotbar.update();
+        }
       }
     }
   }
@@ -849,10 +877,20 @@ export class Game {
     if (this.spectating) {
       this.spectating = false;
       this.spectateTargetId = null;
+      this._specSmoothed = null;
       if (this._preSpectateMode && this.player.spectator) this.player.setMode(this._preSpectateMode);
       this._preSpectateMode = null;
     }
     if (this.networkMode && this.net) {
+      // 阶段6：联机重生——背包已在死亡时清空，重新发放生存初始物品
+      this.inventory.slots = new Array(this.inventory.size).fill(null);
+      this.inventory.hotbarSelected = 0;
+      this.inventory.add('wood_pickaxe');
+      this.inventory.add('wood_axe');
+      this.inventory.add('wood_sword');
+      this.inventory.add('torch', 16);
+      this.inventory.add('bread', 5);
+      if (this.hotbar) this.hotbar.update();
       this.net.sendRespawn(this.player.position.x, this.player.position.y, this.player.position.z);
     }
   }
@@ -862,6 +900,9 @@ export class Game {
     if (!this.running || this.spectating) return;
     this.spectating = true;
     this.spectateTargetId = null;
+    this._specSmoothed = null;
+    this._specSmoothYaw = 0;
+    this._specSmoothPitch = 0;
     this._preSpectateMode = this.player.gamemode === 'spectator' ? 'survival' : this.player.gamemode;
     this.player.setMode('spectator'); // 旁观：穿墙自由飞行
     if (this.deathScreen) this.deathScreen.hideForSpectate();
@@ -880,6 +921,9 @@ export class Game {
     const ids = alive.map((rp) => rp.id);
     const idx = ids.indexOf(this.spectateTargetId);
     this.spectateTargetId = ids[(idx + 1) % ids.length];
+    this._specSmoothed = null; // 阶段6：切换目标即重置平滑，直接贴合新目标（避免跨图横扫）
+    this._specSmoothYaw = 0;
+    this._specSmoothPitch = 0;
   }
 
   // 观战提示（聊天栏显示当前跟随目标 / 操作说明）
@@ -890,7 +934,7 @@ export class Game {
     this.chatBox.add(`观战中 · ${who} · F5 切换目标 / R 重生`, '#aac');
   }
 
-  // 每帧观战相机：跟随目标时第一人称视角贴合目标；无目标则自由飞行（spectator 已穿墙）
+  // 每帧观战相机：跟随目标时第一人称视角贴合目标（平滑后的位置/朝向）；无目标则自由飞行（spectator 已穿墙）
   updateSpectateCamera() {
     if (!this.spectating) return;
     const rp = this.spectateTargetId != null ? this.remotePlayers.get(this.spectateTargetId) : null;
@@ -899,11 +943,11 @@ export class Game {
       return;
     }
     const cam = this.renderer.camera;
-    cam.position.copy(rp.group.position);
+    cam.position.copy(this.player.position); // 已被 update() 平滑吸附到目标附近
     cam.position.y += 1.62; // 视点高度
     cam.rotation.order = 'YXZ';
-    cam.rotation.y = rp.yaw;
-    cam.rotation.x = rp.pitch;
+    cam.rotation.y = this._specSmoothed ? this._specSmoothYaw : rp.yaw;
+    cam.rotation.x = this._specSmoothed ? this._specSmoothPitch : rp.pitch;
   }
 
   getAttackDamage() {

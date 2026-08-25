@@ -126,10 +126,20 @@ const adminHtml = (() => {
 })();
 
 // 阶段5 管理面板鉴权：adminToken 非空时开启，API 请求须带 Authorization: Bearer <token>
-function authOk(req) {
+// 阶段6：adminTokenExpires 非 0 且已到期 → 'expired'（口令过期）；过期后仅放行 POST /api/config 供续期/关闭，其余 401
+function authState(req) {
   const token = serverConfig.adminToken;
-  if (!token) return true; // 未开启鉴权（局域网信任环境默认关闭）
-  return (req.headers['authorization'] || '') === 'Bearer ' + token;
+  if (!token) return 'ok'; // 未开启鉴权（局域网信任环境默认关闭）
+  if ((req.headers['authorization'] || '') !== 'Bearer ' + token) return 'no';
+  if (serverConfig.adminTokenExpires > 0 && Date.now() / 1000 >= serverConfig.adminTokenExpires) return 'expired';
+  return 'ok';
+}
+
+// 阶段6 管理操作日志（内存环形缓冲，最近 200 条，/api/logs 查询）
+const adminLogs = [];
+function logAdmin(op, detail) {
+  adminLogs.push({ time: Date.now(), op, detail });
+  if (adminLogs.length > 200) adminLogs.shift();
 }
 
 // 对外返回配置时掩码 adminToken，避免泄露明文口令
@@ -154,8 +164,16 @@ const server = http.createServer(async (req, res) => {
   if (p.startsWith('/api/')) {
     try {
       // 阶段5 鉴权：开启 adminToken 后所有 API 都要求 Bearer 口令（未开则放行）
-      if (!authOk(req)) {
+      // 阶段6：口令已过期 → 仅允许 POST /api/config 续期/关闭，其余 401；并记录失败尝试
+      const auth = authState(req);
+      if (auth === 'no') {
+        logAdmin('auth-fail', `访问 ${req.method} ${p} 未授权（口令缺失/错误）`);
         sendJson(res, 401, { error: '未授权：请先登录管理面板' });
+        return;
+      }
+      if (auth === 'expired' && !(p === '/api/config' && req.method === 'POST')) {
+        logAdmin('auth-fail', `口令已过期访问 ${req.method} ${p}（仅允许 /api/config 续期）`);
+        sendJson(res, 401, { error: '口令已过期：请在配置卡中续期（或清空口令关闭鉴权）后保存' });
         return;
       }
       if (p === '/api/status' && req.method === 'GET') {
@@ -176,8 +194,14 @@ const server = http.createServer(async (req, res) => {
         const body = await readBody(req);
         Object.assign(serverConfig, config.applyConfig(serverConfig, body));
         config.saveConfig(serverConfig);
-        console.log(`[配置] 已更新: dropTtlMs=${serverConfig.dropTtlMs} heartbeatMs=${serverConfig.heartbeatMs} maxPlayersPerRoom=${serverConfig.maxPlayersPerRoom} adminToken=${serverConfig.adminToken ? '****' : '(未开启)'}`);
+        logAdmin('config', `更新配置 dropTtlMs=${serverConfig.dropTtlMs} heartbeatMs=${serverConfig.heartbeatMs} maxPlayersPerRoom=${serverConfig.maxPlayersPerRoom} adminToken=${serverConfig.adminToken ? '****' : '(未开启)'} adminTokenExpires=${serverConfig.adminTokenExpires}`);
+        console.log(`[配置] 已更新: dropTtlMs=${serverConfig.dropTtlMs} heartbeatMs=${serverConfig.heartbeatMs} maxPlayersPerRoom=${serverConfig.maxPlayersPerRoom} adminToken=${serverConfig.adminToken ? '****' : '(未开启)'} adminTokenExpires=${serverConfig.adminTokenExpires}`);
         sendJson(res, 200, { ok: true, config: maskedConfig() });
+        return;
+      }
+      // 阶段6 操作日志（仅管理面板 / 管理员查看）
+      if (p === '/api/logs' && req.method === 'GET') {
+        sendJson(res, 200, { logs: [...adminLogs].reverse() }); // 最新在前
         return;
       }
       if (p === '/api/broadcast' && req.method === 'POST') {
@@ -187,6 +211,7 @@ const server = http.createServer(async (req, res) => {
         for (const r of rooms.values()) {
           r.broadcast(MSG.CHAT, { from: '系统', fromId: 0, text: `【管理】${text}` });
         }
+        logAdmin('broadcast', text);
         console.log(`[管理] 广播: ${text}`);
         sendJson(res, 200, { ok: true });
         return;
@@ -196,7 +221,9 @@ const server = http.createServer(async (req, res) => {
         const id = Number(body.playerId);
         for (const r of rooms.values()) {
           if (r.players.has(id)) {
+            const name = r.players.get(id).name;
             r.kickPlayer(id, body.reason || '被服务器管理员移出');
+            logAdmin('kick', `踢出玩家 id=${id} (${name})，房间「${r.name}」`);
             sendJson(res, 200, { ok: true, room: r.name });
             return;
           }
@@ -213,6 +240,7 @@ const server = http.createServer(async (req, res) => {
         if (!room) { sendJson(res, 404, { error: '房间不存在' }); return; }
         if (action === 'clear-drops') {
           const removed = room.clearDrops();
+          logAdmin('clear-drops', `房间「${roomName}」清空 ${removed} 个掉落物`);
           sendJson(res, 200, { ok: true, removed });
           return;
         }
@@ -220,6 +248,7 @@ const server = http.createServer(async (req, res) => {
           for (const id of [...room.players.keys()]) room.kickPlayer(id, '房间已被服务器管理员删除');
           store.deleteRoomFile(roomName);
           rooms.delete(roomName);
+          logAdmin('delete-room', `删除房间「${roomName}」（世界存档已移除）`);
           console.log(`[管理] 删除房间「${roomName}」（世界存档已移除）`);
           sendJson(res, 200, { ok: true });
           return;
@@ -328,5 +357,5 @@ server.listen(PORT, HOST, () => {
   console.log('局域网内其它电脑用 ws://<本机IP>:' + PORT + '/ws 加入');
   console.log(`管理面板: http://127.0.0.1:${PORT}/ （房间/玩家/配置/世界管理）`);
   console.log(`已加载磁盘房间存档: ${store.loadRooms().length} 个`);
-  console.log(`配置: 掉落物过期 ${serverConfig.dropTtlMs}ms 心跳 ${serverConfig.heartbeatMs}ms 每房上限 ${serverConfig.maxPlayersPerRoom}人 管理口令 ${serverConfig.adminToken ? '已开启' : '未开启(局域网信任)'}`);
+  console.log(`配置: 掉落物过期 ${serverConfig.dropTtlMs}ms 心跳 ${serverConfig.heartbeatMs}ms 每房上限 ${serverConfig.maxPlayersPerRoom}人 管理口令 ${serverConfig.adminToken ? '已开启' : '未开启(局域网信任)'}${serverConfig.adminTokenExpires > 0 ? ` (${new Date(serverConfig.adminTokenExpires * 1000).toLocaleString()} 过期)` : ''}`);
 });

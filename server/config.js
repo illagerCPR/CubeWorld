@@ -11,6 +11,7 @@ const DEFAULTS = {
   heartbeatMs: 15000,    // 心跳间隔毫秒（超过该时间未收到 pong 视为掉线）
   maxPlayersPerRoom: 10, // 单个房间最大玩家数（超出拒绝加入）
   adminToken: '',        // 管理面板口令（阶段5）：空=不鉴权（局域网信任），非空=API 需 Bearer 口令
+  adminTokenExpires: 0,  // 阶段6 口令过期时间（Unix 秒，0=永不过期）：到期后管理 API 一律 401
 };
 
 // 数字配置的合法范围（防止管理面板提交脏值）
@@ -18,6 +19,7 @@ const RANGES = {
   dropTtlMs: [1000, 3600000],       // 1s ~ 1h
   heartbeatMs: [2000, 60000],       // 2s ~ 60s
   maxPlayersPerRoom: [1, 64],       // 1 ~ 64
+  adminTokenExpires: [0, 4102444800], // Unix 秒，0=永不过期 ~ 2100 年
 };
 
 // 字符串配置的最大长度（如管理口令）

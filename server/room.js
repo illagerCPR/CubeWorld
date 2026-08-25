@@ -81,7 +81,8 @@ export class Room {
     p.health = 20; p.food = 20; p.saturation = 5;
     p.pos = { x: 0.5, y: 66, z: 0.5, yaw: 0, pitch: 0 };
     p.onGround = false; p.flying = false; p.inWater = false;
-    p.selected = 0; p.alive = true;
+    p.selected = 0; p.heldItem = null; p.alive = true;
+    p._diedDrops = false; // 阶段6：本次死亡周期的掉落是否已产出（防重复上报刷掉落）
     this.players.set(p.id, p);
     return true;
   }
@@ -231,6 +232,7 @@ export class Room {
       case MSG.PLAYER_STATE: this.onPlayerState(player, msg); break;
       case MSG.PLAYER_FULL: this.onPlayerFull(player, msg); break;
       case MSG.ATTACK_PLAYER: this.onAttack(player, msg); break;
+      case MSG.PLAYER_DIED: this.onPlayerDied(player, msg); break;
       case MSG.RESPAWN: this.onRespawn(player, msg); break;
       case MSG.GAMEMODE: this.onGamemode(player, msg); break;
       case MSG.SET_TIME: this.onSetTime(player, msg); break;
@@ -322,9 +324,13 @@ export class Room {
     p.x = safeNum(msg.x, p.x); p.y = safeNum(msg.y, p.y); p.z = safeNum(msg.z, p.z);
     p.yaw = safeNum(msg.yaw, p.yaw); p.pitch = safeNum(msg.pitch, p.pitch);
     player.onGround = !!msg.onGround; player.flying = !!msg.flying; player.inWater = !!msg.inWater;
+    // 阶段6：手持物品同步——广播当前快捷栏槽位与物品名（远端模型据此渲染手持物）
+    if (msg.selected !== undefined) player.selected = safeInt(msg.selected, player.selected);
+    if (typeof msg.held === 'string') player.heldItem = msg.held.slice(0, 32);
     this.broadcast(MSG.PLAYER_STATE, {
       id: player.id, x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch,
       onGround: player.onGround, flying: player.flying, inWater: player.inWater,
+      selected: player.selected, held: player.heldItem,
       ts: Date.now(), // 阶段5：服务器时间戳，客户端做时间对齐的缓冲插值
     }, player.id);
   }
@@ -334,10 +340,11 @@ export class Room {
     player.food = safeNum(msg.food, player.food);
     player.saturation = safeNum(msg.saturation, player.saturation);
     if (msg.mode) player.mode = msg.mode === 'creative' ? 'creative' : (msg.mode === 'spectator' ? 'spectator' : 'survival');
-    player.selected = safeInt(msg.selected, player.selected);
+    if (msg.selected !== undefined) player.selected = safeInt(msg.selected, player.selected);
+    if (typeof msg.held === 'string') player.heldItem = msg.held.slice(0, 32);
     this.broadcast(MSG.PLAYER_FULL, {
       id: player.id, health: player.health, food: player.food,
-      saturation: player.saturation, mode: player.mode, selected: player.selected,
+      saturation: player.saturation, mode: player.mode, selected: player.selected, held: player.heldItem,
     }, player.id);
   }
 
@@ -354,8 +361,41 @@ export class Room {
     }
   }
 
+  // 玩家死亡（阶段6）：广播死亡 + 把客户端上报的背包物品生成世界掉落物（drop_spawn 广播，各端一致可拾取）
+  // 由客户端在本地检测到死亡时上报（携带死亡位置 + 背包掉落列表）；PvP 致死时 alive 已 false，此处只产出掉落
+  onPlayerDied(player, msg) {
+    if (player.alive) {
+      player.alive = false;
+      this.broadcast(MSG.PLAYER_DIED, { id: player.id });
+    }
+    // 同一死亡周期只产出一次掉落（防重复上报刷掉落）
+    if (player._diedDrops) return;
+    player._diedDrops = true;
+    const x = safeNum(msg.x, player.pos.x);
+    const y = safeNum(msg.y, player.pos.y);
+    const z = safeNum(msg.z, player.pos.z);
+    const drops = Array.isArray(msg.drops) ? msg.drops : [];
+    let n = 0;
+    for (let i = 0; i < drops.length && n < 64; i++) {
+      const d = drops[i] || {};
+      const name = String(d.name || '').slice(0, 32);
+      const count = Math.min(64, Math.max(1, safeInt(d.count, 1)));
+      if (!name) continue;
+      // 掉落位置做微小确定性偏移，避免整叠重叠成一点
+      const ox = ((i % 5) - 2) * 0.3;
+      const oz = ((Math.floor(i / 5) % 5) - 2) * 0.3;
+      const id = this.nextDropId++;
+      this.drops.set(id, { x: x + ox, y, z: z + oz, name, count, spawnedAt: Date.now() });
+      this.broadcast(MSG.DROP_SPAWN, { id, x: x + ox, y, z: z + oz, name, count });
+      n++;
+    }
+    if (n) this.save();
+    console.log(`[死亡] ${player.name} 死亡 @(${x.toFixed(1)},${y.toFixed(1)},${z.toFixed(1)}) 掉落 ${n} 组`);
+  }
+
   onRespawn(player, msg) {
     player.health = 20; player.food = 20; player.saturation = 5; player.alive = true;
+    player._diedDrops = false; // 阶段6：新死亡周期允许再次产出掉落
     player.pos.x = safeNum(msg.x, 0.5); player.pos.y = safeNum(msg.y, 66); player.pos.z = safeNum(msg.z, 0.5);
     this.broadcast(MSG.RESPAWN, {
       id: player.id, x: player.pos.x, y: player.pos.y, z: player.pos.z,

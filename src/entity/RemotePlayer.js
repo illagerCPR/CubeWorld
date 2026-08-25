@@ -1,18 +1,22 @@
 // RemotePlayer.js -- 远端玩家实体：方块人模型 + 位置插值 + 昵称标签
 // 阶段 3：昵称按玩家 id 着色；阶段 4：插值优化（关节模型 + 行走动画 + 头部俯仰 + 远距瞬移快照）
 // 阶段 5：时间戳对齐插值——缓冲服务器带 ts 的状态样本，按"渲染时刻=本地时间+时钟偏移-延迟"线性插值，消除指数平滑的拖影
+// 阶段 6：手持物品外观同步（右臂挂 sprite 渲染当前手持物）+ 插值延迟自适应（按缓冲头余量动态调延迟）
 import * as THREE from 'three';
 import { playerColorHue, playerColorCss } from '../net/playerColor.js';
+import { ItemRegistry } from '../core/ItemRegistry.js';
+import { BlockRegistry } from '../core/BlockRegistry.js';
+import { SVGTextures } from '../render/SVGTextures.js';
 
 // 简化方块人部件（局部坐标原点在脚 y=0，单位：格）
 // 关节部件（head/arm/leg）用 pivot 支撑：mesh 挂在 pivot 下，旋转 pivot 即旋转肢体
 const PARTS = [
   { box: [-0.25, 1.5, -0.25, 0.25, 2.0, 0.25], role: 'head', pivot: [0, 1.5, 0] },
   { box: [-0.3, 0.6, -0.2, 0.3, 1.5, 0.2], role: 'body' },
-  { box: [-0.5, 0.6, -0.15, -0.3, 1.45, 0.15], role: 'arm', pivot: [-0.4, 1.45, 0] },
-  { box: [0.3, 0.6, -0.15, 0.5, 1.45, 0.15], role: 'arm', pivot: [0.4, 1.45, 0] },
-  { box: [-0.28, 0, -0.15, -0.02, 0.6, 0.15], role: 'leg', pivot: [-0.13, 0.6, 0] },
-  { box: [0.02, 0, -0.15, 0.28, 0.6, 0.15], role: 'leg', pivot: [0.13, 0.6, 0] },
+  { box: [-0.5, 0.6, -0.15, -0.3, 1.45, 0.15], role: 'armL', pivot: [-0.4, 1.45, 0] },
+  { box: [0.3, 0.6, -0.15, 0.5, 1.45, 0.15], role: 'armR', pivot: [0.4, 1.45, 0] },
+  { box: [-0.28, 0, -0.15, -0.02, 0.6, 0.15], role: 'legL', pivot: [-0.13, 0.6, 0] },
+  { box: [0.02, 0, -0.15, 0.28, 0.6, 0.15], role: 'legR', pivot: [0.13, 0.6, 0] },
 ];
 
 // 远距瞬移阈值：插值目标距当前渲染位置超过该值视为传送，直接快照并丢弃旧样本
@@ -24,9 +28,10 @@ function playerColor(id) {
 }
 
 export class RemotePlayer {
-  constructor(scene, id, name, pos) {
+  constructor(scene, id, name, pos, game = null) {
     this.id = id;
     this.name = name;
+    this.game = game;         // 阶段6：用于取物品/方块 SVG 图渲染手持物
     this.dead = false;
     this.hitFlash = 0;
     const color = playerColor(id);
@@ -74,10 +79,14 @@ export class RemotePlayer {
     this.flying = false;
     this.inWater = false;
     this.onGround = false;
-    // 阶段5 时间戳插值：状态样本缓冲 + 时钟偏移估计 + 固定插值延迟
+    // 阶段5 时间戳插值：状态样本缓冲 + 时钟偏移估计 + 插值延迟（阶段6 自适应）
     this._buffer = [];        // {ts, x,y,z,yaw,pitch,flying,inWater,onGround}，按 ts 升序
     this._clockOffset = 0;    // 服务器时钟 - 本地时钟（平滑估计，秒）
-    this._interpDelay = 0.12; // 插值延迟（秒）：始终回放"0.12s 前"的状态，平滑网络抖动
+    this._interpDelay = 0.12; // 插值延迟（秒）：回放"延迟秒前"的状态，平滑网络抖动；阶段6 按缓冲头余量自适应
+    // 阶段6 手持物品：右臂挂 sprite 显示当前手持物
+    this.heldItem = null;     // 当前手持物品名（null=空手）
+    this.heldSprite = null;   // 手持物 sprite（挂在 armR pivot 下）
+    this._heldSeq = 0;        // 异步重建手持 sprite 的序号（防旧结果覆盖新）
     // 行走动画状态：摆动相位 + 估算水平速度（由缓冲段位移算出）
     this._walkPhase = 0;
     this._speed = 0;
@@ -120,10 +129,56 @@ export class RemotePlayer {
       flying: !!s.flying, inWater: !!s.inWater, onGround: !!s.onGround,
     });
     if (this._buffer.length > 40) this._buffer.shift();
+    // 阶段6：手持物品变化时更新右臂挂载的 sprite
+    if (typeof s.held === 'string' && s.held !== this.heldItem) this._setHeld(s.held);
   }
 
   applyFull(s) {
     if (s.mode) this.setMode(s.mode);
+    if (typeof s.held === 'string' && s.held !== this.heldItem) this._setHeld(s.held);
+  }
+
+  // 阶段6：更新手持物品并异步重建右臂 sprite（带序号防竞态）
+  _setHeld(name) {
+    this.heldItem = name || null;
+    const seq = ++this._heldSeq;
+    if (this.heldSprite) {
+      if (this.heldSprite.parent) this.heldSprite.parent.remove(this.heldSprite);
+      if (this.heldSprite.material.map) this.heldSprite.material.map.dispose();
+      this.heldSprite.material.dispose();
+      this.heldSprite = null;
+    }
+    if (!this.heldItem) return;
+    // 优先物品 SVG，其次方块 SVG（与快捷栏图标同源）
+    let svg = null;
+    if (this.game) {
+      const item = ItemRegistry.getByName(this.heldItem);
+      if (item && this.game.itemSvgMap && this.game.itemSvgMap[this.heldItem]) svg = this.game.itemSvgMap[this.heldItem];
+      else {
+        const block = BlockRegistry.getByName(this.heldItem);
+        if (block && this.game.blockSvgMap) {
+          const texName = block.side || block.top;
+          svg = this.game.blockSvgMap[texName] || this.game.blockSvgMap[this.heldItem];
+        }
+      }
+    }
+    if (!svg) return;
+    SVGTextures.svgToImage(svg).then((img) => {
+      if (seq !== this._heldSeq) return; // 期间已换成别的物品，丢弃旧结果
+      const cv = document.createElement('canvas');
+      cv.width = 32; cv.height = 32;
+      const ctx = cv.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0, 32, 32);
+      const tex = new THREE.CanvasTexture(cv);
+      tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+      const sp = new THREE.Sprite(mat);
+      sp.scale.set(0.22, 0.22, 1);
+      sp.position.set(0.08, -0.92, 0.06); // 右手末端（armR pivot 局部坐标）
+      const arm = this.joints.armR;
+      if (arm) { arm.pivot.add(sp); this.heldSprite = sp; }
+    }).catch(() => {});
   }
 
   setMode(mode) { this.flying = mode === 'spectator'; }
@@ -190,6 +245,12 @@ export class RemotePlayer {
       // 移动速度（当前段位移/时间）驱动走路动画；缓冲耗尽时自然归 0（静止停靠）
       this._speed = span > 0.001 ? Math.hypot(b.x - a.x, b.z - a.z) / span : 0;
       this.flying = b.flying; this.inWater = b.inWater; this.onGround = b.onGround;
+
+      // 阶段6 自适应插值延迟：按"头余量 = 最新样本 - 渲染时刻"动态调延迟
+      // 头余量过小（临近欠载、渲染时刻被钳到最新样本）→ 加大延迟吸收抖动；过大 → 缓慢降低延迟减少滞后
+      const headroom = buf[buf.length - 1].ts - renderTime;
+      if (headroom < 0.03) this._interpDelay = Math.min(0.4, this._interpDelay + 0.004);
+      else if (headroom > 0.22) this._interpDelay = Math.max(0.05, this._interpDelay - 0.002);
     }
 
     // 落位：传送（respawn/远距移动）直接快照并丢弃旧样本，否则置于插值目标
@@ -232,6 +293,13 @@ export class RemotePlayer {
     for (const m of this.parts) { m.geometry.dispose(); m.material.dispose(); }
     this.parts = [];
     this.joints = {};
+    // 阶段6：释放手持物品 sprite 资源
+    if (this.heldSprite) {
+      if (this.heldSprite.parent) this.heldSprite.parent.remove(this.heldSprite);
+      if (this.heldSprite.material.map) this.heldSprite.material.map.dispose();
+      this.heldSprite.material.dispose();
+      this.heldSprite = null;
+    }
     if (this.nameSprite) {
       if (this.nameSprite.parent) this.nameSprite.parent.remove(this.nameSprite);
       if (this.nameSprite.material) {

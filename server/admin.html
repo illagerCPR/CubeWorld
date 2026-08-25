@@ -42,6 +42,11 @@
   <h1>🖥 Project-MC 服务器管理面板</h1>
   <div class="sub" id="server-line">加载中…</div>
 
+  <!-- 阶段6：口令过期提示（仍可编辑下方配置卡续期/关闭鉴权） -->
+  <div id="expired-banner" style="display:none; background:#8a3a2f; color:#fff; padding:10px 14px; border-radius:6px; margin-bottom:16px;">
+    🔒 管理口令已过期：接口均返回 401。请修改下方「管理口令 / 口令过期分钟」并<b>保存配置</b>以续期（清空口令并保存 = 关闭鉴权）。
+  </div>
+
   <div class="card">
     <h2>服务器配置</h2>
     <div class="grid">
@@ -64,7 +69,16 @@
         <label>管理口令 (adminToken) <span style="color:#7a8394">（留空=关闭鉴权）</span></label>
         <input id="cfg-adminToken" type="password" placeholder="留空则关闭鉴权">
       </div>
+      <div class="cfg-item">
+        <label>口令过期分钟 (adminTokenExpires) <span style="color:#7a8394">（0=永不过期）</span></label>
+        <input id="cfg-adminTokenExpires" type="number" min="0" step="1">
+      </div>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>操作日志（最近 200 条）</h2>
+    <div id="logs"><div class="empty">加载中…</div></div>
   </div>
 
   <div class="card">
@@ -90,6 +104,15 @@
       <p style="margin:0 0 14px; color:#8a93a3; font-size:13px;">服务器管理面板已开启鉴权，请输入管理口令</p>
       <input id="login-token" type="password" placeholder="管理口令" style="width:100%; padding:8px 10px;
              background:#1b1f27; color:#e6e6e6; border:1px solid #4a5264; border-radius:4px; margin-bottom:10px;">
+      <div class="cfg-item" style="margin-bottom:10px;">
+        <label>本机记住登录（会话过期后需重新输入口令）</label>
+        <select id="login-ttl" style="width:100%; padding:6px 8px; background:#1b1f27; color:#e6e6e6; border:1px solid #4a5264; border-radius:4px;">
+          <option value="0">本次会话（关闭浏览器即失效）</option>
+          <option value="60">1 小时</option>
+          <option value="1440" selected>24 小时</option>
+          <option value="10080">7 天</option>
+        </select>
+      </div>
       <div style="display:flex; justify-content:flex-end; gap:8px;">
         <button class="btn-danger" onclick="doLogout()">清除口令</button>
         <button class="btn-primary" onclick="doLogin()">登录</button>
@@ -100,10 +123,44 @@
 
 <script>
   let status = null;
+  let logs = [];
   const TOKEN_KEY = 'pmc-admin-token';
   let authDenied = false; // 服务器 401 后不再自动轮询刷新，等用户登录
+  let _expiryEdited = false; // 口令过期分钟输入是否被用户手动修改过（防每次保存都续期）
 
-  function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
+  // 阶段6：本地存储 { token, exp }（exp=Unix 秒，0=永不过期）；expired 会话自动清除要求重新登录
+  function readStored() {
+    try {
+      const raw = localStorage.getItem(TOKEN_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    try {
+      const raw = sessionStorage.getItem(TOKEN_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  }
+
+  function getToken() {
+    const st = readStored();
+    if (!st || !st.token) return '';
+    if (st.exp > 0 && Date.now() / 1000 >= st.exp) {
+      localStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(TOKEN_KEY);
+      return '';
+    }
+    return st.token;
+  }
+
+  function storeToken(token, ttlMinutes) {
+    const exp = ttlMinutes > 0 ? Math.floor(Date.now() / 1000) + ttlMinutes * 60 : 0;
+    const data = JSON.stringify({ token, exp });
+    if (ttlMinutes === 0) sessionStorage.setItem(TOKEN_KEY, data); // 本次会话
+    else localStorage.setItem(TOKEN_KEY, data);
+  }
+
+  // HTML 转义（操作日志含用户输入文本，防注入）
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   async function api(path, method = 'GET', body) {
     const opt = { method, headers: {} };
@@ -115,9 +172,18 @@
     }
     const r = await fetch(path, opt);
     if (r.status === 401) {
-      showLogin();
+      let errBody = null;
+      try { errBody = await r.json(); } catch {}
       const e = new Error('unauthorized');
       e.unauthorized = true;
+      // 阶段6：口令已过期 → 保留配置卡可编辑用于续期（不弹登录弹层），并显示续期横幅
+      if (errBody && /过期/.test(errBody.error || '')) {
+        e.expired = true;
+        authDenied = false;
+        document.getElementById('expired-banner').style.display = 'block';
+      } else {
+        showLogin();
+      }
       throw e;
     }
     return r.json();
@@ -134,7 +200,8 @@
   async function doLogin() {
     const v = document.getElementById('login-token').value.trim();
     if (!v) return;
-    localStorage.setItem(TOKEN_KEY, v);
+    const ttl = Number(document.getElementById('login-ttl').value) || 0;
+    storeToken(v, ttl);
     document.getElementById('login-token').value = '';
     document.getElementById('login-err').textContent = '';
     document.getElementById('login').style.display = 'none';
@@ -145,7 +212,9 @@
   // 清除本地口令并回到未登录状态（下次刷新要求重新输入）
   function doLogout() {
     localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
     authDenied = false;
+    document.getElementById('expired-banner').style.display = 'none';
     document.getElementById('login').style.display = 'none';
     refresh();
   }
@@ -210,10 +279,32 @@
       const tkEl = document.getElementById('cfg-adminToken');
       tkEl.value = status.config.adminToken === '****' ? '****' : '';
       tkEl.placeholder = status.config.adminToken === '****' ? '已设置（改此框可换新口令，清空并保存=关闭）' : '留空则关闭鉴权';
+      // 阶段6：口令过期分钟（Unix 秒 → 剩余分钟；0=永不过期）
+      _expiryEdited = false;
+      const expSec = Number(status.config.adminTokenExpires) || 0;
+      document.getElementById('cfg-adminTokenExpires').value =
+        expSec > 0 ? Math.max(0, Math.round((expSec - Date.now() / 1000) / 60)) : 0;
+      // 接口正常 → 隐藏口令过期横幅
+      document.getElementById('expired-banner').style.display = 'none';
       renderRooms();
+      // 阶段6 操作日志（独立容错：日志接口异常不影响状态刷新）
+      try {
+        const lr = await api('/api/logs');
+        logs = lr.logs || [];
+        renderLogs();
+      } catch (e) { /* 401 已由 api() 弹出登录 */ }
     } catch (e) {
       if (!e.unauthorized) document.getElementById('server-line').textContent = '无法连接服务器 API';
     }
+  }
+
+  function renderLogs() {
+    const el = document.getElementById('logs');
+    if (!logs || !logs.length) { el.innerHTML = '<div class="empty">暂无操作日志</div>'; return; }
+    el.innerHTML = `<table>
+      <tr><th>时间</th><th>操作</th><th>详情</th></tr>
+      ${logs.map((l) => `<tr><td>${esc(new Date(l.time).toLocaleTimeString())}</td><td>${esc(l.op)}</td><td>${esc(l.detail)}</td></tr>`).join('')}
+    </table>`;
   }
 
   async function saveConfig() {
@@ -225,10 +316,16 @@
     // adminToken：值为 '****'（未改动，保持原样）时不提交；否则提交（新口令或清空关闭）
     const tk = document.getElementById('cfg-adminToken').value.trim();
     if (tk !== '****') patch.adminToken = tk;
+    // 阶段6：口令过期分钟仅手动编辑过才提交（避免每次保存都自动续期）
+    let expMins = 0;
+    if (_expiryEdited) {
+      expMins = Number(document.getElementById('cfg-adminTokenExpires').value) || 0;
+      patch.adminTokenExpires = expMins > 0 ? Math.floor(Date.now() / 1000) + expMins * 60 : 0;
+    }
     const r = await api('/api/config', 'POST', patch);
-    // 保存后若设置了新口令，立即存本地以便后续请求带上；清空则移除本地口令
-    if (tk && tk !== '****') localStorage.setItem(TOKEN_KEY, tk);
-    else if (!tk) localStorage.removeItem(TOKEN_KEY);
+    // 保存后若设置了新口令，立即按过期分钟存本地以便后续请求带上；清空则移除本地口令
+    if (tk && tk !== '****') storeToken(tk, _expiryEdited ? expMins : 1440);
+    else if (!tk) { localStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(TOKEN_KEY); }
     toast('配置已保存并生效', !!r.error);
     refresh();
   }
@@ -260,6 +357,9 @@
     toast('房间已删除', !!r.error);
     refresh();
   }
+
+  // 口令过期分钟输入被手动编辑 → 保存时提交（续期/设过期）
+  document.getElementById('cfg-adminTokenExpires').addEventListener('input', () => { _expiryEdited = true; });
 
   refresh();
   setInterval(refresh, 3000);

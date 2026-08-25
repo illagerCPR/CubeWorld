@@ -125,7 +125,7 @@ export class NetworkManager {
   _addRemote(info) {
     if (info.id === this.selfId) return;
     if (this.game.remotePlayers.has(info.id)) return;
-    const rp = new RemotePlayer(this.game.renderer.scene, info.id, info.name, info.pos);
+    const rp = new RemotePlayer(this.game.renderer.scene, info.id, info.name, info.pos, this.game);
     this.game.remotePlayers.set(info.id, rp);
     if (info.health !== undefined) rp.applyFull(info);
   }
@@ -309,23 +309,37 @@ export class NetworkManager {
     if (this._stateTimer > 0) return;
     this._stateTimer = this._stateInterval;
     const p = this.game.player;
+    // 阶段6：上报手持物品（当前快捷栏槽位 + 物品名），服务器随 player_state 广播，远端渲染手持物
+    const sel = this.game.inventory.getSelected();
     this._send(MSG.PLAYER_STATE, {
       x: p.position.x, y: p.position.y, z: p.position.z,
       yaw: p.yaw, pitch: p.pitch,
       onGround: p.onGround, flying: p.flying, inWater: p.inWater,
+      selected: this.game.inventory.hotbarSelected,
+      held: sel ? sel.name : null,
     });
   }
 
   sendPlayerFull() {
     const p = this.game.player;
+    const sel = this.game.inventory.getSelected();
     this._send(MSG.PLAYER_FULL, {
       health: p.health, food: p.food, saturation: p.saturation,
       mode: p.gamemode, selected: this.game.inventory.hotbarSelected,
+      held: sel ? sel.name : null,
     });
   }
 
   sendAttackPlayer(targetId, damage) { this._send(MSG.ATTACK_PLAYER, { targetId, damage }); }
-  sendPlayerDied() { this._send(MSG.PLAYER_DIED, {}); }
+  sendPlayerDied() {
+    // 阶段6：死亡上报死亡位置 + 背包内容（服务器据此生成世界掉落物并广播）
+    const p = this.game.player;
+    const drops = [];
+    for (const s of this.game.inventory.slots) {
+      if (s) drops.push({ name: s.name, count: s.count });
+    }
+    this._send(MSG.PLAYER_DIED, { x: p.position.x, y: p.position.y, z: p.position.z, drops });
+  }
   sendRespawn(x, y, z) { this._send(MSG.RESPAWN, { x, y, z }); }
   sendGamemode(mode) { this._send(MSG.GAMEMODE, { mode }); }
   sendSetTime(t) { this._send(MSG.SET_TIME, { time: t }); }

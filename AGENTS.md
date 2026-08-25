@@ -174,7 +174,7 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
 - 路径含空格的可执行文件用 call 操作符 `& "..."`。
 - `Read` 工具对长文件有重复返回前几行的 bug，长文件请改 `Get-Content ... | Select-Object -Skip N -First M` 或 `Select-String`。
 
-## 局域网联机（LAN 多人，阶段 0-5 已完成）
+## 局域网联机（LAN 多人，阶段 0-6 已完成）
 
 - **架构 thin-host（方案C）**：Node 服务器 = 房间管理 + 方块/掉落物账本 + 消息中继 + 时间权威；每个客户端本地自模拟世界（确定性生成 `TerrainGenerator(seed)`，不用 Math.random），只同步增量。消息键 `t`（type），`server/protocol.js` 集中定义；S2C 表见 `docs/lan-multiplayer-design.md` §7。
 - **端口**：服务器 TCP **3001**（`.\start.cmd server`），前端 5173（`.\start.cmd start`），管理面板 `http://127.0.0.1:3001/`。
@@ -182,22 +182,33 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
 - **怪物/红石（阶段2）**：方案①事件同步——host 权威生成 + 攻击位置纠正，掉落只由击杀侧发；红石方块状态同步 + 周期性状态缓解。
 - **玩家名着色**：`src/net/playerColor.js`（HUES 调色板）。
 - **断线重连（阶段1）**：心跳 pong、断线自动重连（保位置/物品）；被踢 `kicked` → `_explicitClose` 停止自动重连。
-- **远端插值（阶段4-①+5）**：`src/entity/RemotePlayer.js` 关节模型（head/arm/leg pivot 组），**阶段5 时间戳对齐插值**（样本缓冲 + 时钟偏移 + 120ms 延迟线性插值，见下方备忘），距离>4 快照，行走摆臂 + 头部俯仰。
-- **死亡观战（阶段4-②）**：`Game.spectating/spectateTargetId`，死亡界面 `hideForSpectate()`（勿用 `hide()`，会重生），F5 切目标、R 重生，观战不广播位置（`NetworkManager.update` 早退）。
-- **管理面板（阶段4-③+5）**：`server/admin.html` 自包含页 3s 轮询；`/api/status|config|broadcast|kick|room/<name>/clear-drops|delete`；配置持久化 `server/config.json` 热生效（dropTtlMs/heartbeatMs/maxPlayersPerRoom/adminToken，范围校验非法值忽略）；adminToken 非空时 API 需 `Authorization: Bearer`。
-- **联机测试**：起真实 server 后跑 `node server/test-mp.mjs`（34/34）、`server/test-store.mjs`（15/15）、`server/test-admin.mjs`（26/26）、`server/test-stage5.mjs`（16/16），须保持全绿。浏览器冒烟用 playwright-cli 三会话 `-s=host/-s=join/-s=three`。
+- **远端插值（阶段4-①+5+6）**：`src/entity/RemotePlayer.js` 关节模型（head/armL/armR/legL/legR pivot 组），**阶段5 时间戳对齐插值**（样本缓冲 + 时钟偏移 + 延迟线性插值，见下方备忘），**阶段6 自适应延迟**（按缓冲"头余量"动态调 0.05~0.4s），距离>4 快照，行走摆臂 + 头部俯仰 + **右手手持物 sprite**（`held` 同步 + SVG sprite）。
+- **死亡观战（阶段4-②+6）**：`Game.spectating/spectateTargetId`，死亡界面 `hideForSpectate()`（勿用 `hide()`，会重生），F5 切目标、R 重生，观战不广播位置（`NetworkManager.update` 早退）；**阶段6 相机平滑**（`_specSmoothed/_specSmoothYaw/Pitch` 指数平滑跟随，切换目标/瞬移不跳变）。
+- **管理面板（阶段4-③+5+6）**：`server/admin.html` 自包含页 3s 轮询；`/api/status|config|broadcast|kick|logs|room/<name>/clear-drops|delete`；配置持久化 `server/config.json` 热生效（dropTtlMs/heartbeatMs/maxPlayersPerRoom/adminToken/adminTokenExpires，范围校验非法值忽略）；adminToken 非空时 API 需 `Authorization: Bearer`；**阶段6** `adminTokenExpires` 过期后除 `POST /api/config` 续期外全 401 + 内存操作日志 200 条 `/api/logs` + 登录会话 TTL。
+- **死亡掉落物（阶段6）**：客户端死亡 `player_died` 上报背包 → 服务器 `Room.onPlayerDied` 广播死亡 + 逐项 `drop_spawn`（进账本持久化）；同一次死亡 `_diedDrops` 去重（`onRespawn` 复位）；死亡端清空背包、重生重发生存初始物品（`Game.respawn` 联机分支）。
+- **联机测试**：起真实 server 后跑 `node server/test-mp.mjs`（34/34）、`server/test-store.mjs`（15/15）、`server/test-admin.mjs`（26/26）、`server/test-stage5.mjs`（16/16）、`server/test-stage6.mjs`（20/20），须保持全绿。**注意非幂等**：重复跑批前清空 `server/world/` 与 `server/config.json`（或重启服务器），否则遗留世界存档/管理口令会污染断言。浏览器冒烟用 playwright-cli 三会话 `-s=host/-s=join/-s=three`。
 
 ## 任务进度（Roadmap）
 
-已完成并推送 master（`https://github.com/illagerCPR/Web-MC.git`）：阶段 0 房间服务器+网络层+方块/玩家/聊天同步（`893fb49`）→ 阶段 1 掉落物/拾取同步+断线重连（`4d9a2ea`）→ 阶段 2 怪物事件同步+红石缓解（`7048df0`）→ 阶段 3 多房间+世界落盘+换房/新建+玩家名颜色（`ce98e23`）→ 阶段 4 插值优化+死亡观战+配置面板（`74418d1`）→ 阶段 5 世界内换房/重建+时间戳对齐插值+管理面板鉴权（待提交）。设计文档 v0.7、README 已同步。
+已完成并推送 master（`https://github.com/illagerCPR/Web-MC.git`）：阶段 0 房间服务器+网络层+方块/玩家/聊天同步（`893fb49`）→ 阶段 1 掉落物/拾取同步+断线重连（`4d9a2ea`）→ 阶段 2 怪物事件同步+红石缓解（`7048df0`）→ 阶段 3 多房间+世界落盘+换房/新建+玩家名颜色（`ce98e23`）→ 阶段 4 插值优化+死亡观战+配置面板（`74418d1`）→ 阶段 5 世界内换房/重建+时间戳对齐插值+管理面板鉴权（`d57403a`）→ 阶段 6 手持物品外观同步+死亡掉落物+观战平滑+鉴权增强+自适应插值延迟（待提交）。设计文档 v0.8、README 已同步。
 
 剩余规划（见 `docs/lan-multiplayer-design.md` §11，待用户确认范围）：
 
-- **阶段 6（规划）**：手持物品外观同步/快捷栏槽位可见；玩家死亡掉落物同步；观战者视角平滑；管理面板鉴权增强（token 过期/操作日志）；时间戳插值自适应延迟（当前固定 120ms）。
+- **阶段 7（规划）**：手持物品 3D 化渲染；快捷栏槽位完整可见；死亡掉落拾取归属细同步；管理面板多账号/token 轮换；插值延迟加入 RTT 直测辅助。
 
 ### 阶段 5 关键实现备忘（防回退）
 
 - **换房/重建协议**：`switch_room`（C2S，保持连接换房，目标满则拒）、`world_reset`（C2S，仅 host）；`world_info` 加 `restart` 标记（含新建房走 `createRoom` 分支也要带）。客户端 `NetworkManager` 收到 restart → `_ready=false` + `restart_world` 事件 → `main.js` 用新 seed 重启本地世界 → `onWorldStarted()` 落地缓存，全程不断连接。聊天命令 `/room <名>` `/rebuild`。
 - **时间戳插值**：`player_state` 广播带 `ts: Date.now()`；`RemotePlayer` 样本缓冲(≤40) + 时钟偏移平滑(0.9/0.1) + 固定 120ms 延迟，`renderTime = now + offset - delay` 线性插值重放。**高陷阱：包围 renderTime 的下标 i 必须钳到 `len-2`**（`b = buf[i+1]` 不能越界），否则 `b.ts` 抛错会让整条 `Game.loop` 停摆（曾真出过）。SNAP>4 快照并清空缓冲防传送回拉。
-- **面板鉴权**：`config.js` 的 `adminToken`（字符串 ≤64，空=关）；`index.mjs` `authOk(req)` 校验 `Authorization: Bearer <token>`，`maskedConfig()` 掩码回显；`admin.html` 登录弹层 + localStorage 存口令，配置卡口令框 `****` 未改不提交。未授权 401。
+- **面板鉴权**：`config.js` 的 `adminToken`（字符串 ≤64，空=关）+ `adminTokenExpires`（阶段6，Unix 秒，0=永不过期）；`index.mjs` `authState(req)` 返回 `'ok'/'no'/'expired'`（`Bearer <token>` 校验 + 过期判断），`maskedConfig()` 掩码回显；`admin.html` 登录弹层 + localStorage 存口令，配置卡口令框 `****` 未改不提交。未授权 401。
 - **ChatBox 全局 T 键监听器必须在 dispose 移除**（`this._onKey` 引用保存并 `removeEventListener`），否则换房/重建反复 `start()` 会堆积监听器导致一次 T 开多个输入框。
+
+### 阶段 6 关键实现备忘（防回退）
+
+- **手持物品同步**：`player_state`/`player_full` 广播 `selected`（槽位）+ `held`（物品名），`Room.onPlayerState/onPlayerFull` 透传记录；`RemotePlayer._setHeld(name)` 异步重建右臂 sprite（`SVGTextures.svgToImage` + `CanvasTexture`，`_heldSeq` 序号防竞态），`dispose()` 必须释放 heldSprite。
+- **PARTS 关节 role 必须唯一**：左右臂/腿用 `armL/armR/legL/legR`（**勿回退为重复 `'arm'`/`'leg'`**——后者覆盖前者导致 `joints.armL/armR/legL/legR` 全部不存在，行走摆臂失效、手持 sprite 挂不上右臂，曾真出过）。手持 sprite 挂在 `joints.armR.pivot` 末端。
+- **死亡掉落物**：`player_died` 携带死亡位置 + 背包列表（客户端 `sendPlayerDied()` 先读背包再清空）；`Room.onPlayerDied` 广播死亡 + 逐项 `drop_spawn`（确定性偏移防重叠，进账本）；同一次死亡 `_diedDrops` 去重（`addPlayer`/`onRespawn` 复位，防重复上报刷掉落）；`Game.respawn` 联机分支重发生存初始物品。
+- **鉴权过期**：`adminTokenExpires` 到期后 `authState` 返回 `'expired'`——**仅放行 `POST /api/config` 供续期/关闭**（避免永久锁死），其余 401（错误含"过期"，admin.html 据此显示续期横幅而非登录弹层）；`/api/logs` 内存环形缓冲 200 条记录 config/broadcast/kick/clear-drops/delete-room/auth-fail。**注意：PowerShell `Get-Date -UFormat %s` 的 epoch 会偏 ~8 小时（时区 bug），设过期时间要用 `[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()`**。
+- **观战平滑**：`_specSmoothed/_specSmoothYaw/_specSmoothPitch` 帧率无关指数平滑（`k = 1 - Math.pow(0.0001, dt)`），切换目标（`cycleSpectateTarget`）/进入观战/重生时重置为 null（避免跨图横扫）；`updateSpectateCamera` 读平滑后位置/朝向。
+- **自适应插值延迟**：`RemotePlayer.update` 按"头余量 = 最新样本 ts − renderTime"动态调 `_interpDelay`（<0.03 → +0.004 加大吸收抖动；>0.22 → −0.002 降低滞后；钳 0.05~0.4）。**仍须保留 stage5 的 `i 钳到 len-2` 防越界**。
+- **测试非幂等**：服务器回归测试对同一 live 服务器重复跑批会被污染（遗留 `server/world/*.json`、config 里的 adminToken/expires）——跑批前清空 `server/world/` 与 `server/config.json`（或重启服务器）。
