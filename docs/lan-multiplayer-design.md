@@ -1,7 +1,7 @@
 # Project-MC 局域网联机设计文档
 
-> 版本：v0.8（阶段 6 已实现并通过验证）
-> 状态：阶段 0（MVP）完成（2026-08-21）；阶段 1（掉落物/断线重连）完成（2026-08-22）；阶段 2（怪物事件同步 + 红石状态缓解）完成（2026-08-22）；阶段 3（多房间 + 世界落盘 + 玩家名着色）完成（2026-08-23）；阶段 4（插值优化 + 观战 + 服务器管理面板）完成（2026-08-23）；阶段 5（世界内换房/重建 + 时间戳对齐插值 + 管理面板鉴权）完成（2026-08-24）；阶段 6（手持物品外观同步 + 玩家死亡掉落物 + 观战视角平滑 + 鉴权增强 + 自适应插值延迟）完成（2026-08-25）
+> 版本：v0.9（阶段 7 怪物建模优化已实现并通过验证）
+> 状态：阶段 0（MVP）完成（2026-08-21）；阶段 1（掉落物/断线重连）完成（2026-08-22）；阶段 2（怪物事件同步 + 红石状态缓解）完成（2026-08-22）；阶段 3（多房间 + 世界落盘 + 玩家名着色）完成（2026-08-23）；阶段 4（插值优化 + 观战 + 服务器管理面板）完成（2026-08-23）；阶段 5（世界内换房/重建 + 时间戳对齐插值 + 管理面板鉴权）完成（2026-08-24）；阶段 6（手持物品外观同步 + 玩家死亡掉落物 + 观战视角平滑 + 鉴权增强 + 自适应插值延迟）完成（2026-08-25）；阶段 7（4 种怪物建模优化：法线光照 + 方形皮肤 + 细节纹理 + 模型细化）完成（2026-08-27）；阶段 8（原阶段 7 的 LAN 增强清单）规划中
 > 阶段 0 新增：`server/`（index/room/protocol）、`src/net/NetworkManager.js`、`src/entity/RemotePlayer.js`、`src/ui/ChatBox.js`
 > 阶段 0 改动：`World.js`（setBlock 上报钩子）、`Game.js`（联机集成）、`MobManager.js`（spawnEnabled）、`MenuScreen.js`/`main.js`（联机入口）、`start.cmd`（server 子命令）
 > 阶段 0 验证：`server/test-mp.mjs` 协议 13/13 PASS；浏览器 host + Node 客户端双端链路验证通过
@@ -17,7 +17,7 @@
 > 阶段 5 验证：`server/test-mp.mjs` 协议 **34/34 PASS** + `server/test-store.mjs` **15/15 PASS** + `server/test-admin.mjs` 管理面板回归 **26/26 PASS**（新增鉴权 8 项）+ 新增 `server/test-stage5.mjs` 换房/重建/时间戳回归 **16/16 PASS** + 浏览器冒烟（双端进房、换房后 host 变新房 host 且连接不断、`/rebuild` 种子变化、远端时间戳插值平滑跟随、管理面板登录弹层与口令校验）通过
 > 阶段 6 新增能力（体验/安全/流畅）：**手持物品外观同步**（`player_state`/`player_full` 广播 `selected`+`held`，`RemotePlayer` 右臂挂 sprite 渲染手持物，修复左右臂/腿 role 重复导致摆臂从未生效的潜在 bug）；**玩家死亡掉落物**（死亡时客户端上报背包 → 服务器生成世界掉落物 `drop_spawn` 广播，各端可见可拾取；死亡清空背包、重生重发生存初始物品）；**观战视角平滑**（观战相机对目标位置/朝向做帧率无关指数平滑，切换目标/瞬移不跳变）；**管理面板鉴权增强**（`adminTokenExpires` 口令过期——到期后除 `POST /api/config` 续期外全部 401；操作日志内存环形缓冲 + `/api/logs`，记录配置/广播/踢人/清掉落物/删房/未授权访问；面板登录会话 TTL 与过期续期横幅）；**时间戳插值自适应延迟**（按缓冲"头余量"动态调插值延迟 0.05~0.4s，网络抖动大自动加大延迟吸收、干净时自动降低减少滞后）
 > 阶段 6 验证：`server/test-mp.mjs` 协议 **34/34 PASS** + `server/test-store.mjs` **15/15 PASS** + `server/test-admin.mjs` **26/26 PASS** + `server/test-stage5.mjs` **16/16 PASS** + 新增 `server/test-stage6.mjs` 手持/死亡掉落/鉴权过期与日志 **20/20 PASS** + 浏览器双端冒烟（手持物切换渲染、死亡掉落全链路（死亡屏→掉落→清背包→重生重发）、观战平滑跟随、管理面板登录弹层 + `/api/logs` + 口令过期 401/横幅 + UI 续期）通过
-> 开发中发现并修复：①服务器心跳误用协议层 pong（应用层 JSON ping 需客户端回 JSON pong，否则 30s 踢出）；②`set_time/time` 时间字段与消息类型键 `t` 冲突（改为 `time` 字段）；③方块同步需统一挂 `World.setBlock` 钩子（`bindWorld`）而非散点手动上报，保证爆炸/活塞也同步；④首次加入时 `world_info` 后紧接的方块/掉落物账本回放可能先于世界就绪到达而被丢弃——增加 `_ready` 预就绪缓冲队列；⑤重连关闭旧 socket 时旧 onclose 会误触发重连调度——用 `this.ws !== ws` 守卫只处理当前 socket；⑥`start.cmd server` 子进程继承 `PORT=5173` 误占用 Vite 端口——`:server` 分支启动前 `set "PORT="`；⑦多房间化后 `welcome` 无法携带玩家列表（hello 时尚未进房）——改为 `joinRoom` 回放已有玩家，且磁盘恢复的房间无 host 时由首个加入者接管；⑧`store.saveRoom` 序列化掉落物时漏掉 `id` 字段导致恢复被丢弃——改为 `[...drops.entries()]` 携带 id；⑨观战若在 update() 早期 `return` 会冻结怪物/红石/区块——改为只 gate 玩家移动/物理段（`specTarget` 分支），世界模拟照常跑；⑩被踢出的玩家若沿用断线自动重连会立刻回房——新增 `kicked` 消息置 `_explicitClose`，客户端停止自动重连；⑪`RemotePlayer` PARTS 中左右臂/腿 `role` 重复为 `'arm'`/`'leg'`（后者覆盖前者），`joints.armL/armR/legL/legR` 实际不存在——行走摆臂从未生效、阶段 6 手持 sprite 也挂不上右臂——拆分为 `armL/armR/legL/legR` 独立 role；⑫服务器回归测试对"复用同一 live 服务器"**非幂等**（遗留 `server/world/*.json` 与 `config.json` 中的 adminToken 会污染下一轮跑批：test-mp 的 block_change `by=` 断言会被账本回放干扰、test-admin 鉴权用例中途崩溃遗留口令）——跑批前清空 `server/world/` 与 `server/config.json`（或重启服务器），保证全新状态
+> 开发中发现并修复：①服务器心跳误用协议层 pong（应用层 JSON ping 需客户端回 JSON pong，否则 30s 踢出）；②`set_time/time` 时间字段与消息类型键 `t` 冲突（改为 `time` 字段）；③方块同步需统一挂 `World.setBlock` 钩子（`bindWorld`）而非散点手动上报，保证爆炸/活塞也同步；④首次加入时 `world_info` 后紧接的方块/掉落物账本回放可能先于世界就绪到达而被丢弃——增加 `_ready` 预就绪缓冲队列；⑤重连关闭旧 socket 时旧 onclose 会误触发重连调度——用 `this.ws !== ws` 守卫只处理当前 socket；⑥`start.cmd server` 子进程继承 `PORT=5173` 误占用 Vite 端口——`:server` 分支启动前 `set "PORT="`；⑦多房间化后 `welcome` 无法携带玩家列表（hello 时尚未进房）——改为 `joinRoom` 回放已有玩家，且磁盘恢复的房间无 host 时由首个加入者接管；⑧`store.saveRoom` 序列化掉落物时漏掉 `id` 字段导致恢复被丢弃——改为 `[...drops.entries()]` 携带 id；⑨观战若在 update() 早期 `return` 会冻结怪物/红石/区块——改为只 gate 玩家移动/物理段（`specTarget` 分支），世界模拟照常跑；⑩被踢出的玩家若沿用断线自动重连会立刻回房——新增 `kicked` 消息置 `_explicitClose`，客户端停止自动重连；⑪`RemotePlayer` PARTS 中左右臂/腿 `role` 重复为 `'arm'`/`'leg'`（后者覆盖前者），`joints.armL/armR/legL/legR` 实际不存在——行走摆臂从未生效、阶段 6 手持 sprite 也挂不上右臂——拆分为 `armL/armR/legL/legR` 独立 role；⑫服务器回归测试对"复用同一 live 服务器"**非幂等**（遗留 `server/world/*.json` 与 `config.json` 中的 adminToken 会污染下一轮跑批：test-mp 的 block_change `by=` 断言会被账本回放干扰、test-admin 鉴权用例中途崩溃遗留口令）——跑批前清空 `server/world/` 与 `server/config.json`（或重启服务器），保证全新状态；⑬怪物渲染"同色纸片"根因（阶段 7 发现）：`MobManager.buildMaterials` 合并的 cuboid BufferGeometry **从未生成法线**（无 normal attribute → three.js 不绑定 → WebGL 默认 (0,0,0)）→ Lambert 材质 `max(dot(N,L),0)=0`，太阳光对怪物零贡献、只吃环境光 → 全表面同色无明暗。且 FACE_DEFS 每个面的两个三角形**绕序相反**（一个外法线朝外、一个朝内），直接 `computeVertexNormals` 会平均成 ~0。修复：索引绕序统一为 `(0,1,2)(1,3,2)`（不改 UV）+ `geo.computeVertexNormals()`（每面顶点不共享 → 平坦面法线 → 方向光明暗生效）
 
 ---
 
@@ -531,7 +531,29 @@ server/
 - [x] 时间戳插值自适应延迟。
   - `RemotePlayer.update` 按缓冲"头余量 = 最新样本 ts − 渲染时刻"动态调 `_interpDelay`（<0.03s 加大吸收抖动、>0.22s 降低减少滞后，钳制 0.05~0.4s，步进 0.004/0.002）。干净网络稳定 ~0.12s，抖动大自动抬升避免欠载。
 
-### 阶段 7（规划）
+### 阶段 7（已完成）—— 4 种怪物建模优化（"同色纸片" → 立体有细节）
+
+> 注：阶段 7 原规划为 LAN 增强清单，经用户确认延后为**阶段 8**；阶段 7 改为打磨单机/联机共用的怪物渲染观感。
+
+- [x] 修复"同色纸片"根因（法线缺失 → 无方向光）。
+  - `MobManager.buildMaterials` 合并的 cuboid geometry 从未 `computeVertexNormals`，且 FACE_DEFS 每面两三角形绕序相反（会平均成 ~0 法线）。
+  - 修复：索引绕序统一为 `(0,1,2)(1,3,2)`（UV 不变）+ `geo.computeVertexNormals()` → 平坦面法线 → `MeshLambertMaterial` 方向光生效（受光面亮/背光面暗）。
+  - 验证：4 种怪 geometry `attributes.normal` 存在、144/144/144/240 条全单位向量、各轴平均绝对值恰为 1/3（轴向平面法线分布）。
+- [x] 皮肤 atlas 64×64（cell 16×16 方形）。
+  - 原 64×32（cell 16×8）贴到方形面上 UV 拉伸变形；改方形后每面贴图无畸变，可画更多细节。
+  - 每 face 按朝向套基础明暗（front 1.0 / back 0.80 / left 1.05 / right 0.88），配合方向光在夜晚也保持辨识度。
+- [x] 重写 4 种怪皮肤纹理（16×16/面像素细节）。
+  - 僵尸：绿皮噪点 + 头发帘/眼睛/嘴（带牙）+ 眼下阴影 + 衬衫中缝/破洞露皮 + 皮带扣 + 裤磨破 + 鞋。
+  - 骷髅：白骨 + 高光颅顶 + 大眼窝/鼻孔/颧骨 + 白牙列 + 衬衫肋骨/胸骨 + 脊柱 + 腰带。
+  - 苦力怕：斑驳绿 + 标志性大眼睛（4 宽）+ 渐宽裂口嘴 + 腹部暗面。
+  - 蜘蛛：近黑 + 8 只红眼（2×4）+ 口器 + 腹部背面浅斑。
+- [x] 模型细化。
+  - 苦力怕：身体更方更壮（0.5×0.7×0.28，贴近原版 8×12×4 比例）。
+  - 蜘蛛：由"1 头 + 1 身 + 4 腿"改为"头胸（前小）+ 腹部（后大）+ **8 条腿**（4 对，薄长 box 斜向外）"，剪影更接近原版。
+  - 人形：臂略细、腿加粗，微调比例。
+- [x] 验证：`node --check` + `npm run build`（45 模块）+ 浏览器冒烟（法线属性/控制台 0 错误/世界投影取景确认 4 怪在画面内 + before/after 截图）+ 服务器单测保持全绿（34/15/26/16/20）。
+
+### 阶段 8（规划）
 
 - 手持物品 3D 化渲染（当前为 billboard sprite，可升级为简易体素/Box 组合随手臂摆动）。
 - 快捷栏槽位完整可见（当前仅同步选中槽位物品名，未同步整条快捷栏）。

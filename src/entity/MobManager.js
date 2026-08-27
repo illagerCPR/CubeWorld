@@ -62,15 +62,15 @@ export class MobManager {
   async buildMaterials() {
     for (const typeName of Object.keys(MobTypes)) {
       const type = MobTypes[typeName];
-      // 1. svg → image → canvas → texture
+      // 1. svg → image → canvas → texture（64×64，每 face 16×16 方形 cell）
       const svg = this.mobSkins[typeName];
       const img = await SVGTextures.svgToImage(svg);
       const canvas = document.createElement('canvas');
       canvas.width = 64;
-      canvas.height = 32;
+      canvas.height = 64;
       const ctx = canvas.getContext('2d');
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(img, 0, 0, 64, 32);
+      ctx.drawImage(img, 0, 0, 64, 64);
       const tex = new THREE.CanvasTexture(canvas);
       tex.magFilter = THREE.NearestFilter;
       tex.minFilter = THREE.NearestFilter;
@@ -100,8 +100,9 @@ export class MobManager {
             // UV 顺序跟随 corner [底,顶,底,顶]：底→v0，顶→v1
             uvs.push(c < 2 ? uv.u0 : uv.u1, (c & 1) ? uv.v1 : uv.v0);
           }
-          // 索引：两个三角形 (0,1,2)+(0,2,3)
-          indices.push(idx, idx + 1, idx + 2, idx, idx + 2, idx + 3);
+          // 两个三角形使用统一绕序 (0,1,2)(1,3,2)，保证每面两个三角形外法线一致，
+          // 否则 computeVertexNormals 会平均出 ~0 法线 → Lambert 方向光失效（"同色纸片"）
+          indices.push(idx, idx + 1, idx + 2, idx + 1, idx + 3, idx + 2);
           idx += 4;
         }
       }
@@ -110,6 +111,8 @@ export class MobManager {
       geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
       geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
       geo.setIndex(indices);
+      // 每面顶点不共享 → 生成平坦面法线（每面一个朝向），方向光据此做明暗（立体感关键）
+      geo.computeVertexNormals();
 
       const mat = new THREE.MeshLambertMaterial({
         map: tex,

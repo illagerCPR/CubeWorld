@@ -85,8 +85,9 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
 
 - `MobManager` 管理生成（夜晚优先，MAX_MOBS=20）、更新、渲染、掉落物。
 - 怪物模型用 **box-parts cuboid**：每只怪是一个 BufferGeometry，由若干 cuboid 部件合并而成（head/body/2 arm/2 leg 等），共 ≈ 6 部位 × 6 面 × 2 三角形 = 72 三角形/怪。**不再用 4 面 billboard**。
-- 怪物纹理用**独立 64×32 皮肤 atlas**（4 行 × 4 列，cell 16×8 像素），每 type 一份私有 `CanvasTexture`，**不再合并到全局方块/物品图集**。
-- 皮肤 atlas 布局：row 0=head, row 1=body, row 2=arm, row 3=leg；col 0/1/2/3 = front/back/left/right；顶/底面复用 col 0/1。UV 查表用 `mobSkinUV(partRow, faceCol)`，FaceEnum 由 `FACE_COL` 映射。
+- 怪物纹理用**独立 64×64 皮肤 atlas**（4 行 × 4 列，cell 16×16 方形像素），每 type 一份私有 `CanvasTexture`，**不再合并到全局方块/物品图集**。
+- 皮肤 atlas 布局：row 0=head, row 1=body, row 2=arm, row 3=leg；col 0/1/2/3 = front/back/left/right；顶/底面复用 col 0/1。UV 查表用 `mobSkinUV(partRow, faceCol)`，FaceEnum 由 `FACE_COL` 映射。每 face 按朝向套基础明暗（front 1.0 / back 0.80 / left 1.05 / right 0.88）。
+- **法线是立体感关键（阶段 7 修复）**：`MobManager.buildMaterials()` 合并 geometry 后必须 `geo.computeVertexNormals()`，且 FACE_DEFS 每面两三角形绕序必须统一为 `(0,1,2)(1,3,2)`——若沿用 `(0,1,2)(0,2,3)`，每面两三角形一个朝外一个朝内，`computeVertexNormals` 平均成 ~0 法线，`MeshLambertMaterial` 方向光失效 → 全表面同色无明暗（"同色纸片"根因）。修绕序不改 UV。
 - 模型部件定义在 `MobTextures.js` 中 `HUMANOID_PARTS`/`CREEPER_PARTS`/`SPIDER_PARTS` 常量；`MobTypes[type].model.parts` 引用。box = `[minX, minY, minZ, maxX, maxY, maxZ]`，**局部坐标系原点在脚 y=0，+Z 朝玩家**。
 - `MobManager.buildMaterials()` 是 **async**（要 await SVG → Image → Canvas）；`Game.start()` 中必须 `await this.mobManager.buildMaterials()`，否则下一次 `start()` 时 master geometry/material 上下文未就绪。
 - `Mob.js` 含 AI：chase/wander/attack/jump/burn/explode/lineOfSight。
@@ -174,7 +175,7 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
 - 路径含空格的可执行文件用 call 操作符 `& "..."`。
 - `Read` 工具对长文件有重复返回前几行的 bug，长文件请改 `Get-Content ... | Select-Object -Skip N -First M` 或 `Select-String`。
 
-## 局域网联机（LAN 多人，阶段 0-6 已完成）
+## 局域网联机（LAN 多人，阶段 0-7 已完成）
 
 - **架构 thin-host（方案C）**：Node 服务器 = 房间管理 + 方块/掉落物账本 + 消息中继 + 时间权威；每个客户端本地自模拟世界（确定性生成 `TerrainGenerator(seed)`，不用 Math.random），只同步增量。消息键 `t`（type），`server/protocol.js` 集中定义；S2C 表见 `docs/lan-multiplayer-design.md` §7。
 - **端口**：服务器 TCP **3001**（`.\start.cmd server`），前端 5173（`.\start.cmd start`），管理面板 `http://127.0.0.1:3001/`。
@@ -190,11 +191,11 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
 
 ## 任务进度（Roadmap）
 
-已完成并推送 master（`https://github.com/illagerCPR/Web-MC.git`）：阶段 0 房间服务器+网络层+方块/玩家/聊天同步（`893fb49`）→ 阶段 1 掉落物/拾取同步+断线重连（`4d9a2ea`）→ 阶段 2 怪物事件同步+红石缓解（`7048df0`）→ 阶段 3 多房间+世界落盘+换房/新建+玩家名颜色（`ce98e23`）→ 阶段 4 插值优化+死亡观战+配置面板（`74418d1`）→ 阶段 5 世界内换房/重建+时间戳对齐插值+管理面板鉴权（`d57403a`）→ 阶段 6 手持物品外观同步+死亡掉落物+观战平滑+鉴权增强+自适应插值延迟（待提交）。设计文档 v0.8、README 已同步。
+已完成并推送 master（`https://github.com/illagerCPR/Web-MC.git`）：阶段 0 房间服务器+网络层+方块/玩家/聊天同步（`893fb49`）→ 阶段 1 掉落物/拾取同步+断线重连（`4d9a2ea`）→ 阶段 2 怪物事件同步+红石缓解（`7048df0`）→ 阶段 3 多房间+世界落盘+换房/新建+玩家名颜色（`ce98e23`）→ 阶段 4 插值优化+死亡观战+配置面板（`74418d1`）→ 阶段 5 世界内换房/重建+时间戳对齐插值+管理面板鉴权（`d57403a`）→ 阶段 6 手持物品外观同步+死亡掉落物+观战平滑+鉴权增强+自适应插值延迟（`fab3b7f`）→ 阶段 7 4 种怪物建模优化（法线光照 + 方形皮肤 + 细节纹理 + 模型细化）（待提交）。设计文档 v0.9、README 已同步。
 
 剩余规划（见 `docs/lan-multiplayer-design.md` §11，待用户确认范围）：
 
-- **阶段 7（规划）**：手持物品 3D 化渲染；快捷栏槽位完整可见；死亡掉落拾取归属细同步；管理面板多账号/token 轮换；插值延迟加入 RTT 直测辅助。
+- **阶段 8（规划，原阶段 7 清单）**：手持物品 3D 化渲染；快捷栏槽位完整可见；死亡掉落拾取归属细同步；管理面板多账号/token 轮换；插值延迟加入 RTT 直测辅助。
 
 ### 阶段 5 关键实现备忘（防回退）
 
@@ -212,3 +213,12 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
 - **观战平滑**：`_specSmoothed/_specSmoothYaw/_specSmoothPitch` 帧率无关指数平滑（`k = 1 - Math.pow(0.0001, dt)`），切换目标（`cycleSpectateTarget`）/进入观战/重生时重置为 null（避免跨图横扫）；`updateSpectateCamera` 读平滑后位置/朝向。
 - **自适应插值延迟**：`RemotePlayer.update` 按"头余量 = 最新样本 ts − renderTime"动态调 `_interpDelay`（<0.03 → +0.004 加大吸收抖动；>0.22 → −0.002 降低滞后；钳 0.05~0.4）。**仍须保留 stage5 的 `i 钳到 len-2` 防越界**。
 - **测试非幂等**：服务器回归测试对同一 live 服务器重复跑批会被污染（遗留 `server/world/*.json`、config 里的 adminToken/expires）——跑批前清空 `server/world/` 与 `server/config.json`（或重启服务器）。
+
+### 阶段 7 关键实现备忘（防回退）—— 4 种怪物建模优化
+
+- **"同色纸片"根因 = 法线缺失**：`MobManager.buildMaterials()` 合并的 cuboid geometry 原本**无 normal attribute**（three.js 不绑定 → WebGL 默认 (0,0,0)）→ `MeshLambertMaterial` 的 `max(dot(N,L),0)=0`，太阳光对怪物零贡献、只吃环境光 → 全表面同色无明暗。方块正常是因为 `ChunkMesh.js` 手动写死每面法线。修复：`geo.computeVertexNormals()`。
+- **绕序陷阱（必读）**：FACE_DEFS 每个面 4 顶点的原索引 `(0,1,2)(0,2,3)` 使两个三角形**一个朝外一个朝内**（已验证 right 面 +X/-X 各一）——直接 computeVertexNormals 会平均成 ~0 法线，仍扁平。修复：索引改为 `(0,1,2)(1,3,2)`（绕序统一、**不改 UV**）。**勿回退成 `(0,2,3)`**。
+- **atlas 64×64**：皮肤 atlas 由 64×32（cell 16×8）升级为 **64×64（cell 16×16 方形）**，修掉方形面上 UV 拉伸；`MobManager.buildMaterials` 的 canvas 与 `drawImage` 必须同步 64×64。`mobSkinUV(partRow, faceCol)` 公式不变。
+- **面朝向亮度**：`MobTextures.js` `FACE_BRIGHTNESS`（front 1.0 / back 0.80 / left 1.05 / right 0.88）在生成 cell 时逐像素乘系数——方向光之外的静态体积感，夜晚也保持辨识。改色板 `C.*` 时保持 rgb 数组。
+- **模型**：蜘蛛由 4 腿改为 **8 腿（4 对）+ 头胸 + 腹部**（SPIDER_PARTS 10 部件 → 240 顶点）；苦力怕身体更方；人形臂略细腿加粗。box 仍为 `[minX,minY,minZ,maxX,maxY,maxZ]`，原点脚底 y=0。
+- **验证**：浏览器断言 `geo.attributes.normal` 存在、单位向量、各轴平均绝对值≈1/3（axial 法线分布）；`npm run build`（45 模块）；服务器单测不涉及（仅前端渲染）。
