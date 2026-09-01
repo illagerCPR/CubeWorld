@@ -73,6 +73,11 @@ export class ChunkMeshBuilder {
     // 收集水面方块（顶面暴露空气的水方块），用于贪心合并
     const waterTops = [];
 
+    // 发光面（light mesh）顶点微抬量：避免与 solid 面共面深度冲突（z-fighting）。
+    // 此前主循环内联的 light 面直接引用 yOff 但从未定义——含发光方块（火把/荧石等）
+    // 的 chunk 一旦重建就 ReferenceError，rAF 链断裂画面冻结（阶段 9 修复）。
+    const yOff = 0.001;
+
     const getBlock = (x, y, z) => {
       if (x < 0 || x >= CHUNK_SIZE || z < 0 || z >= CHUNK_SIZE) {
         return this.world.getBlock(chunk.cx * CHUNK_SIZE + x, y, chunk.cz * CHUNK_SIZE + z);

@@ -27,7 +27,7 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
   `& "C:\Users\illag\AppData\Roaming\npm\playwright-cli.cmd" reload|click|eval|console <args>`
 - `playwright-cli eval` 中的字符串字面量常被 PowerShell 吃掉引号/反引号；传含 `name: "torch"` 之类参数时改用 `String.fromCharCode(...)` 拼接，或把脚本写到临时文件再 `eval --filename`。
 - playwright 无 pointer lock 能力，ESC 暂停 / 死亡屏幕等 pointer-lock 相关流程只能 `eval` 直接调用 `pauseMenu.show()`/`deathScreen.show()` 验证。
-- **不要用 Read 工具读取 PNG 截图文件**，会导致进程异常停止。
+- PNG 截图可直接用 Read 工具（read_image）查看，用于画面级渲染验证。
 
 ## 验证 / agent-browser（可真实操作 3D 世界，已实测 2026-08-31）
 
@@ -69,9 +69,9 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 
 近期已修复的泄漏案例：Sky.time 沿用上一存档时间（未先重置）；Inventory 残留上一存档的物品（未先清空）；chunk mesh / mob mesh 未从 scene 移除（_disposeWorld 缺失）。
 
-### 纹理管线（硬性约束：所有纹理必须 SVG 程序化生成）
+### 纹理管线（SVG 程序化生成为主）
 
-**禁止使用外部图片文件或读取图片。** 纹理全由 SVG 字符串生成：
+纹理全由 SVG 字符串程序化生成（现存管线以 SVG 为准）：
 
 1. `src/blocks/BlockDefs.js` 和 `src/items/ItemDefs.js` 在注册方块/物品时同时生成 SVG 字符串，分别导出 `BlockSVGDefinitions` 和 `ItemSVGDefinitions`（`{ 纹理名: svgString }`）。方块/物品建议同时填中文 `displayName`（用于 HUD/物品栏悬浮提示/快捷栏切换气泡）。
 2. `Game.start()` 合并两个 SVG map，先注入 `MobManager.init()` 添加怪物 SVG，再调用 `SVGTextures.buildAtlas()` 打包为一张 Canvas 图集纹理 + UV map。
@@ -209,11 +209,10 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 
 ## 任务进度（Roadmap）
 
-已完成并推送 master（`https://github.com/illagerCPR/Web-MC.git`）：阶段 0 房间服务器+网络层+方块/玩家/聊天同步（`893fb49`）→ 阶段 1 掉落物/拾取同步+断线重连（`4d9a2ea`）→ 阶段 2 怪物事件同步+红石缓解（`7048df0`）→ 阶段 3 多房间+世界落盘+换房/新建+玩家名颜色（`ce98e23`）→ 阶段 4 插值优化+死亡观战+配置面板（`74418d1`）→ 阶段 5 世界内换房/重建+时间戳对齐插值+管理面板鉴权（`d57403a`）→ 阶段 6 手持物品外观同步+死亡掉落物+观战平滑+鉴权增强+自适应插值延迟（`fab3b7f`）→ 阶段 7 4 种怪物建模优化（法线光照 + 方形皮肤 + 细节纹理 + 模型细化）（`a5fcbee`）→ 阶段 8 怪物朝向修复+原版化贴图+天空盒跟随（见下方备忘）。设计文档 v0.10、README 已同步。
+已完成并推送 master（`https://github.com/illagerCPR/Web-MC.git`）：阶段 0 房间服务器+网络层+方块/玩家/聊天同步（`893fb49`）→ 阶段 1 掉落物/拾取同步+断线重连（`4d9a2ea`）→ 阶段 2 怪物事件同步+红石缓解（`7048df0`）→ 阶段 3 多房间+世界落盘+换房/新建+玩家名颜色（`ce98e23`）→ 阶段 4 插值优化+死亡观战+配置面板（`74418d1`）→ 阶段 5 世界内换房/重建+时间戳对齐插值+管理面板鉴权（`d57403a`）→ 阶段 6 手持物品外观同步+死亡掉落物+观战平滑+鉴权增强+自适应插值延迟（`fab3b7f`）→ 阶段 7 4 种怪物建模优化（法线光照 + 方形皮肤 + 细节纹理 + 模型细化）（`a5fcbee`）→ 阶段 8 怪物朝向修复+原版化贴图+天空盒跟随（`0af6184`）→ 阶段 9 方块材质重绘+发光区块重建崩溃修复（见下方备忘）。设计文档 v1.0、README 已同步。
 
 剩余规划（见 `docs/lan-multiplayer-design.md` §11）：
 
-- **阶段 9（规划）**：方块材质重绘贴近原版（原版配色 + 结构化像素画：砖缝/木板拼条/圆石砌块/年轮/矿石晶簇），注册名与 SVG 管线不变。
 - **阶段 10（规划，原阶段 8 清单）**：手持物品 3D 化渲染；快捷栏槽位完整可见；死亡掉落拾取归属细同步；管理面板多账号/token 轮换；插值延迟加入 RTT 直测辅助。
 
 ### 阶段 5 关键实现备忘（防回退）
@@ -250,3 +249,10 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **原版化皮肤**：僵尸无发 + 青衫 + **HUMANOID_PARTS 手臂沿 +Z 前伸**（box y 1.28..1.50，z 0.14..0.89）；骷髅用 **SKELETON_PARTS**（细肢 0.14 宽，MobTypes.skeleton 引用）+ 全骨白；苦力怕经典脸（眼 4×4 @ rows4-7，嘴上窄中宽下分叉）；蜘蛛头前红眼。改皮肤时保持 6 面 partCells 结构。
 - **天空盒跟随（防"远处纯黑"）**：`Sky.update()` 必须 `skyMesh.position.set(playerPos)` + 构造时 `frustumCulled = false`。天空球半径 500 固定在原点时，玩家离原点 >far(1000)−500 后球面被远裁剪面裁掉露出黑色 clearColor。
 - **验证**：agent-browser 冒烟——atlas 96×64 断言（`mobTextures.get('zombie').image.width===96`）、top-cell UV 使用断言（u∈[0.667,0.833]）、4 怪正午特写截图（脸在头正面/手臂前伸/经典脸/蜘蛛红眼）、传送 (2500,95,2500) 天空蓝天无黑。拍摄技巧：`spawnEnabled=false` + `detectionRange=0` + `burningInDay=false` 防走位/爆炸/燃烧干扰；旁观模式瞬移后相机有平滑，需置 `_specSmoothed/_specSmoothYaw/_specSmoothPitch = null`。
+
+### 阶段 9 关键实现备忘（防回退）—— 方块材质重绘 + 发光区块重建崩溃修复
+
+- **`ChunkMesh.js` 的 `yOff` 未定义曾致画面永久冻结（高危，勿删）**：light 面（发光方块 light≥13，如火把/荧石/岩浆/红石灯）顶点微抬引用的 `yOff` 曾从未定义——**含发光方块的 chunk 一旦重建即 `ReferenceError` → `Game.update` 抛错 → `Game.loop` 的 rAF 链断裂（`requestAnimationFrame` 不再排下一帧）→ 画面冻结且时间不走**。现已在 `build()` 作用域定义 `const yOff = 0.001`（顶面微抬防 z-fighting）。浏览器侧没有覆盖"放置发光方块后区块重建"的回归，排查"画面冻住"类问题先手动 `game.update(0.016)` 抓异常（`agent-browser console` 只显示 console.*，不捕获 pageerror）。
+- **材质重绘结构**：`BlockDefs.js` 用 `makeTex/setPx/fillRect/rgb([r,g,b],f)/hash2` 像素画工具 + 三色噪声 `noiseTex`（基色为主 + 暗/亮碎点 + 轻微抖动）+ 2×2 斑驳 `blotchTex`，结构化图案（圆石砌块错位、石砖大砖受光边、红砖交错缝、木板拼条端缝、原木年轮、矿石晶簇高光/阴影点、TNT 白带字样、工作台网格、熔炉炉口、砂岩分层）按原版配色校准。注册名 / textures key / SVG 管线未变；`redstone_block` 双注册已清理（保留 light 0）。
+- **水体纹理平铺**：`waterTex` 的波纹用 `sin(x*π/8 + y*π/4)`（16 的整数分频周期）保证世界坐标 RepeatWrapping 平铺无缝，勿改回非周期函数。
+- **验证**：`node --check` + `npm run build`（45 模块）+ agent-browser 冒烟（创造物品栏一屏全图标核对 + 16 种方块阵列特写 + 摆放荧石后 `sky.time` 持续推进无冻结）。
