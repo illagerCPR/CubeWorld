@@ -29,6 +29,11 @@ export class NetworkManager {
     this._reconnectTimer = null;  // 重连定时器
     this._explicitClose = false;  // 主动关闭（returnToMenu）则不自动重连
     this.onStatusChange = null;   // (status: 'connected'|'reconnecting'|'closed', text) => void
+    // 阶段10：RTT 直测（应用层 ping/pong 计时），供插值自适应与信息栏显示
+    this.rttMs = null;            // 平滑后的往返延迟（毫秒，EMA 0.8/0.2）；null=尚未测得
+    this._pingSeq = 0;
+    this._pingTimer = 0;
+    this._pingInterval = 2;       // 每 2 秒直测一次 RTT
   }
 
   on(type, fn) { this._handlers.set(type, fn); }
@@ -127,7 +132,8 @@ export class NetworkManager {
     if (this.game.remotePlayers.has(info.id)) return;
     const rp = new RemotePlayer(this.game.renderer.scene, info.id, info.name, info.pos, this.game);
     this.game.remotePlayers.set(info.id, rp);
-    if (info.health !== undefined) rp.applyFull(info);
+    // 阶段10：joinRoom 回放的 PLAYER_JOIN 携带 selected/heldItem/hotbar（新加入者立即看到在线玩家手持物）
+    if (info.health !== undefined || info.hotbar !== undefined || info.heldItem !== undefined) rp.applyFull(info);
   }
 
   _removeRemote(id) {
@@ -142,7 +148,8 @@ export class NetworkManager {
 
   _spawnDrop(msg) {
     if (!this.game.mobManager) return;
-    this.game.mobManager.spawnRemoteDrop(msg.id, msg.x, msg.y, msg.z, msg.name, msg.count);
+    // 阶段10：透传归属锁（死亡掉落物：ownerLock 毫秒内仅 owner 本人可拾取）
+    this.game.mobManager.spawnRemoteDrop(msg.id, msg.x, msg.y, msg.z, msg.name, msg.count, msg.owner, msg.ownerLock);
   }
 
   _takeDrop(msg) {
@@ -253,7 +260,20 @@ export class NetworkManager {
         this._emit('chat', msg);
         break;
       case MSG.PING:
-        this._send(MSG.PONG, { seq: msg.seq });   // 回应用层心跳，防服务器踢出
+        this._send(MSG.PONG, { seq: msg.seq });   // 回应服务器心跳，防踢出（不带 ts，与 RTT 直测区分）
+        break;
+      case MSG.PONG:
+        // 阶段10：自己发起的 RTT 直测回包（服务器回显 ts）——与心跳 PONG（无 ts）区分
+        if (typeof msg.ts === 'number' && msg.ts > 0) {
+          const rtt = performance.now() - msg.ts;
+          if (rtt >= 0 && rtt < 10000) {
+            this.rttMs = this.rttMs == null ? rtt : this.rttMs * 0.8 + rtt * 0.2;
+          }
+        }
+        break;
+      case MSG.DROP_DENY:
+        // 阶段10：拾取被归属锁拒绝（死亡掉落物锁定期内他人拾取）——交给 Game 回滚本地拾取
+        this._emit('drop_deny', msg);
         break;
       case MSG.KICKED:
         // 服务器管理面板踢出：停止自动重连并断开
@@ -301,10 +321,16 @@ export class NetworkManager {
   // 红石源状态（lever/button），低频广播让各端 poweredBlocks 对齐
   sendRedstoneState(x, y, z, on) { this._send(MSG.REDSTONE_STATE, { x, y, z, on }); }
 
-  // 每帧调用：节流上报本地玩家状态
+  // 每帧调用：节流上报本地玩家状态 + RTT 直测
   update(dt) {
     if (!this.connected || !this.game.world) return;
     if (this.game.spectating) return; // 观战中不上报位置（避免观战者被吸附到目标处广播出去）
+    // 阶段10：RTT 直测——发 ping（带本地时间戳），服务器回显 ts，PONG 分支计算平滑 RTT
+    this._pingTimer -= dt;
+    if (this._pingTimer <= 0) {
+      this._pingTimer = this._pingInterval;
+      this._send(MSG.PING, { seq: ++this._pingSeq, ts: performance.now() });
+    }
     this._stateTimer -= dt;
     if (this._stateTimer > 0) return;
     this._stateTimer = this._stateInterval;
@@ -323,10 +349,13 @@ export class NetworkManager {
   sendPlayerFull() {
     const p = this.game.player;
     const sel = this.game.inventory.getSelected();
+    // 阶段10：上报完整快捷栏（9 槽快照），服务器记录并在 joinRoom 回放给新加入者
+    const hotbar = this.game.inventory.slots.slice(0, 9).map((s) => (s ? { name: s.name, count: s.count } : null));
     this._send(MSG.PLAYER_FULL, {
       health: p.health, food: p.food, saturation: p.saturation,
       mode: p.gamemode, selected: this.game.inventory.hotbarSelected,
       held: sel ? sel.name : null,
+      hotbar,
     });
   }
 

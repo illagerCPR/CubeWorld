@@ -6,6 +6,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Room } from './room.js';
@@ -125,13 +126,18 @@ const adminHtml = (() => {
   } catch { return '<h1>管理面板文件缺失</h1>'; }
 })();
 
-// 阶段5 管理面板鉴权：adminToken 非空时开启，API 请求须带 Authorization: Bearer <token>
-// 阶段6：adminTokenExpires 非 0 且已到期 → 'expired'（口令过期）；过期后仅放行 POST /api/config 供续期/关闭，其余 401
+// 阶段5 管理面板鉴权：管理账号列表非空时开启，API 请求须带 Authorization: Bearer <token>
+// 阶段10：升级为多账号（serverConfig.adminAccounts），任一未过期账号均可通过；旧 adminToken 等价于 default 账号
+// 账号过期 → 'expired'（仅放行 POST /api/config 续期/关闭，其余 401）
 function authState(req) {
-  const token = serverConfig.adminToken;
-  if (!token) return 'ok'; // 未开启鉴权（局域网信任环境默认关闭）
-  if ((req.headers['authorization'] || '') !== 'Bearer ' + token) return 'no';
-  if (serverConfig.adminTokenExpires > 0 && Date.now() / 1000 >= serverConfig.adminTokenExpires) return 'expired';
+  const accounts = Array.isArray(serverConfig.adminAccounts) ? serverConfig.adminAccounts : [];
+  if (!accounts.length) return 'ok'; // 未开启鉴权（局域网信任环境默认关闭）
+  const auth = req.headers['authorization'] || '';
+  if (!auth.startsWith('Bearer ')) return 'no';
+  const token = auth.slice(7);
+  const acc = accounts.find((a) => a.token === token);
+  if (!acc) return 'no';
+  if (acc.expires > 0 && Date.now() / 1000 >= acc.expires) return 'expired';
   return 'ok';
 }
 
@@ -142,10 +148,18 @@ function logAdmin(op, detail) {
   if (adminLogs.length > 200) adminLogs.shift();
 }
 
-// 对外返回配置时掩码 adminToken，避免泄露明文口令
+// 管理账号对外稳定标识：token 的 SHA-256 前 8 位（明文口令不出现在列表/日志，rotate/revoke 按 id 定位）
+function accountId(a) {
+  return crypto.createHash('sha256').update(String(a.token)).digest('hex').slice(0, 8);
+}
+
+// 对外返回配置时掩码口令，避免泄露明文；adminToken 兼容字段由 default 账号派生显示
 function maskedConfig() {
   const c = { ...serverConfig };
-  if (c.adminToken) c.adminToken = '****';
+  const accounts = (c.adminAccounts || []).map((a) => ({ id: accountId(a), label: a.label, expires: a.expires, token: a.token ? '****' : '' }));
+  const def = accounts.find((a) => a.label === 'default') || null;
+  c.adminAccounts = accounts;
+  c.adminToken = def && def.token ? '****' : '';
   return c;
 }
 
@@ -204,6 +218,56 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 200, { logs: [...adminLogs].reverse() }); // 最新在前
         return;
       }
+      // 阶段10 管理账号 API：生成 / 轮换 / 撤销（多账号 + token 轮换策略）
+      // 生成：POST /api/tokens {label?, expiresMinutes?} -> 新口令明文仅此一次返回
+      if (p === '/api/tokens' && req.method === 'POST') {
+        if (!Array.isArray(serverConfig.adminAccounts)) serverConfig.adminAccounts = [];
+        if (serverConfig.adminAccounts.length >= 10) { sendJson(res, 400, { error: '管理账号已达上限（10 个）' }); return; }
+        const body = await readBody(req);
+        const token = crypto.randomBytes(24).toString('base64url'); // 32 字符强随机
+        const label = String(body.label || '').trim().slice(0, 24) || `token-${Date.now() % 10000}`;
+        const minutes = Number(body.expiresMinutes) || 0;
+        const expires = minutes > 0 ? Math.floor(Date.now() / 1000) + minutes * 60 : 0;
+        serverConfig.adminAccounts.push({ token, label, expires });
+        config.saveConfig(serverConfig);
+        logAdmin('token-create', `新增管理账号「${label}」${expires > 0 ? `（${new Date(expires * 1000).toLocaleString()} 过期）` : '（永不过期）'}`);
+        console.log(`[管理] 新增管理账号「${label}」（共 ${serverConfig.adminAccounts.length} 个）`);
+        sendJson(res, 200, { ok: true, token, label, expires });
+        return;
+      }
+      // 轮换：POST /api/tokens/rotate {id|token, expiresMinutes?} -> 该账号换发新口令（旧口令立即失效）
+      if (p === '/api/tokens/rotate' && req.method === 'POST') {
+        const body = await readBody(req);
+        const accounts = Array.isArray(serverConfig.adminAccounts) ? serverConfig.adminAccounts : [];
+        const idOrToken = String(body.id || body.token || '');
+        const acc = accounts.find((a) => accountId(a) === idOrToken || a.token === idOrToken);
+        if (!acc) { sendJson(res, 404, { error: '管理账号不存在（口令不匹配）' }); return; }
+        const newToken = crypto.randomBytes(24).toString('base64url');
+        acc.token = newToken;
+        if (body.expiresMinutes !== undefined) {
+          const minutes = Number(body.expiresMinutes) || 0;
+          acc.expires = minutes > 0 ? Math.floor(Date.now() / 1000) + minutes * 60 : 0;
+        }
+        config.saveConfig(serverConfig);
+        logAdmin('token-rotate', `轮换管理账号「${acc.label}」口令（旧口令已失效）`);
+        console.log(`[管理] 轮换管理账号「${acc.label}」口令`);
+        sendJson(res, 200, { ok: true, token: newToken, label: acc.label, expires: acc.expires });
+        return;
+      }
+      // 撤销：POST /api/tokens/revoke {id|token} -> 删除该账号（全部撤销后鉴权自动关闭）
+      if (p === '/api/tokens/revoke' && req.method === 'POST') {
+        const body = await readBody(req);
+        const accounts = Array.isArray(serverConfig.adminAccounts) ? serverConfig.adminAccounts : [];
+        const idOrToken = String(body.id || body.token || '');
+        const idx = accounts.findIndex((a) => accountId(a) === idOrToken || a.token === idOrToken);
+        if (idx < 0) { sendJson(res, 404, { error: '管理账号不存在（口令不匹配）' }); return; }
+        const [rm] = accounts.splice(idx, 1);
+        config.saveConfig(serverConfig);
+        logAdmin('token-revoke', `撤销管理账号「${rm.label}」${accounts.length ? '' : '（鉴权已关闭）'}`);
+        console.log(`[管理] 撤销管理账号「${rm.label}」（剩余 ${accounts.length} 个）`);
+        sendJson(res, 200, { ok: true, remaining: accounts.length });
+        return;
+      }
       if (p === '/api/broadcast' && req.method === 'POST') {
         const body = await readBody(req);
         const text = String(body.text || '').slice(0, 200);
@@ -219,11 +283,12 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/kick' && req.method === 'POST') {
         const body = await readBody(req);
         const id = Number(body.playerId);
+        const reason = String(body.reason || '').trim().slice(0, 80) || '被服务器管理员移出'; // 阶段10：原因可填写
         for (const r of rooms.values()) {
           if (r.players.has(id)) {
             const name = r.players.get(id).name;
-            r.kickPlayer(id, body.reason || '被服务器管理员移出');
-            logAdmin('kick', `踢出玩家 id=${id} (${name})，房间「${r.name}」`);
+            r.kickPlayer(id, reason);
+            logAdmin('kick', `踢出玩家 id=${id} (${name})，房间「${r.name}」，原因：${reason}`);
             sendJson(res, 200, { ok: true, room: r.name });
             return;
           }

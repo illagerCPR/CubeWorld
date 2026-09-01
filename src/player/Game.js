@@ -25,6 +25,7 @@ import { matchRecipe } from '../core/Crafting.js';
 import { MobManager } from '../entity/MobManager.js';
 import { RedstoneSystem } from '../core/RedstoneSystem.js';
 import { SaveSystem } from '../core/SaveSystem.js';
+import { FirstPersonHand } from '../render/FirstPersonHand.js';
 import { playerColorCss } from '../net/playerColor.js';
 
 // 触发方块/物品定义注册
@@ -56,6 +57,8 @@ export class Game {
     this.commandPanel = null;
     this.cheatsEnabled = false;
     this.paused = false;
+    // 阶段10：第一人称手持物（跨存档共享相机挂点，start 时重置手持内容）
+    this.hand = new FirstPersonHand(this);
     this.currentSlot = 1;
     this.onExit = null;
     this.mobManager = null;
@@ -162,6 +165,10 @@ export class Game {
     this._specSmoothed = null;      // 阶段6：观战平滑状态重置
     this._specSmoothYaw = 0;
     this._specSmoothPitch = 0;
+    // 阶段10：重置第一人称手持物（跨存档共享实例，物品由下方物品栏初始化后同步）
+    this.hand.currentName = undefined;
+    this.hand.itemGroup.clear();
+    this.hand.setVisible(true);
     // 显示加载界面
     const loadingEl = document.getElementById('loading');
     if (loadingEl) {
@@ -304,6 +311,16 @@ export class Game {
       this.net.bindWorld(this.world); // World.setBlock 统一上报（含防回环）
       // 联机拾取掉落物：通知服务器移除并广播
       if (this.mobManager) this.mobManager.onDropTaken = (id) => this.net.sendDropTaken(id);
+      // 阶段10：归属锁判定需要本地联机 id（死亡掉落物锁定期内他人不可拾取）
+      if (this.mobManager) this.mobManager.getSelfId = () => (this.net ? this.net.selfId : null);
+      // 阶段10：拾取被归属锁拒绝（drop_deny）→ 从背包扣回 + 凭服务器补发的 drop_spawn 重建实体
+      this.net.on('drop_deny', ({ id }) => {
+        const info = this.mobManager ? this.mobManager.takePendingPickup(id) : null;
+        if (!info) return; // 未抢先拾取（本地预判已拦下），无需回滚
+        this.inventory.removeItems(info.name, info.count);
+        if (this.hotbar) this.hotbar.update();
+        if (this.chatBox) this.chatBox.add('该掉落物仍归属其主人，已归还。', '#fa8');
+      });
       // 红石源状态（lever/button）：低频广播让各端 poweredBlocks 对齐
       if (this.redstone) this.redstone.onStateChange = (x, y, z, on) => this.net.sendRedstoneState(x, y, z, on);
       this.net.on('time', (t) => { if (this.sky) this.sky.time = t; });
@@ -541,9 +558,21 @@ export class Game {
     // HUD
     this.hud.update(this.player);
     if (this.infoBar && this.world && this.world.generator) {
-      this.infoBar.update(this.player, this.world.generator, this.sky, this.crosshairInfo);
+      this.infoBar.update(this.player, this.world.generator, this.sky, this.crosshairInfo,
+        this.networkMode && this.net ? this.net.rttMs : null); // 阶段10：联机时显示 RTT
     }
-    
+
+    // 阶段10：第一人称手持物（物品变化检测 + bob/挥动；观战与旁观隐藏）
+    this.hand.setVisible(!this.spectating && !this.player.spectator);
+    {
+      const sel = this.inventory.getSelected();
+      const selName = sel ? sel.name : null;
+      if (selName !== this.hand.currentName) this.hand.setItem(selName);
+    }
+    this.hand.update(dt,
+      Math.hypot(this.player.velocity.x, this.player.velocity.z) > 0.8,
+      this.controls.isSprinting());
+
     // 怪物系统
     if (this.mobManager) {
       this.mobManager.onPickup = (name, count) => {
@@ -700,6 +729,7 @@ export class Game {
         this.renderer.camera.getWorldDirection(dir);
         const rp = this._findRemoteByRay(origin, dir, 4);
         if (rp) {
+          this.hand.swing(); // 阶段10：命中远端玩家挥动
           this.net.sendAttackPlayer(rp.id, this.getAttackDamage());
           this.controls.mouseLeft = false;
           return;
@@ -714,6 +744,7 @@ export class Game {
         const damage = this.player.creative ? 100 : this.getAttackDamage();
         const hit = this.mobManager.attackMob(origin, dir, 4, damage);
         if (hit) {
+          this.hand.swing(); // 阶段10：命中怪物挥动
           this.controls.mouseLeft = false;
           return;
         }
@@ -768,6 +799,7 @@ export class Game {
         const itemDef = ItemRegistry.getByName(sel.name);
         if (itemDef && itemDef.food && this.player.food < this.player.maxFood) {
           if (this.player.eat(itemDef)) {
+            this.hand.swing(); // 阶段10：进食挥动
             this.inventory.removeSelected(1);
             this.hotbar.update();
           }
@@ -809,6 +841,7 @@ export class Game {
         
         const blockDef = BlockRegistry.getByName(sel.name);
         if (blockDef) {
+          this.hand.swing(); // 阶段10：放置方块挥动
           this.world.setBlock(placeX, placeY, placeZ, blockDef.id);
           if (this.redstone) this.redstone.onBlockChange(placeX, placeY, placeZ);
           if (this.player.survival) {

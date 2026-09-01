@@ -1,7 +1,7 @@
 # Project-MC 局域网联机设计文档
 
-> 版本：v1.0（阶段 9 方块材质重绘已实现并通过验证）
-> 状态：阶段 0（MVP）完成（2026-08-21）；阶段 1（掉落物/断线重连）完成（2026-08-22）；阶段 2（怪物事件同步 + 红石状态缓解）完成（2026-08-22）；阶段 3（多房间 + 世界落盘 + 玩家名着色）完成（2026-08-23）；阶段 4（插值优化 + 观战 + 服务器管理面板）完成（2026-08-23）；阶段 5（世界内换房/重建 + 时间戳对齐插值 + 管理面板鉴权）完成（2026-08-24）；阶段 6（手持物品外观同步 + 玩家死亡掉落物 + 观战视角平滑 + 鉴权增强 + 自适应插值延迟）完成（2026-08-25）；阶段 7（4 种怪物建模优化：法线光照 + 方形皮肤 + 细节纹理 + 模型细化）完成（2026-08-27）；阶段 8（怪物朝向修复 + 原版化贴图 + 天空盒修复）完成（2026-09-01）；阶段 9（方块材质重绘贴近原版 + 发光区块重建崩溃修复）完成（2026-09-01）；阶段 10（原阶段 8 的 LAN 增强清单）规划中
+> 版本：v1.1（阶段 10 原阶段 8 的 LAN 增强清单已实现并通过验证）
+> 状态：阶段 0（MVP）完成（2026-08-21）；阶段 1（掉落物/断线重连）完成（2026-08-22）；阶段 2（怪物事件同步 + 红石状态缓解）完成（2026-08-22）；阶段 3（多房间 + 世界落盘 + 玩家名着色）完成（2026-08-23）；阶段 4（插值优化 + 观战 + 服务器管理面板）完成（2026-08-23）；阶段 5（世界内换房/重建 + 时间戳对齐插值 + 管理面板鉴权）完成（2026-08-24）；阶段 6（手持物品外观同步 + 玩家死亡掉落物 + 观战视角平滑 + 鉴权增强 + 自适应插值延迟）完成（2026-08-25）；阶段 7（4 种怪物建模优化：法线光照 + 方形皮肤 + 细节纹理 + 模型细化）完成（2026-08-27）；阶段 8（怪物朝向修复 + 原版化贴图 + 天空盒修复）完成（2026-09-01）；阶段 9（方块材质重绘贴近原版 + 发光区块重建崩溃修复）完成（2026-09-01）；阶段 10（手持物品 3D 化 + 完整快捷栏同步 + 掉落归属锁 + 管理多账号/token 轮换 + RTT 直测）完成（2026-09-01）
 > 阶段 0 新增：`server/`（index/room/protocol）、`src/net/NetworkManager.js`、`src/entity/RemotePlayer.js`、`src/ui/ChatBox.js`
 > 阶段 0 改动：`World.js`（setBlock 上报钩子）、`Game.js`（联机集成）、`MobManager.js`（spawnEnabled）、`MenuScreen.js`/`main.js`（联机入口）、`start.cmd`（server 子命令）
 > 阶段 0 验证：`server/test-mp.mjs` 协议 13/13 PASS；浏览器 host + Node 客户端双端链路验证通过
@@ -584,13 +584,21 @@ server/
 - [x] 修复 `ChunkMesh.js` 潜伏崩溃：light 面（发光方块，light≥13）顶点微抬引用了**从未定义的 `yOff`**——含发光方块（火把/荧石/岩浆等）的 chunk 重建即 `ReferenceError` → `Game.loop` rAF 链断裂 → 画面永久冻结。定义 `const yOff = 0.001`（顶面微抬防 z-fighting）。浏览器侧从未覆盖"放置发光方块后区块重建"路径，本次摆放含荧石的阵列时暴露。
 - [x] 验证：`node --check` + `npm run build`（45 模块，649 kB）+ agent-browser 冒烟（创造物品栏一屏全图标核对 + 16 种方块阵列世界内特写：TNT 白带字样/红砖缝/石砖/圆石砌块/年轮/矿石晶簇/荧石 + 摆放发光方块后时间持续推进无冻结）。
 
-### 阶段 10（规划，原阶段 8 清单）
+### 阶段 10（完成，2026-09-01）
 
-- 手持物品 3D 化渲染（当前为 billboard sprite，可升级为简易体素/Box 组合随手臂摆动）。
-- 快捷栏槽位完整可见（当前仅同步选中槽位物品名，未同步整条快捷栏）。
-- 死亡掉落物拾取归属/捡起冷却细同步（当前局域网信任接受先到先得）。
-- 管理面板鉴权多账号 / 踢出原因可填写 / token 轮换（rotation）策略。
-- 插值延迟加入网络 RTT 直测（ping/pong 计时）辅助自适应，替代纯头余量启发式。
+- [x] **手持物品 3D 化渲染**：新文件 `src/render/HeldItemMesh.js`——手持物 3D 模型构建器（方块 = 六面贴图小立方体，cross 方块 = 交叉双面薄片，物品 = 双面薄片；SVG → 32×32 CanvasTexture 最近邻采样；材质 = MeshLambertMaterial + emissiveMap 同贴图 0.35 自发光，夜晚可见；模板按物品名进程级缓存，clone 复用）。新文件 `src/render/FirstPersonHand.js`——第一人称手持物（相机子节点，右下基座 + 空手肤色手臂 + 挥动/走路 bob 动画；按住左键自动连续挥动，放置/食用/命中触发单次挥动）。**注意**：camera 必须加入 scene（`scene.add(camera)`）其子节点才渲染。`RemotePlayer._setHeld` 由 sprite 升级为 3D 模型（挂 armR pivot 随摆臂）。
+- [x] **快捷栏槽位完整可见（整条快捷栏同步）**：`player_full` 携带 `hotbar`（9 槽 `[{name,count}|null]`，服务器 `sanitizeHotbar` 校验后记录在 `player.hotbar`）；`joinRoom` 回放的 `PLAYER_JOIN` 扩展为 `joinInfo()`（含 `selected`/`held`/`hotbar`）——新加入者立即看到所有在线玩家的选中槽位/手持物；脏 hotbar（空名/超界）整体丢弃不改状态。`RemotePlayer.applyFull` 存 `hotbar`/`selectedSlot`，消息未带 held 时由 `hotbar[selected]` 推导。
+- [x] **死亡掉落物拾取归属/捡起冷却细同步**：死亡掉落带 3 秒归属锁（账本 `owner`/`ownerUntil`，广播 `owner`/`ownerLock` 毫秒）；锁内非 owner 拾取：本地预判跳过 + 服务器权威拒绝（`drop_deny` + 补发 `drop_spawn` 供客户端重建实体）；账本已不存在的 `drop_taken` 也回 `drop_deny`（防两人同时拾取复制物品）；客户端 `drop_deny` → 从背包扣回（`Inventory.removeItems` + `MobManager.takePendingPickup` 拾取留档）。普通挖矿掉落无锁（先到先得不变）。
+- [x] **管理面板多账号 / 踢出原因 / token 轮换**：`config.adminAccounts = [{token,label,expires}]`（≤10 个，任一未过期账号可通过鉴权；全部撤销 = 鉴权自动关闭）；旧 `adminToken`/`adminTokenExpires` 保留为兼容接口（等价于 label='default' 的账号，读写同步）。新 API：`POST /api/tokens`（生成，crypto 强随机 32 字符，明文仅返回一次）、`POST /api/tokens/rotate`（轮换，旧口令立即失效，按 `id`=token 哈希定位避免明文回传）、`POST /api/tokens/revoke`（撤销）。`admin.html` 新增「管理账号」卡（生成/轮换/撤销 + 有效期倒计时），踢出弹窗支持填写原因（透传 `kicked.reason`，日志记录）。
+- [x] **插值延迟 RTT 直测**：客户端每 2s 发 `ping {seq, ts}`（应用层），服务器回显 `{seq, ts}`，客户端 PONG 分支算 EMA(0.8/0.2) 平滑 RTT（`NetworkManager.rttMs`）；`RemotePlayer` 自适应以 RTT 为主信号（目标延迟 ≈ 0.05s + RTT/2，钳 0.05~0.4s，平滑靠拢），头余量仅保留欠载保护（<0.03s 加大延迟）；InfoBar 联机时显示「网络: Xms」行。
+- [x] 验证：`node --check` + `npm run build`（47 模块，655 kB）+ 新增 `server/test-stage10.mjs` **41/41**（RTT 回显/完整快捷栏透传与 joinRoom 回放/归属锁拒绝与补发实体/owner 放行/普通掉落先到先得/账本不存在 deny 防复制/多账号生成轮换撤销与旧接口兼容/踢出原因透传）+ 全基线 test-mp 34/34、test-store 15/15、test-admin 26/26、test-stage5 16/16、test-stage6 20/20 全绿 + agent-browser 冒烟（第一人称手持方块/火把/物品截图、挥动动画、远端玩家手持 3D 模型、joinInfo 回放断言、InfoBar RTT 行、掉落锁确定性断言：锁内拦截/过期放行、管理面板生成→轮换→撤销全流程）。
+
+### 阶段 11 及以后（候选项）
+
+- 手持物挥动与挖掘进度联动（按方块硬度同步挥动频率/幅度）。
+- 远端玩家快捷栏 UI 可视化（头顶槽位图标，基于已同步的 hotbar 数据）。
+- 服务器房间白名单 / 每账号权限分级（op 与 viewer）。
+- 插值延迟结合抖动方差的更细自适应。
 
 ---
 

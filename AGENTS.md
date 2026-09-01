@@ -176,7 +176,7 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 
 - `Hotbar`：`flashName()` 在切换快捷栏槽位时显示物品名气泡 2 秒；数字键 / 滚轮切换处需主动调用。
 - `Hud`：血量/饥饿行 `bottom:86px`，经验条 `bottom:72px`，都贴在快捷栏上方，改动二者距离时务必同步避免遮挡快捷栏。
-- `InfoBar`：游戏内左上角 4 行 —— 坐标 / 生物群系 / 时间 / **准星目标**（`targetLine`）。`update(player, generator, sky, crosshairInfo)` 第 4 个参数是 `{type:'block'|'mob', displayName, name}` 或 null。`crosshairInfo` 由 `Game.updateRaycast()` 每帧算好并存到 `this.crosshairInfo`：方块 hit + mob hit 取较近者。Mob 命中靠 `MobManager.findMobByRay(origin, dir, maxDist)`（不伤害的纯查询版，球体射线检测半径 = `mob.height/2`，与 `attackMob` 同口径）。ator.getBiome()` 更新。
+- `InfoBar`：游戏内左上角 4+1 行 —— 坐标 / 生物群系 / 时间 / **准星目标**（`targetLine`）/ **网络 RTT**（联机时显示「网络: Xms」，`rttLine`）。`update(player, generator, sky, crosshairInfo, rttMs = null)` 第 4 个参数是 `{type:'block'|'mob', displayName, name}` 或 null，第 5 个参数为联机平滑 RTT（毫秒，null=单机隐藏该行）。`crosshairInfo` 由 `Game.updateRaycast()` 每帧算好并存到 `this.crosshairInfo`：方块 hit + mob hit 取较近者。Mob 命中靠 `MobManager.findMobByRay(origin, dir, maxDist)`（不伤害的纯查询版，球体射线检测半径 = `mob.height/2`，与 `attackMob` 同口径）。ator.getBiome()` 更新。
 - `InventoryScreen`：每个 slot 通过 `_bindHover()` 挂载 mouseenter/mouseleave 悬浮 tooltip（显示 `displayName`）。`returnCursorItem()` / `hide()` 必须同时隐藏 tooltip。
 - **创造栏去重陷阱**：`renderCreative()` 用 `[...BlockRegistry.all(), ...ItemRegistry.all()]` 合并展示列表。部分方块名在两边都注册——`lever` / `stone_button` 既在 `BlockDefs.js` 作方块又在 `ItemDefs.js` 作物品注册——不去重会出现两个相同物品槽。修复：方块优先，同名物品在合并时跳过。新加"既是方块也是物品"的项目时务必检查是否双注册。
 - `PauseMenu` / `DeathScreen`：禁用 `controls.enabled` + `exitPointerLock`，hide 时恢复。`PauseMenu` 不要再自带 ESC 监听器（会与 Game 的 ESC 切换同一事件内既打开又关闭）。`Game._setupPauseOnUnlock()` 监听 `pointerlockchange` 在指针锁意外丢失时自动弹暂停菜单。
@@ -193,7 +193,7 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - 路径含空格的可执行文件用 call 操作符 `& "..."`。
 - `Read` 工具对长文件有重复返回前几行的 bug，长文件请改 `Get-Content ... | Select-Object -Skip N -First M` 或 `Select-String`。
 
-## 局域网联机（LAN 多人，阶段 0-8 已完成）
+## 局域网联机（LAN 多人，阶段 0-10 已完成）
 
 - **架构 thin-host（方案C）**：Node 服务器 = 房间管理 + 方块/掉落物账本 + 消息中继 + 时间权威；每个客户端本地自模拟世界（确定性生成 `TerrainGenerator(seed)`，不用 Math.random），只同步增量。消息键 `t`（type），`server/protocol.js` 集中定义；S2C 表见 `docs/lan-multiplayer-design.md` §7。
 - **端口**：服务器 TCP **3001**（`.\start.cmd server`），前端 5173（`.\start.cmd start`），管理面板 `http://127.0.0.1:3001/`。
@@ -201,19 +201,26 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **怪物/红石（阶段2）**：方案①事件同步——host 权威生成 + 攻击位置纠正，掉落只由击杀侧发；红石方块状态同步 + 周期性状态缓解。
 - **玩家名着色**：`src/net/playerColor.js`（HUES 调色板）。
 - **断线重连（阶段1）**：心跳 pong、断线自动重连（保位置/物品）；被踢 `kicked` → `_explicitClose` 停止自动重连。
-- **远端插值（阶段4-①+5+6）**：`src/entity/RemotePlayer.js` 关节模型（head/armL/armR/legL/legR pivot 组），**阶段5 时间戳对齐插值**（样本缓冲 + 时钟偏移 + 延迟线性插值，见下方备忘），**阶段6 自适应延迟**（按缓冲"头余量"动态调 0.05~0.4s），距离>4 快照，行走摆臂 + 头部俯仰 + **右手手持物 sprite**（`held` 同步 + SVG sprite）。
+- **远端插值（阶段4-①+5+6）**：`src/entity/RemotePlayer.js` 关节模型（head/armL/armR/legL/legR pivot 组），**阶段5 时间戳对齐插值**（样本缓冲 + 时钟偏移 + 延迟线性插值，见下方备忘），**阶段6 自适应延迟**（按缓冲"头余量"动态调 0.05~0.4s），距离>4 快照，行走摆臂 + 头部俯仰 + **右手手持物 3D 模型**（`held` 同步 + `HeldItemMesh` 共享缓存构建，阶段10 由 sprite 升级）。
 - **死亡观战（阶段4-②+6）**：`Game.spectating/spectateTargetId`，死亡界面 `hideForSpectate()`（勿用 `hide()`，会重生），F5 切目标、R 重生，观战不广播位置（`NetworkManager.update` 早退）；**阶段6 相机平滑**（`_specSmoothed/_specSmoothYaw/Pitch` 指数平滑跟随，切换目标/瞬移不跳变）。
-- **管理面板（阶段4-③+5+6）**：`server/admin.html` 自包含页 3s 轮询；`/api/status|config|broadcast|kick|logs|room/<name>/clear-drops|delete`；配置持久化 `server/config.json` 热生效（dropTtlMs/heartbeatMs/maxPlayersPerRoom/adminToken/adminTokenExpires，范围校验非法值忽略）；adminToken 非空时 API 需 `Authorization: Bearer`；**阶段6** `adminTokenExpires` 过期后除 `POST /api/config` 续期外全 401 + 内存操作日志 200 条 `/api/logs` + 登录会话 TTL。
-- **死亡掉落物（阶段6）**：客户端死亡 `player_died` 上报背包 → 服务器 `Room.onPlayerDied` 广播死亡 + 逐项 `drop_spawn`（进账本持久化）；同一次死亡 `_diedDrops` 去重（`onRespawn` 复位）；死亡端清空背包、重生重发生存初始物品（`Game.respawn` 联机分支）。
-- **联机测试**：起真实 server 后跑 `node server/test-mp.mjs`（34/34）、`server/test-store.mjs`（15/15）、`server/test-admin.mjs`（26/26）、`server/test-stage5.mjs`（16/16）、`server/test-stage6.mjs`（20/20），须保持全绿。**注意非幂等**：重复跑批前清空 `server/world/` 与 `server/config.json`（或重启服务器），否则遗留世界存档/管理口令会污染断言。浏览器冒烟用 playwright-cli 三会话 `-s=host/-s=join/-s=three`。
+- **管理面板（阶段4-③+5+6+10）**：`server/admin.html` 自包含页 3s 轮询；`/api/status|config|broadcast|kick|logs|tokens|tokens/rotate|tokens/revoke|room/<name>/clear-drops|delete`；配置持久化 `server/config.json` 热生效（dropTtlMs/heartbeatMs/maxPlayersPerRoom/adminToken/adminTokenExpires/adminAccounts，范围校验非法值忽略）；**阶段10 多账号** `adminAccounts=[{token,label,expires}]` 任一未过期账号可通过鉴权，全部撤销=鉴权自动关闭；**阶段6** 过期后除 `POST /api/config` 续期外全 401 + 内存操作日志 200 条 `/api/logs` + 登录会话 TTL；**阶段10** 踢出 API 带可填写原因（透传 `kicked.reason`）。
+- **死亡掉落物（阶段6+10）**：客户端死亡 `player_died` 上报背包 → 服务器 `Room.onPlayerDied` 广播死亡 + 逐项 `drop_spawn`（进账本持久化）；同一次死亡 `_diedDrops` 去重（`onRespawn` 复位）；死亡端清空背包、重生重发生存初始物品（`Game.respawn` 联机分支）；**阶段10 归属锁**：死亡掉落带 `owner`/`ownerUntil`（3 秒），锁内非 owner 拾取被服务器拒（`drop_deny` + 补发 `drop_spawn` 重建实体），客户端预判拦截 + deny 回滚背包（`Inventory.removeItems` + `takePendingPickup`）。
+- **联机测试**：起真实 server 后跑 `node server/test-mp.mjs`（34/34）、`server/test-store.mjs`（15/15）、`server/test-admin.mjs`（26/26）、`server/test-stage5.mjs`（16/16）、`server/test-stage6.mjs`（20/20）、`server/test-stage10.mjs`（41/41），须保持全绿。**注意非幂等**：重复跑批前清空 `server/world/` 与 `server/config.json`（或重启服务器），否则遗留世界存档/管理口令会污染断言。浏览器冒烟用 playwright-cli 三会话 `-s=host/-s=join/-s=three`。
 
 ## 任务进度（Roadmap）
 
-已完成并推送 master（`https://github.com/illagerCPR/Web-MC.git`）：阶段 0 房间服务器+网络层+方块/玩家/聊天同步（`893fb49`）→ 阶段 1 掉落物/拾取同步+断线重连（`4d9a2ea`）→ 阶段 2 怪物事件同步+红石缓解（`7048df0`）→ 阶段 3 多房间+世界落盘+换房/新建+玩家名颜色（`ce98e23`）→ 阶段 4 插值优化+死亡观战+配置面板（`74418d1`）→ 阶段 5 世界内换房/重建+时间戳对齐插值+管理面板鉴权（`d57403a`）→ 阶段 6 手持物品外观同步+死亡掉落物+观战平滑+鉴权增强+自适应插值延迟（`fab3b7f`）→ 阶段 7 4 种怪物建模优化（法线光照 + 方形皮肤 + 细节纹理 + 模型细化）（`a5fcbee`）→ 阶段 8 怪物朝向修复+原版化贴图+天空盒跟随（`0af6184`）→ 阶段 9 方块材质重绘+发光区块重建崩溃修复（见下方备忘）。设计文档 v1.0、README 已同步。
+已完成并推送 master（`https://github.com/illagerCPR/Web-MC.git`）：阶段 0 房间服务器+网络层+方块/玩家/聊天同步（`893fb49`）→ 阶段 1 掉落物/拾取同步+断线重连（`4d9a2ea`）→ 阶段 2 怪物事件同步+红石缓解（`7048df0`）→ 阶段 3 多房间+世界落盘+换房/新建+玩家名颜色（`ce98e23`）→ 阶段 4 插值优化+死亡观战+配置面板（`74418d1`）→ 阶段 5 世界内换房/重建+时间戳对齐插值+管理面板鉴权（`d57403a`）→ 阶段 6 手持物品外观同步+死亡掉落物+观战平滑+鉴权增强+自适应插值延迟（`fab3b7f`）→ 阶段 7 4 种怪物建模优化（法线光照 + 方形皮肤 + 细节纹理 + 模型细化）（`a5fcbee`）→ 阶段 8 怪物朝向修复+原版化贴图+天空盒跟随（`0af6184`）→ 阶段 9 方块材质重绘+发光区块重建崩溃修复（`4f1e60f`）→ 阶段 10 手持物品 3D 化+整条快捷栏同步+死亡掉落归属锁+管理多账号/token 轮换+RTT 直测（见下方备忘）。设计文档 v1.1、README 已同步。
 
-剩余规划（见 `docs/lan-multiplayer-design.md` §11）：
+后续候选（见 `docs/lan-multiplayer-design.md` §11 阶段 11）：手持物挥动联动挖掘进度、远端玩家头顶快捷栏可视化（hotbar 数据已同步）、房间白名单/账号权限分级、插值延迟结合抖动方差。
 
-- **阶段 10（规划，原阶段 8 清单）**：手持物品 3D 化渲染；快捷栏槽位完整可见；死亡掉落拾取归属细同步；管理面板多账号/token 轮换；插值延迟加入 RTT 直测辅助。
+### 阶段 10 关键实现备忘（防回退）—— 手持物 3D 化 + 快捷栏同步 + 掉落归属锁 + 多账号 + RTT
+
+- **手持物 3D 化**：`src/render/HeldItemMesh.js`（模板缓存进程级，clone 复用；方块=六面贴图立方体、`renderType==='cross'` 方块=交叉双面薄片、物品=双面薄片；材质 `MeshLambertMaterial` + `emissiveMap` 同贴图 0.35 自发光，夜晚可见；**勿改回 sprite billboard**）。`src/render/FirstPersonHand.js` 第一人称：**camera 必须加入 scene（`scene.add(camera)`）其子节点才渲染**（`Game.constructor` 一次性挂载，属共享型子系统——`start()` 里重置 `currentName=undefined` 强制重建）；按住左键自动连续挥动（0.3s 冷却），放置/食用/命中命中时 `hand.swing()`。`RemotePlayer._setHeld` 挂 `armR.pivot`（dispose 只 remove 不 dispose，几何/材质为共享缓存）。
+- **整条快捷栏同步**：`player_full` 带 `hotbar`（9 槽），`Room.sanitizeHotbar` 校验（一项非法整体丢弃、保留旧值）；`Room.joinInfo(p)` 供 joinRoom/createRoom/resetWorld 回放 `PLAYER_JOIN`（带 `selected`/`held`/`hotbar`）——**新加入者立即看到在线玩家手持物**；`RemotePlayer.applyFull` 无 held 时用 `hotbar[selected]` 推导。
+- **死亡掉落归属锁**：账本 `owner`/`ownerUntil`（3 秒）；广播 `drop_spawn` 带 `owner`/`ownerLock`（剩余毫秒）；锁内非 owner `drop_taken` → 服务器 `drop_deny` + **补发 drop_spawn**（客户端重建实体）；**账本已不存在的 drop_taken 也回 deny**（防两人同时拾取复制物品，勿删此分支）；客户端 deny 回滚 = `takePendingPickup(id)` 取拾取留档 + `Inventory.removeItems(name, count)`；本地预判拦截在 `MobManager.updateDroppedItems`（`getSelfId` 由 Game 注入，勿删）。
+- **管理多账号**：`config.adminAccounts=[{token,label,expires}]`（≤10）；旧 `adminToken`/`adminTokenExpires` 是 default 账号的兼容接口（`applyConfig` 双向同步）；`authState` 遍历账号匹配；**id = token 的 SHA-256 前 8 位**（`accountId()`），rotate/revoke 按 id 定位避免明文回传——**轮换后 id 会变**（客户端须重新拉列表）；token 生成用 `crypto.randomBytes(24).toString('base64url')`，明文仅创建/轮换响应返回一次。admin.html 生成/轮换用 `prompt` 显示新口令（agent-browser 需 `dialog accept`）。
+- **RTT 直测**：客户端每 2s 发 `ping {seq, ts: performance.now()}`，`room.handle` PING 分支**回显 `ts`**（勿删）；客户端 PONG 分支按 `ts` 算 EMA(0.8/0.2) → `NetworkManager.rttMs`；`RemotePlayer` 自适应以 RTT 为主信号（目标 = clamp(0.05 + rtt/2000, 0.05, 0.4)，每秒 40% 平滑靠拢），头余量仅保留欠载保护（>0.22 降延迟仅限无 RTT 数据时）；InfoBar 联机显示「网络: Xms」（第 5 参数 `rttMs=null` 隐藏）。
+- **验证**：`node --check` + `npm run build`（47 模块，655 kB）+ `test-stage10.mjs` 41/41 + 全基线绿 + agent-browser 冒烟（第一人称手持方块/火把/物品截图、远端手持模型、joinInfo 回放断言、InfoBar RTT 行、掉落锁确定性断言：**注入 fake drop（owner≠self, lockedUntil>now）手动驱动 updateDroppedItems → 拦截；置 lockedUntil=0 → 拾取**——浏览器实时 3 秒锁内断言受命令间隔/pickupDelay 干扰不可靠，用此注入法）。
 
 ### 阶段 5 关键实现备忘（防回退）
 
@@ -224,7 +231,7 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 
 ### 阶段 6 关键实现备忘（防回退）
 
-- **手持物品同步**：`player_state`/`player_full` 广播 `selected`（槽位）+ `held`（物品名），`Room.onPlayerState/onPlayerFull` 透传记录；`RemotePlayer._setHeld(name)` 异步重建右臂 sprite（`SVGTextures.svgToImage` + `CanvasTexture`，`_heldSeq` 序号防竞态），`dispose()` 必须释放 heldSprite。
+- **手持物品同步**：`player_state`/`player_full` 广播 `selected`（槽位）+ `held`（物品名），`Room.onPlayerState/onPlayerFull` 透传记录；`RemotePlayer._setHeld(name)` 异步重建右臂挂载物（**阶段10 已升级为 3D 模型**，见阶段 10 备忘），`_heldSeq` 序号防竞态，`dispose()` 必须释放挂载物。
 - **PARTS 关节 role 必须唯一**：左右臂/腿用 `armL/armR/legL/legR`（**勿回退为重复 `'arm'`/`'leg'`**——后者覆盖前者导致 `joints.armL/armR/legL/legR` 全部不存在，行走摆臂失效、手持 sprite 挂不上右臂，曾真出过）。手持 sprite 挂在 `joints.armR.pivot` 末端。
 - **死亡掉落物**：`player_died` 携带死亡位置 + 背包列表（客户端 `sendPlayerDied()` 先读背包再清空）；`Room.onPlayerDied` 广播死亡 + 逐项 `drop_spawn`（确定性偏移防重叠，进账本）；同一次死亡 `_diedDrops` 去重（`addPlayer`/`onRespawn` 复位，防重复上报刷掉落）；`Game.respawn` 联机分支重发生存初始物品。
 - **鉴权过期**：`adminTokenExpires` 到期后 `authState` 返回 `'expired'`——**仅放行 `POST /api/config` 供续期/关闭**（避免永久锁死），其余 401（错误含"过期"，admin.html 据此显示续期横幅而非登录弹层）；`/api/logs` 内存环形缓冲 200 条记录 config/broadcast/kick/clear-drops/delete-room/auth-fail。**注意：PowerShell `Get-Date -UFormat %s` 的 epoch 会偏 ~8 小时（时区 bug），设过期时间要用 `[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()`**。

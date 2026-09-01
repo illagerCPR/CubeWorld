@@ -22,7 +22,7 @@ export class Room {
     this.config = config;
     this.players = new Map();   // id -> player
     this.blocks = new Map();    // "x,y,z" -> id  (方块账本主副本)
-    this.drops = new Map();     // dropId -> {x,y,z,name,count,spawnedAt}  (掉落物账本主副本)
+    this.drops = new Map();     // dropId -> {x,y,z,name,count,spawnedAt,owner?,ownerUntil?}  (掉落物账本主副本；owner/ownerUntil=阶段10 死亡掉落归属锁)
     this.nextDropId = 1;
     this.nextMobId = 1;         // 怪物 id 分配（事件同步，服务器仅分配/中继不跑 AI）
     this.seed = null;
@@ -55,6 +55,9 @@ export class Room {
         name: String(d.name).slice(0, 32),
         count: Math.min(64, Math.max(1, safeInt(d.count, 1))),
         spawnedAt: safeNum(d.spawnedAt, now),
+        // 阶段10：归属锁恢复（ownerId 需为正整数；过期锁自动失效）
+        owner: Number.isInteger(d.owner) && d.owner > 0 ? d.owner : null,
+        ownerUntil: safeNum(d.ownerUntil, 0),
       });
     }
     this.hostId = null;
@@ -82,6 +85,7 @@ export class Room {
     p.pos = { x: 0.5, y: 66, z: 0.5, yaw: 0, pitch: 0 };
     p.onGround = false; p.flying = false; p.inWater = false;
     p.selected = 0; p.heldItem = null; p.alive = true;
+    p.hotbar = null; // 阶段10：完整快捷栏快照（player_full 上报；joinRoom 回放给新加入者）
     p._diedDrops = false; // 阶段6：本次死亡周期的掉落是否已产出（防重复上报刷掉落）
     this.players.set(p.id, p);
     return true;
@@ -92,6 +96,13 @@ export class Room {
       id: p.id, name: p.name, mode: p.mode, pos: p.pos,
       health: p.health, food: p.food, selected: p.selected,
     }));
+  }
+
+  // 阶段10：玩家加入回放信息（含选中槽位/手持物/完整快捷栏，让新加入者立即看到在线玩家手持物）
+  joinInfo(p) {
+    const info = { id: p.id, name: p.name, mode: p.mode, pos: p.pos, selected: p.selected, held: p.heldItem };
+    if (Array.isArray(p.hotbar)) info.hotbar = p.hotbar;
+    return info;
   }
 
   sendTo(p, type, data) {
@@ -164,7 +175,7 @@ export class Room {
     this.sendTo(player, MSG.ROOM_CREATED, { roomId: this.name });
     // restart=true 表示世界内换房到新房间：客户端需重启本地世界（新 seed）
     this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: player.mode, time: this.time, hostId: this.hostId, room: this.name, restart: !!msg.restart });
-    this.broadcast(MSG.PLAYER_JOIN, { id: player.id, name: player.name, mode: player.mode, pos: player.pos }, player.id);
+    this.broadcast(MSG.PLAYER_JOIN, this.joinInfo(player), player.id);
     this.save();
     console.log(`[+] ${player.name} 创建房间「${this.name}」seed=${this.seed} (host)`);
   }
@@ -179,19 +190,22 @@ export class Room {
     // 无 host 时（如房间从磁盘恢复且暂无玩家在线）首个加入者接管 host
     if (this.hostId === null || !this.players.has(this.hostId)) this.hostId = player.id;
     this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId, room: this.name, restart: !!opts.restart });
-    // 回放现存玩家：加入者立即可见房间内已有玩家
+    // 回放现存玩家：加入者立即可见房间内已有玩家（阶段10：附带选中槽位/手持物/完整快捷栏）
     for (const p of this.players.values()) {
       if (p.id === player.id) continue;
-      this.sendTo(player, MSG.PLAYER_JOIN, { id: p.id, name: p.name, mode: p.mode, pos: p.pos });
+      this.sendTo(player, MSG.PLAYER_JOIN, this.joinInfo(p));
     }
     // 回放方块账本：新玩家加入即见世界现状
     for (const [key, id] of this.blocks) {
       const [x, y, z] = key.split(',').map(Number);
       this.sendTo(player, MSG.BLOCK_CHANGE, { x, y, z, id, by: 0 });
     }
-    // 回放当前掉落物：新玩家加入即见现存掉落物
+    // 回放当前掉落物：新玩家加入即见现存掉落物（阶段10：携带归属锁剩余毫秒，非 owner 在锁定期内同样不可拾取）
     for (const [id, d] of this.drops) {
-      this.sendTo(player, MSG.DROP_SPAWN, { id, x: d.x, y: d.y, z: d.z, name: d.name, count: d.count });
+      const remainLock = d.ownerUntil > Date.now() && d.owner ? Math.ceil(d.ownerUntil - Date.now()) : 0;
+      const back = { id, x: d.x, y: d.y, z: d.z, name: d.name, count: d.count };
+      if (d.owner && remainLock > 0) { back.owner = d.owner; back.ownerLock = remainLock; }
+      this.sendTo(player, MSG.DROP_SPAWN, back);
     }
     this.broadcast(MSG.PLAYER_JOIN, { id: player.id, name: player.name, mode: player.mode, pos: player.pos }, player.id);
     console.log(`[+] ${player.name} 加入房间「${this.name}」seed=${this.seed} (${this.players.size}人)`);
@@ -213,7 +227,7 @@ export class Room {
     this.nextDropId = 1;
     this.broadcast(MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId, room: this.name, restart: true });
     for (const p of this.players.values()) {
-      this.broadcast(MSG.PLAYER_JOIN, { id: p.id, name: p.name, mode: p.mode, pos: p.pos }, p.id);
+      this.broadcast(MSG.PLAYER_JOIN, this.joinInfo(p), p.id);
     }
     this.save();
     console.log(`[世界] 房间「${this.name}」已重建 seed=${this.seed} (${this.players.size}人)`);
@@ -237,7 +251,10 @@ export class Room {
       case MSG.GAMEMODE: this.onGamemode(player, msg); break;
       case MSG.SET_TIME: this.onSetTime(player, msg); break;
       case MSG.CHAT: this.onChat(player, msg); break;
-      case MSG.PING: this.sendTo(player, MSG.PONG, { seq: msg.seq }); break;
+      case MSG.PING:
+        // 阶段10：回显 seq + 客户端时间戳 ts，供客户端直测网络 RTT
+        this.sendTo(player, MSG.PONG, { seq: safeInt(msg.seq), ts: safeNum(msg.ts, 0) });
+        break;
       default: break;
     }
   }
@@ -264,10 +281,25 @@ export class Room {
     console.log(`[掉落] ${player.name} 生成 ${name}x${count} @(${x},${y},${z}) id=${id}`);
   }
 
-  // 掉落物拾取：从账本删除并广播（重复/无效 id 直接忽略）
+  // 掉落物拾取：从账本删除并广播
+  // 阶段10：死亡掉落物有归属锁——锁定期内只有 owner 本人可拾取，他人拾取被拒（回 drop_deny，账本保留）
   onDropTaken(player, msg) {
     const id = safeInt(msg.id);
-    if (!this.drops.has(id)) return;
+    const d = this.drops.get(id);
+    if (!d) {
+      // 账本中已不存在（他人抢先拾取/过期移除/管理清空）→ 通知请求者回滚本地拾取，防物品复制
+      this.sendTo(player, MSG.DROP_DENY, { id, owner: 0 });
+      return;
+    }
+    if (d.owner && d.ownerUntil > Date.now() && player.id !== d.owner) {
+      this.sendTo(player, MSG.DROP_DENY, { id, owner: d.owner });
+      // 补发实体数据（客户端若已抢先本地拾取移除，凭此重建；数据以服务器账本为准）
+      this.sendTo(player, MSG.DROP_SPAWN, {
+        id, x: d.x, y: d.y, z: d.z, name: d.name, count: d.count,
+        owner: d.owner, ownerLock: Math.ceil(d.ownerUntil - Date.now()),
+      });
+      return;
+    }
     this.drops.delete(id);
     this.broadcast(MSG.DROP_TAKEN, { id, by: player.id });
     this.save();
@@ -335,6 +367,19 @@ export class Room {
     }, player.id);
   }
 
+  // 阶段10：校验客户端上报的完整快捷栏（≤9 槽，每项 null 或 {name,count}），非法整体丢弃
+  sanitizeHotbar(raw) {
+    if (!Array.isArray(raw) || raw.length === 0 || raw.length > 9) return null;
+    const out = [];
+    for (const s of raw) {
+      if (!s) { out.push(null); continue; }
+      const name = typeof s.name === 'string' ? s.name.slice(0, 32) : '';
+      if (!name) return null; // 脏包：一项非法则整条丢弃
+      out.push({ name, count: Math.min(64, Math.max(1, safeInt(s.count, 1))) });
+    }
+    return out;
+  }
+
   onPlayerFull(player, msg) {
     player.health = safeNum(msg.health, player.health);
     player.food = safeNum(msg.food, player.food);
@@ -342,10 +387,14 @@ export class Room {
     if (msg.mode) player.mode = msg.mode === 'creative' ? 'creative' : (msg.mode === 'spectator' ? 'spectator' : 'survival');
     if (msg.selected !== undefined) player.selected = safeInt(msg.selected, player.selected);
     if (typeof msg.held === 'string') player.heldItem = msg.held.slice(0, 32);
-    this.broadcast(MSG.PLAYER_FULL, {
+    const hotbar = this.sanitizeHotbar(msg.hotbar);
+    if (hotbar) player.hotbar = hotbar; // 阶段10：记录完整快捷栏（joinRoom 回放给新加入者）
+    const back = {
       id: player.id, health: player.health, food: player.food,
       saturation: player.saturation, mode: player.mode, selected: player.selected, held: player.heldItem,
-    }, player.id);
+    };
+    if (player.hotbar) back.hotbar = player.hotbar;
+    this.broadcast(MSG.PLAYER_FULL, back, player.id);
   }
 
   onAttack(player, msg) {
@@ -385,8 +434,11 @@ export class Room {
       const ox = ((i % 5) - 2) * 0.3;
       const oz = ((Math.floor(i / 5) % 5) - 2) * 0.3;
       const id = this.nextDropId++;
-      this.drops.set(id, { x: x + ox, y, z: z + oz, name, count, spawnedAt: Date.now() });
-      this.broadcast(MSG.DROP_SPAWN, { id, x: x + ox, y, z: z + oz, name, count });
+      // 阶段10：死亡掉落归属锁——3 秒内只有死者本人可拾取（防止别人的死亡掉落被路过玩家瞬间抢走）
+      const ownerLockMs = 3000;
+      const ownerUntil = Date.now() + ownerLockMs;
+      this.drops.set(id, { x: x + ox, y, z: z + oz, name, count, spawnedAt: Date.now(), owner: player.id, ownerUntil });
+      this.broadcast(MSG.DROP_SPAWN, { id, x: x + ox, y, z: z + oz, name, count, owner: player.id, ownerLock: ownerLockMs });
       n++;
     }
     if (n) this.save();

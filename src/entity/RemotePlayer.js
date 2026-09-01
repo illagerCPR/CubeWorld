@@ -4,9 +4,8 @@
 // 阶段 6：手持物品外观同步（右臂挂 sprite 渲染当前手持物）+ 插值延迟自适应（按缓冲头余量动态调延迟）
 import * as THREE from 'three';
 import { playerColorHue, playerColorCss } from '../net/playerColor.js';
-import { ItemRegistry } from '../core/ItemRegistry.js';
-import { BlockRegistry } from '../core/BlockRegistry.js';
 import { SVGTextures } from '../render/SVGTextures.js';
+import { buildHeldItemTemplate } from '../render/HeldItemMesh.js';
 
 // 简化方块人部件（局部坐标原点在脚 y=0，单位：格）
 // 关节部件（head/arm/leg）用 pivot 支撑：mesh 挂在 pivot 下，旋转 pivot 即旋转肢体
@@ -83,10 +82,12 @@ export class RemotePlayer {
     this._buffer = [];        // {ts, x,y,z,yaw,pitch,flying,inWater,onGround}，按 ts 升序
     this._clockOffset = 0;    // 服务器时钟 - 本地时钟（平滑估计，秒）
     this._interpDelay = 0.12; // 插值延迟（秒）：回放"延迟秒前"的状态，平滑网络抖动；阶段6 按缓冲头余量自适应
-    // 阶段6 手持物品：右臂挂 sprite 显示当前手持物
+    // 阶段6/10 手持物品：右臂挂 3D 模型显示当前手持物 + 完整快捷栏快照
     this.heldItem = null;     // 当前手持物品名（null=空手）
-    this.heldSprite = null;   // 手持物 sprite（挂在 armR pivot 下）
-    this._heldSeq = 0;        // 异步重建手持 sprite 的序号（防旧结果覆盖新）
+    this.heldGroup = null;    // 手持物 3D 模型（挂在 armR pivot 下）
+    this._heldSeq = 0;        // 异步重建手持模型的序号（防旧结果覆盖新）
+    this.selectedSlot = 0;    // 阶段10：远端玩家当前选中的快捷栏槽位
+    this.hotbar = null;       // 阶段10：远端玩家完整快捷栏快照（[{name,count}|null ×9] 或 null）
     // 行走动画状态：摆动相位 + 估算水平速度（由缓冲段位移算出）
     this._walkPhase = 0;
     this._speed = 0;
@@ -129,56 +130,44 @@ export class RemotePlayer {
       flying: !!s.flying, inWater: !!s.inWater, onGround: !!s.onGround,
     });
     if (this._buffer.length > 40) this._buffer.shift();
-    // 阶段6：手持物品变化时更新右臂挂载的 sprite
+    // 阶段6/10：手持物品变化时更新右臂挂载的 3D 模型；selected 槽位随状态更新
+    if (typeof s.selected === 'number') this.selectedSlot = s.selected;
     if (typeof s.held === 'string' && s.held !== this.heldItem) this._setHeld(s.held);
   }
 
   applyFull(s) {
     if (s.mode) this.setMode(s.mode);
-    if (typeof s.held === 'string' && s.held !== this.heldItem) this._setHeld(s.held);
+    // 阶段10：完整快捷栏 + 选中槽位（joinRoom 回放 / player_full 广播）
+    if (typeof s.selected === 'number') this.selectedSlot = s.selected;
+    if (Array.isArray(s.hotbar)) this.hotbar = s.hotbar;
+    if (typeof s.held === 'string') {
+      if (s.held !== this.heldItem) this._setHeld(s.held);
+    } else if (this.hotbar && this.hotbar[this.selectedSlot] && this.hotbar[this.selectedSlot].name) {
+      // 消息未带 held 时用 快捷栏[选中槽位] 推导（joinRoom 回放兼容）
+      const name = this.hotbar[this.selectedSlot].name;
+      if (name !== this.heldItem) this._setHeld(name);
+    }
   }
 
-  // 阶段6：更新手持物品并异步重建右臂 sprite（带序号防竞态）
-  _setHeld(name) {
+  // 阶段6→10：更新手持物品并异步重建右臂挂载的 3D 模型（带序号防竞态）
+  // 模型由 HeldItemMesh 共享缓存构建（方块=六面贴图立方体 / 物品=双面薄片），随摆臂关节运动
+  async _setHeld(name) {
     this.heldItem = name || null;
     const seq = ++this._heldSeq;
-    if (this.heldSprite) {
-      if (this.heldSprite.parent) this.heldSprite.parent.remove(this.heldSprite);
-      if (this.heldSprite.material.map) this.heldSprite.material.map.dispose();
-      this.heldSprite.material.dispose();
-      this.heldSprite = null;
+    if (this.heldGroup) {
+      if (this.heldGroup.parent) this.heldGroup.parent.remove(this.heldGroup);
+      this.heldGroup = null;
     }
     if (!this.heldItem) return;
-    // 优先物品 SVG，其次方块 SVG（与快捷栏图标同源）
-    let svg = null;
-    if (this.game) {
-      const item = ItemRegistry.getByName(this.heldItem);
-      if (item && this.game.itemSvgMap && this.game.itemSvgMap[this.heldItem]) svg = this.game.itemSvgMap[this.heldItem];
-      else {
-        const block = BlockRegistry.getByName(this.heldItem);
-        if (block && this.game.blockSvgMap) {
-          const texName = block.side || block.top;
-          svg = this.game.blockSvgMap[texName] || this.game.blockSvgMap[this.heldItem];
-        }
-      }
-    }
-    if (!svg) return;
-    SVGTextures.svgToImage(svg).then((img) => {
-      if (seq !== this._heldSeq) return; // 期间已换成别的物品，丢弃旧结果
-      const cv = document.createElement('canvas');
-      cv.width = 32; cv.height = 32;
-      const ctx = cv.getContext('2d');
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(img, 0, 0, 32, 32);
-      const tex = new THREE.CanvasTexture(cv);
-      tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
-      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
-      const sp = new THREE.Sprite(mat);
-      sp.scale.set(0.22, 0.22, 1);
-      sp.position.set(0.08, -0.92, 0.06); // 右手末端（armR pivot 局部坐标）
-      const arm = this.joints.armR;
-      if (arm) { arm.pivot.add(sp); this.heldSprite = sp; }
-    }).catch(() => {});
+    const tpl = await buildHeldItemTemplate(this.heldItem);
+    if (seq !== this._heldSeq) return; // 期间已换成别的物品，丢弃旧结果
+    if (!tpl) return;
+    const g = tpl.clone();
+    g.scale.set(0.26, 0.26, 0.26);
+    g.position.set(0.10, -0.88, 0.22); // 右手末端（armR pivot 局部坐标）
+    g.rotation.set(-0.5, 0.35, 0.15);  // 斜握姿态
+    const arm = this.joints.armR;
+    if (arm) { arm.pivot.add(g); this.heldGroup = g; }
   }
 
   setMode(mode) { this.flying = mode === 'spectator'; }
@@ -246,11 +235,18 @@ export class RemotePlayer {
       this._speed = span > 0.001 ? Math.hypot(b.x - a.x, b.z - a.z) / span : 0;
       this.flying = b.flying; this.inWater = b.inWater; this.onGround = b.onGround;
 
-      // 阶段6 自适应插值延迟：按"头余量 = 最新样本 - 渲染时刻"动态调延迟
-      // 头余量过小（临近欠载、渲染时刻被钳到最新样本）→ 加大延迟吸收抖动；过大 → 缓慢降低延迟减少滞后
+      // 阶段6/10 自适应插值延迟：
+      // ① RTT 直测可用（应用层 ping/pong 平滑值）→ 以 RTT 为主信号：目标延迟 ≈ 单向延迟(RTT/2) + 状态包缓冲
+      // ② 头余量仅作欠载保护（渲染时刻逼近最新样本时加大延迟吸收抖动）
+      const net = this.game && this.game.net ? this.game.net : null;
+      const rttS = net && typeof net.rttMs === 'number' ? net.rttMs : null;
+      if (rttS != null) {
+        const target = Math.min(0.4, Math.max(0.05, 0.05 + rttS / 2000)); // rttMs/1000*0.5 + 0.05 基底
+        this._interpDelay += (target - this._interpDelay) * Math.min(1, dt * 0.5); // 平滑靠拢，RTT 突变不猛拉
+      }
       const headroom = buf[buf.length - 1].ts - renderTime;
       if (headroom < 0.03) this._interpDelay = Math.min(0.4, this._interpDelay + 0.004);
-      else if (headroom > 0.22) this._interpDelay = Math.max(0.05, this._interpDelay - 0.002);
+      else if (headroom > 0.22 && rttS == null) this._interpDelay = Math.max(0.05, this._interpDelay - 0.002);
     }
 
     // 落位：传送（respawn/远距移动）直接快照并丢弃旧样本，否则置于插值目标
@@ -293,12 +289,10 @@ export class RemotePlayer {
     for (const m of this.parts) { m.geometry.dispose(); m.material.dispose(); }
     this.parts = [];
     this.joints = {};
-    // 阶段6：释放手持物品 sprite 资源
-    if (this.heldSprite) {
-      if (this.heldSprite.parent) this.heldSprite.parent.remove(this.heldSprite);
-      if (this.heldSprite.material.map) this.heldSprite.material.map.dispose();
-      this.heldSprite.material.dispose();
-      this.heldSprite = null;
+    // 阶段10：释放手持物 3D 模型（几何/材质来自共享缓存，无需 dispose）
+    if (this.heldGroup) {
+      if (this.heldGroup.parent) this.heldGroup.parent.remove(this.heldGroup);
+      this.heldGroup = null;
     }
     if (this.nameSprite) {
       if (this.nameSprite.parent) this.nameSprite.parent.remove(this.nameSprite);

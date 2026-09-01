@@ -19,9 +19,10 @@ export const MSG = {
   BLOCK_SET: 'block_set',
   BLOCK_CHANGE: 'block_change',
 
-  // 掉落物（阶段 1）
+  // 掉落物（阶段 1）；阶段 10：DROP_DENY = 拾取被归属锁拒绝（死亡掉落物归属期内他人拾取）
   DROP_SPAWN: 'drop_spawn',
   DROP_TAKEN: 'drop_taken',
+  DROP_DENY: 'drop_deny',
 
   // 怪物（阶段 2，事件同步：生成/受击/死亡广播）
   MOB_SPAWN: 'mob_spawn',

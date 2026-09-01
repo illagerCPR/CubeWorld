@@ -56,6 +56,21 @@ export class Inventory {
     return removed;
   }
 
+  // 阶段10：按名称从背包扣除（deny 回滚用），从末尾槽向前扣；返回实际扣除数量
+  removeItems(name, count = 1) {
+    let left = count;
+    for (let i = this.size - 1; i >= 0 && left > 0; i--) {
+      const s = this.slots[i];
+      if (s && s.name === name) {
+        const take = Math.min(s.count, left);
+        s.count -= take;
+        left -= take;
+        if (s.count <= 0) this.slots[i] = null;
+      }
+    }
+    return count - left;
+  }
+
   swap(i, j) {
     const t = this.slots[i];
     this.slots[i] = this.slots[j];

@@ -56,6 +56,7 @@ export class MobManager {
     this.frame = 0;
     this.spawnEnabled = true; // 联机阶段 0 关闭本地怪物生成
     this.onDropTaken = null;  // 联机拾取回调 (dropId) => void，由 Game 注入（通知服务器移除）
+    this.getSelfId = null;    // 阶段10：返回本地玩家联机 id（归属锁判定），由 Game 注入；null=单机
     this.mobNet = null;       // 联机怪物事件接口（sendMobSpawn/sendMobAttack/sendMobDied），由 Game 注入
   }
 
@@ -505,7 +506,8 @@ export class MobManager {
   }
 
   // 由服务器广播 drop_spawn 创建掉落物：id 服务器唯一；速度由 id 确定性派生，各端运动一致
-  spawnRemoteDrop(id, x, y, z, name, count) {
+  // 阶段10：owner/ownerLockMs = 死亡掉落归属锁（锁定期内仅 owner 本人可拾取）
+  spawnRemoteDrop(id, x, y, z, name, count, owner = null, ownerLockMs = 0) {
     if (this.droppedItems.some(d => d.id === id)) return; // 去重（重连回放可能重复广播）
     const drop = {
       id,
@@ -520,9 +522,31 @@ export class MobManager {
       age: 0,
       pickupDelay: 1.0,
       mesh: null,
+      owner: owner || null,
+      lockedUntil: owner && ownerLockMs > 0 ? Date.now() + ownerLockMs : 0,
     };
     this._createDropMesh(drop);
     this.droppedItems.push(drop);
+  }
+
+  // 阶段10：记录本地已发起拾取的远程掉落物（全量拾取并已上报 drop_taken 的）
+  // 服务器归属锁拒绝（drop_deny）时凭此记录从背包扣回，配合补发 drop_spawn 重建实体
+  recordPendingPickup(id, name, count) {
+    if (!this._pendingPickup) this._pendingPickup = new Map();
+    this._pendingPickup.set(id, { name, count });
+    if (this._pendingPickup.size > 64) {
+      // 防御性清理：只保留最近 32 条
+      const keys = [...this._pendingPickup.keys()].slice(0, this._pendingPickup.size - 32);
+      for (const k of keys) this._pendingPickup.delete(k);
+    }
+  }
+
+  // 阶段10：取回并删除拾取记录（deny 回滚用；无记录返回 null）
+  takePendingPickup(id) {
+    if (!this._pendingPickup) return null;
+    const info = this._pendingPickup.get(id) || null;
+    this._pendingPickup.delete(id);
+    return info;
   }
 
   // 按 id 移除掉落物（drop_taken 广播落地），找不到则忽略
@@ -619,6 +643,9 @@ export class MobManager {
       // 拾取
       const dist = drop.position.distanceTo(player.position);
       if (drop.pickupDelay <= 0 && dist < 1.5) {
+        // 阶段10：死亡掉落归属锁——锁定期内仅 owner 本人可拾取（服务器侧同校验兜底）
+        const selfId = this.getSelfId ? this.getSelfId() : null;
+        if (drop.lockedUntil && Date.now() < drop.lockedUntil && drop.owner !== selfId) continue;
         if (this.onPickup) {
           // onPickup 返回未放入的剩余数量（0 = 全部拾取）
           const remaining = this.onPickup(drop.name, drop.count);
@@ -627,7 +654,10 @@ export class MobManager {
             // 全部拾取
             if (drop.mesh) this.scene.remove(drop.mesh);
             this.droppedItems.splice(i, 1);
-            if (drop.id != null && this.onDropTaken) this.onDropTaken(drop.id); // 联机：通知服务器移除
+            if (drop.id != null && this.onDropTaken) {
+              this.recordPendingPickup(drop.id, drop.name, drop.count); // 阶段10：留档供 deny 回滚
+              this.onDropTaken(drop.id); // 联机：通知服务器移除
+            }
             continue;
           }
         }
@@ -737,5 +767,6 @@ export class MobManager {
     }
     this.mobs = [];
     this.droppedItems = [];
+    this._pendingPickup = new Map(); // 阶段10：拾取留档随世界销毁一并清空
   }
 }

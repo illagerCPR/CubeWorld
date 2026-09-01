@@ -77,6 +77,27 @@
   </div>
 
   <div class="card">
+    <h2>管理账号（阶段10 多口令 / 轮换）</h2>
+    <div style="font-size:12px;color:#7a8394;margin-bottom:10px;">
+      每个账号是独立口令，任一未过期口令均可登录管理面板；「轮换」立即换发新口令并使旧口令失效；撤销全部账号后鉴权自动关闭。
+    </div>
+    <div id="accounts"><div class="empty">加载中…</div></div>
+    <div class="grid" style="margin-top:12px;align-items:flex-end;">
+      <div class="cfg-item" style="margin-bottom:0;">
+        <label>新账号备注 (label)</label>
+        <input id="acc-label" type="text" placeholder="例如：op-甲" style="width:160px;">
+      </div>
+      <div class="cfg-item" style="margin-bottom:0;">
+        <label>过期分钟（0=永不过期）</label>
+        <input id="acc-expiry" type="number" min="0" step="1" value="0" style="width:120px;">
+      </div>
+      <div class="cfg-item" style="margin-bottom:0;">
+        <button class="btn-primary" onclick="createToken()">➕ 生成新账号</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>操作日志（最近 200 条）</h2>
     <div id="logs"><div class="empty">加载中…</div></div>
   </div>
@@ -287,6 +308,7 @@
       // 接口正常 → 隐藏口令过期横幅
       document.getElementById('expired-banner').style.display = 'none';
       renderRooms();
+      renderAccounts(); // 阶段10：管理账号列表
       // 阶段6 操作日志（独立容错：日志接口异常不影响状态刷新）
       try {
         const lr = await api('/api/logs');
@@ -340,8 +362,81 @@
 
   async function kick(id) {
     if (!confirm(`确定踢出玩家 id=${id}？`)) return;
-    const r = await api('/api/kick', 'POST', { playerId: id });
+    // 阶段10：踢出原因可填写（留空用服务器默认文案）
+    const reason = prompt('踢出原因（可留空）：', '') ?? undefined;
+    const r = await api('/api/kick', 'POST', { playerId: id, reason: (reason || '').trim() });
     toast('已踢出', !!r.error);
+    refresh();
+  }
+
+  // ===== 阶段10：管理账号（多口令 / 轮换 / 撤销）=====
+
+  function fmtAccountExpiry(expires) {
+    if (!expires || expires <= 0) return '<span style="color:#7a8394;">永不过期</span>';
+    const left = expires - Date.now() / 1000;
+    if (left <= 0) return '<span style="color:#f88;">已过期</span>';
+    if (left < 3600) return `剩余 ${Math.max(1, Math.round(left / 60))} 分钟`;
+    if (left < 86400) return `剩余 ${Math.round(left / 3600)} 小时`;
+    return `剩余 ${Math.round(left / 86400)} 天`;
+  }
+
+  function renderAccounts() {
+    const el = document.getElementById('accounts');
+    const list = (status && status.config && status.config.adminAccounts) || [];
+    if (!list.length) {
+      el.innerHTML = '<div class="empty">当前无管理账号 = 鉴权关闭（局域网信任）。生成账号后即开启鉴权，所有 API 需要 Bearer 口令。</div>';
+      return;
+    }
+    el.innerHTML = `<table>
+      <tr><th>备注</th><th>口令</th><th>有效期</th><th>操作</th></tr>
+      ${list.map((a) => `
+        <tr>
+          <td>${esc(a.label || '(未命名)')}</td>
+          <td><code>${esc(a.token || '****')}</code></td>
+          <td>${fmtAccountExpiry(a.expires)}</td>
+          <td>
+            <button class="btn-warn btn-sm" onclick="rotateToken('${esc(a.id)}')">轮换</button>
+            <button class="btn-danger btn-sm" onclick="revokeToken('${esc(a.id)}')">撤销</button>
+          </td>
+        </tr>`).join('')}
+    </table>`;
+  }
+
+  // 新口令明文只显示一次：用 prompt 展示便于直接复制保存
+  function revealSecret(label, token) {
+    prompt(`【${label}】新口令（仅显示这一次，请立即复制保存）：`, token);
+  }
+
+  async function createToken() {
+    const label = document.getElementById('acc-label').value.trim();
+    const minutes = Number(document.getElementById('acc-expiry').value) || 0;
+    const r = await api('/api/tokens', 'POST', { label, expiresMinutes: minutes });
+    if (r.ok) {
+      document.getElementById('acc-label').value = '';
+      revealSecret(r.label || label, r.token);
+      toast('管理账号已生成，鉴权已开启');
+    } else toast(r.error || '生成失败', true);
+    refresh();
+  }
+
+  async function rotateToken(id) {
+    if (!confirm('确定轮换该账号口令？旧口令将立即失效。')) return;
+    const minutesRaw = prompt('新口令有效分钟数（留空保持原有效期，0=永不过期）：', '');
+    const body = { id };
+    if (minutesRaw !== null && minutesRaw.trim() !== '') body.expiresMinutes = Number(minutesRaw) || 0;
+    const r = await api('/api/tokens/rotate', 'POST', body);
+    if (r.ok) {
+      revealSecret(r.label || id, r.token);
+      toast('口令已轮换（旧口令失效）');
+    } else toast(r.error || '轮换失败', true);
+    refresh();
+  }
+
+  async function revokeToken(id) {
+    if (!confirm('确定撤销该管理账号？')) return;
+    const r = await api('/api/tokens/revoke', 'POST', { id });
+    if (r.ok) toast(`已撤销（剩余 ${r.remaining ?? 0} 个账号${!r.remaining ? '，鉴权已关闭' : ''}`);
+    else toast(r.error || '撤销失败', true);
     refresh();
   }
 
