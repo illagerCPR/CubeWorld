@@ -21,10 +21,12 @@ export class Sky {
       { t: 1.00, color: new THREE.Color(0.02, 0.03, 0.10) }   // 半夜
     ];
     
-    // 天空盒（大球）
+    // 天空盒（大球）：每帧跟随玩家位置——固定在原点时玩家走远后球面超出相机
+    // far(1000) 被裁剪，露出黑色 clear color（"远处天空纯黑"根因）
     const skyGeo = new THREE.SphereGeometry(500, 32, 16);
     const skyMat = new THREE.MeshBasicMaterial({ side: THREE.BackSide, fog: false });
     this.skyMesh = new THREE.Mesh(skyGeo, skyMat);
+    this.skyMesh.frustumCulled = false; // 包围球包住相机，视锥剔除无意义且可能误裁
     scene.add(this.skyMesh);
     
     // 太阳
@@ -51,7 +53,10 @@ export class Sky {
 
   update(dt, playerPos) {
     this.time = (this.time + dt / this.dayLength) % 1;
-    
+
+    // 天空球/太阳/月亮全部跟随玩家（天空球保持以相机为球心，任何位置都在 far 内）
+    this.skyMesh.position.set(playerPos.x, playerPos.y, playerPos.z);
+
     // 太阳角度
     const angle = this.time * Math.PI * 2 - Math.PI / 2;
     const sunX = Math.cos(angle) * 200;

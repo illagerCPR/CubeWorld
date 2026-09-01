@@ -111,7 +111,10 @@ export class Mob extends Entity {
       nz = dz / dist;
       this.velocity.x = nx * this.speed + this.knockback.x;
       this.velocity.z = nz * this.speed + this.knockback.z;
-      this.yaw = Math.atan2(-nx, -nz);
+      // mesh 局部 +Z 是脸/头朝向：rotation.y=yaw 把 +Z 旋到 (sin yaw, cos yaw)，
+      // yaw=atan2(nx,nz) 使 +Z 指向移动方向（脸朝玩家、蜘蛛头在前）。
+      // 旧公式 atan2(-nx,-nz) 会让脸背对移动方向（蜘蛛头拖在身后），勿回退。
+      this.yaw = Math.atan2(nx, nz);
     }
 
     // 蜘蛛可以攀爬
@@ -171,7 +174,7 @@ export class Mob extends Entity {
     this.velocity.x = this.wanderDir.x * this.speed * 0.5;
     this.velocity.z = this.wanderDir.z * this.speed * 0.5;
     if (this.wanderDir.lengthSq() > 0) {
-      this.yaw = Math.atan2(-this.wanderDir.x, -this.wanderDir.z);
+      this.yaw = Math.atan2(this.wanderDir.x, this.wanderDir.z); // 同 chase：+Z 朝移动方向
     }
   }
 

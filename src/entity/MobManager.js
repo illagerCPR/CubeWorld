@@ -1,7 +1,7 @@
 // MobManager.js -- 怪物管理：生成/更新/渲染/掉落物
 import * as THREE from 'three';
 import { Mob } from './Mob.js';
-import { MobTypes, generateMobSkinSVGs, mobSkinUV } from './MobTextures.js';
+import { MobTypes, generateMobSkinSVGs, mobSkinUV, MOB_ATLAS } from './MobTextures.js';
 import { SVGTextures } from '../render/SVGTextures.js';
 import { EntityPhysics } from './EntityPhysics.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
@@ -17,19 +17,25 @@ const HEALTH_BAR_FADE = 3.0;       // 怪物头顶血条淡出时长（秒）
 const DEATH_ANIM_DURATION = 0.4;   // 死亡缩放动画时长（秒）
 const HEALTH_BAR_WIDTH = 1.0;      // 血条世界坐标宽
 
-// 皮肤 atlas 各 face 的 col 索引映射（顶/底面复用 front/back）
-const FACE_COL = { front: 0, back: 1, left: 2, right: 3, top: 0, bot: 1 };
+// 皮肤 atlas 各 face 的 col 索引映射（96×64 atlas：col 4=top，col 5=bottom 独立 cell，
+// 不再复用 front/back——此前 top 复用 front cell 导致"脸贴在头顶"）
+const FACE_COL = { front: 0, back: 1, left: 2, right: 3, top: 4, bot: 5 };
 
-// 6 个 face 定义（参考 ChunkMesh FACES）：
-//   - corners：4 个顶点用 unit-cube [0/1, 0/1, 0/1] 描述，顺序为 [底,顶,底,顶]，与现有 UV 顺序对齐
-//   - name：该 face 对应 mob 皮肤的哪一面（front/back/left/right/top/bot）
+// 6 个 face 定义：
+//   - corners：4 个顶点用 unit-cube [0/1, 0/1, 0/1] 描述，顺序为 [底,顶,底,顶]
+//   - uvs：每个 corner 的 [u 选位, v 选位]（0=u0/v0，1=u1/v1）。
+//     侧面统一 [[1,0],[1,1],[0,0],[0,1]]：u1 落在"观察者右侧"→ 从外看贴图不镜像；
+//     top/bot 用 [[0,0],[1,0],[0,1],[1,1]]：u 随 x、v1 落在 -Z（背面朝上），俯视不镜像。
+//     旧写法 `c<2?u0:u1` 把 u0 固定给前两个 corner，4 个侧面全部水平镜像，勿回退。
+const SIDE_UVS = [[1, 0], [1, 1], [0, 0], [0, 1]];
+const CAP_UVS = [[0, 0], [1, 0], [0, 1], [1, 1]];
 const FACE_DEFS = [
-  { name: 'right',  corners: [[1,0,0],[1,1,0],[1,0,1],[1,1,1]] }, // +X
-  { name: 'left',   corners: [[0,0,1],[0,1,1],[0,0,0],[0,1,0]] }, // -X
-  { name: 'top',    corners: [[0,1,1],[1,1,1],[0,1,0],[1,1,0]] }, // +Y
-  { name: 'bot',    corners: [[0,0,0],[1,0,0],[0,0,1],[1,0,1]] }, // -Y
-  { name: 'front',  corners: [[1,0,1],[1,1,1],[0,0,1],[0,1,1]] }, // +Z
-  { name: 'back',   corners: [[0,0,0],[0,1,0],[1,0,0],[1,1,0]] }, // -Z
+  { name: 'right',  corners: [[1,0,0],[1,1,0],[1,0,1],[1,1,1]], uvs: SIDE_UVS }, // +X
+  { name: 'left',   corners: [[0,0,1],[0,1,1],[0,0,0],[0,1,0]], uvs: SIDE_UVS }, // -X
+  { name: 'top',    corners: [[0,1,1],[1,1,1],[0,1,0],[1,1,0]], uvs: CAP_UVS },  // +Y
+  { name: 'bot',    corners: [[0,0,0],[1,0,0],[0,0,1],[1,0,1]], uvs: CAP_UVS },  // -Y
+  { name: 'front',  corners: [[1,0,1],[1,1,1],[0,0,1],[0,1,1]], uvs: SIDE_UVS }, // +Z（脸朝向）
+  { name: 'back',   corners: [[0,0,0],[0,1,0],[1,0,0],[1,1,0]], uvs: SIDE_UVS }, // -Z
 ];
 
 export class MobManager {
@@ -62,15 +68,15 @@ export class MobManager {
   async buildMaterials() {
     for (const typeName of Object.keys(MobTypes)) {
       const type = MobTypes[typeName];
-      // 1. svg → image → canvas → texture（64×64，每 face 16×16 方形 cell）
+      // 1. svg → image → canvas → texture（96×64，每 face 16×16 方形 cell × 6 列）
       const svg = this.mobSkins[typeName];
       const img = await SVGTextures.svgToImage(svg);
       const canvas = document.createElement('canvas');
-      canvas.width = 64;
-      canvas.height = 64;
+      canvas.width = MOB_ATLAS.w;
+      canvas.height = MOB_ATLAS.h;
       const ctx = canvas.getContext('2d');
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(img, 0, 0, 64, 64);
+      ctx.drawImage(img, 0, 0, MOB_ATLAS.w, MOB_ATLAS.h);
       const tex = new THREE.CanvasTexture(canvas);
       tex.magFilter = THREE.NearestFilter;
       tex.minFilter = THREE.NearestFilter;
@@ -97,8 +103,9 @@ export class MobManager {
             const cy = fdef.corners[c][1];
             const cz = fdef.corners[c][2];
             positions.push(minX + cx * dimX, minY + cy * dimY, minZ + cz * dimZ);
-            // UV 顺序跟随 corner [底,顶,底,顶]：底→v0，顶→v1
-            uvs.push(c < 2 ? uv.u0 : uv.u1, (c & 1) ? uv.v1 : uv.v0);
+            // UV 按每面显式 uvs 表选位（保证从外看不镜像、v1=图像顶部朝上）
+            const [us, vs] = fdef.uvs[c];
+            uvs.push(us ? uv.u1 : uv.u0, vs ? uv.v1 : uv.v0);
           }
           // 两个三角形使用统一绕序 (0,1,2)(1,3,2)，保证每面两个三角形外法线一致，
           // 否则 computeVertexNormals 会平均出 ~0 法线 → Lambert 方向光失效（"同色纸片"）

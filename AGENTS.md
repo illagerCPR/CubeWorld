@@ -29,6 +29,27 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
 - playwright 无 pointer lock 能力，ESC 暂停 / 死亡屏幕等 pointer-lock 相关流程只能 `eval` 直接调用 `pauseMenu.show()`/`deathScreen.show()` 验证。
 - **不要用 Read 工具读取 PNG 截图文件**，会导致进程异常停止。
 
+## 验证 / agent-browser（可真实操作 3D 世界，已实测 2026-08-31）
+
+agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第二套浏览器冒烟工具**，与 playwright-cli 互补。核心差异：**能捕获指针锁 + 真实键盘/鼠标输入 → 单机与联机都能真实移动/转向/挖/放/聊天**（playwright-cli 做不到）。DOM UI 用快照 + `@eN` 语义引用（无需选择器），HUD DOM 直接桥接实时 3D 状态（坐标/生物群系/时间/准星方块）。详细实测见 `docs/agent-browser-eval.md`。
+
+**PowerShell 使用注意（每条命令都要记住）**：
+- `$env:AGENT_BROWSER_SESSION` 在**每次 pwsh 调用间不保留**（新进程）——每条命令内联设置：`$env:AGENT_BROWSER_SESSION="my-session"; agent-browser <cmd>`。
+- `@eN` 参数会被 PowerShell 吃掉 `@`——必须加引号：`agent-browser click '@e7'`。
+- `eval` 要传**表达式** `"(...)"`；传函数 `() => {...}` 会返回函数本身（显示 `{}`）而非结果。等价于 playwright-cli 的 eval，可读任意 game 状态。
+- 会话隔离是硬要求：联机多会话（host/join）必须用不同命名会话，否则共享浏览器互抢页面。
+
+**世界内交互（实测有效命令面）**：
+- 指针锁：`click 'canvas[data-engine]'` 捕获（`canvas` 裸选择器命中 10 个元素 → strict mode 违规，必须精确定位主渲染 canvas）。
+- 移动：`press w`（单次按压位移很小 ~0.01m，连续多按才有明显位移）；转向：`mouse move <dx> <dy>`。
+- 挖/放：`mouse down left` + 延迟 + `mouse up left`（挖）；`mouse down right` + up（放）。CDP 鼠标事件能到达游戏 handler 并同步置位 `controls.mouseLeft/mouseRight`（已用同步监听器验证）。
+- **高陷阱：用 eval 改 `player.pitch/yaw` 不会可靠同步相机 → 射线指偏、挖/放打不中目标**。瞄准必须用真实 `mouse move`，命中块以 `game.selectedBlock` 为准。
+- 在自己脚下/身上放方块会被玩家重叠检查拒绝（游戏设计行为，非失败）；对墙放置即成功。
+- 联机链路（已实测全通）：host/join 建/加入房间 → 互见（`game.remotePlayers`，位置在 `rp.group.position`）→ 挖方块同步 → 双向聊天（`press t` + `keyboard type` + `press Enter`，输入框自动聚焦）→ 移动同步。
+- 服务端残留：联机测试房间落盘 `server/world/<房间名>.json`，用一次性房间名（如 `ab-eval-<ts>`）或测完删除；先起服务（Vite/LAN）再开会话，否则 `ERR_CONNECTION_REFUSED`。
+
+**定位与边界**：覆盖并超出 playwright-cli 三会话冒烟（真实输入驱动）；不替代 `node server/test-*.mjs` 确定性回归；agent 驱动**不可重复**，产出需人工复核，不能进 CI 回归门槛。
+
 ## 架构要点
 
 ### 入口与主循环
@@ -85,10 +106,12 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
 
 - `MobManager` 管理生成（夜晚优先，MAX_MOBS=20）、更新、渲染、掉落物。
 - 怪物模型用 **box-parts cuboid**：每只怪是一个 BufferGeometry，由若干 cuboid 部件合并而成（head/body/2 arm/2 leg 等），共 ≈ 6 部位 × 6 面 × 2 三角形 = 72 三角形/怪。**不再用 4 面 billboard**。
-- 怪物纹理用**独立 64×64 皮肤 atlas**（4 行 × 4 列，cell 16×16 方形像素），每 type 一份私有 `CanvasTexture`，**不再合并到全局方块/物品图集**。
-- 皮肤 atlas 布局：row 0=head, row 1=body, row 2=arm, row 3=leg；col 0/1/2/3 = front/back/left/right；顶/底面复用 col 0/1。UV 查表用 `mobSkinUV(partRow, faceCol)`，FaceEnum 由 `FACE_COL` 映射。每 face 按朝向套基础明暗（front 1.0 / back 0.80 / left 1.05 / right 0.88）。
+- 怪物纹理用**独立 96×64 皮肤 atlas**（4 行 × 6 列，cell 16×16 方形像素），每 type 一份私有 `CanvasTexture`，**不再合并到全局方块/物品图集**。
+- 皮肤 atlas 布局：row 0=head, row 1=body, row 2=前组肢体(臂/前腿), row 3=后组肢体(腿/后腿)；col 0/1/2/3/4/5 = front/back/left/right/top/bot（**每面独立 cell，顶/底不再复用 front/back**——复用会导致"脸贴在头顶"）。UV 查表用 `mobSkinUV(partRow, faceCol)`，col 映射由 `FACE_COL`；atlas 尺寸常量 `MOB_ATLAS` 导出，`buildMaterials` 画布必须同步 96×64。每 face 按朝向套基础明暗（front 1.0 / back 0.80 / left 1.05 / right 0.88 / top 0.96 / bottom 0.70）。
 - **法线是立体感关键（阶段 7 修复）**：`MobManager.buildMaterials()` 合并 geometry 后必须 `geo.computeVertexNormals()`，且 FACE_DEFS 每面两三角形绕序必须统一为 `(0,1,2)(1,3,2)`——若沿用 `(0,1,2)(0,2,3)`，每面两三角形一个朝外一个朝内，`computeVertexNormals` 平均成 ~0 法线，`MeshLambertMaterial` 方向光失效 → 全表面同色无明暗（"同色纸片"根因）。修绕序不改 UV。
-- 模型部件定义在 `MobTextures.js` 中 `HUMANOID_PARTS`/`CREEPER_PARTS`/`SPIDER_PARTS` 常量；`MobTypes[type].model.parts` 引用。box = `[minX, minY, minZ, maxX, maxY, maxZ]`，**局部坐标系原点在脚 y=0，+Z 朝玩家**。
+- **UV 朝向（阶段 8 修复）**：FACE_DEFS 每面带显式 `uvs` 选择器——侧面统一 `[[1,0],[1,1],[0,0],[0,1]]`（u1 落在观察者右侧→从外看不镜像），top/bot 用 `[[0,0],[1,0],[0,1],[1,1]]`。旧写法 `c<2 ? u0 : u1` 会让 4 个侧面全部水平镜像，勿回退。
+- **怪物朝向（阶段 8 修复）**：mesh 局部 **+Z 是脸/头的方向**；`Mob.js` 的 yaw 必须为 `atan2(nx, nz)`（nx/nz 指向移动/玩家方向），使 +Z 旋到移动方向。旧公式 `atan2(-nx, -nz)` 会让脸背对移动方向（蜘蛛头拖在身后），勿回退。
+- 模型部件定义在 `MobTextures.js` 中 `HUMANOID_PARTS`（僵尸，**手臂沿 +Z 前伸**）/`SKELETON_PARTS`（骷髅，细肢 0.14 宽）/`CREEPER_PARTS`/`SPIDER_PARTS`（头胸在前 z∈[0.26,0.60]）常量；`MobTypes[type].model.parts` 引用。box = `[minX, minY, minZ, maxX, maxY, maxZ]`，**局部坐标系原点在脚 y=0，+Z 朝脸的方向**。
 - `MobManager.buildMaterials()` 是 **async**（要 await SVG → Image → Canvas）；`Game.start()` 中必须 `await this.mobManager.buildMaterials()`，否则下一次 `start()` 时 master geometry/material 上下文未就绪。
 - `Mob.js` 含 AI：chase/wander/attack/jump/burn/explode/lineOfSight。
 - 注意 `Mob` 中攻击伤害属性名为 `attackDamage`（早期叫 `damage` 曾引发"该属性和同名方法冲突"的 bug，勿回退命名）。
@@ -108,11 +131,6 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
 - `player.onHurt = (amount, source) => this.hud.flashDamage(amount)` 在 `Game.start()` 中注册。新加伤害源时**所有一次性攻击**（怪物 `Mob.attack`、摔落、爆炸）应调用 `player.hurt(amount, source, true)`；持续/低频伤害（溺水每秒 1 血、饥饿每秒 0.5 血）直接 `player.health -= amount`，**不要**触发红屏（连续闪屏很烦）。
 - `Hud.flashDamage(damage)` 内部 set opacity 到 `Math.min(0.9, 0.3 + damage * 0.04)` 后用双层 `requestAnimationFrame` 启动 `transition: opacity 0.5s ease-out` → 0 的淡出。修改时**不要去掉双层 RAF**——少了会让 opacity 0 立刻写回覆盖 intensity。
 
-### 玩家物理与游泳
-
-- `Physics.moveAxis()` 对每个轴单独移动+碰撞回退，**收集所有碰撞方块取最保守的回退位置**（不要改回"命中即停"的早期实现，曾导致穿墙）。
-- **auto-jump（自动台阶）**：`moveAxis` 中水平碰撞时若 `maxBlockTopY - entity.position.y > 0 && <= 1.0+0.01`，且抬升后 `[targetY, targetY+height]` 范围内无碰撞，则直接抬升 y 而不回退水平位置。陆上台阶和水中上岸共用此逻辑——不要依赖 `inWater` 触发水岸上岸（玩家头出水后 inWater 会变 false，会失败）。
-- 水中物理：`inWater` 由 `Game._updateWaterState()` 根据眼睛位置方块 `def.fluid && name==='water'` 判定；水中重力 -8、阻力 0.8、水平速度上限 ~4.3；Space 上浮、Shift 下潜（逻辑在 `Game.update()` 中而非 Physics）；`airTicks=300`，水下递减，<0 溺水扣血。
 ### 玩家物理与游泳
 
 - `Physics.moveAxis()` 对每个轴单独移动+碰撞回退，**收集所有碰撞方块取最保守的回退位置**（不要改回"命中即停"的早期实现，曾导致穿墙）。
@@ -175,7 +193,7 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
 - 路径含空格的可执行文件用 call 操作符 `& "..."`。
 - `Read` 工具对长文件有重复返回前几行的 bug，长文件请改 `Get-Content ... | Select-Object -Skip N -First M` 或 `Select-String`。
 
-## 局域网联机（LAN 多人，阶段 0-7 已完成）
+## 局域网联机（LAN 多人，阶段 0-8 已完成）
 
 - **架构 thin-host（方案C）**：Node 服务器 = 房间管理 + 方块/掉落物账本 + 消息中继 + 时间权威；每个客户端本地自模拟世界（确定性生成 `TerrainGenerator(seed)`，不用 Math.random），只同步增量。消息键 `t`（type），`server/protocol.js` 集中定义；S2C 表见 `docs/lan-multiplayer-design.md` §7。
 - **端口**：服务器 TCP **3001**（`.\start.cmd server`），前端 5173（`.\start.cmd start`），管理面板 `http://127.0.0.1:3001/`。
@@ -191,11 +209,12 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
 
 ## 任务进度（Roadmap）
 
-已完成并推送 master（`https://github.com/illagerCPR/Web-MC.git`）：阶段 0 房间服务器+网络层+方块/玩家/聊天同步（`893fb49`）→ 阶段 1 掉落物/拾取同步+断线重连（`4d9a2ea`）→ 阶段 2 怪物事件同步+红石缓解（`7048df0`）→ 阶段 3 多房间+世界落盘+换房/新建+玩家名颜色（`ce98e23`）→ 阶段 4 插值优化+死亡观战+配置面板（`74418d1`）→ 阶段 5 世界内换房/重建+时间戳对齐插值+管理面板鉴权（`d57403a`）→ 阶段 6 手持物品外观同步+死亡掉落物+观战平滑+鉴权增强+自适应插值延迟（`fab3b7f`）→ 阶段 7 4 种怪物建模优化（法线光照 + 方形皮肤 + 细节纹理 + 模型细化）（待提交）。设计文档 v0.9、README 已同步。
+已完成并推送 master（`https://github.com/illagerCPR/Web-MC.git`）：阶段 0 房间服务器+网络层+方块/玩家/聊天同步（`893fb49`）→ 阶段 1 掉落物/拾取同步+断线重连（`4d9a2ea`）→ 阶段 2 怪物事件同步+红石缓解（`7048df0`）→ 阶段 3 多房间+世界落盘+换房/新建+玩家名颜色（`ce98e23`）→ 阶段 4 插值优化+死亡观战+配置面板（`74418d1`）→ 阶段 5 世界内换房/重建+时间戳对齐插值+管理面板鉴权（`d57403a`）→ 阶段 6 手持物品外观同步+死亡掉落物+观战平滑+鉴权增强+自适应插值延迟（`fab3b7f`）→ 阶段 7 4 种怪物建模优化（法线光照 + 方形皮肤 + 细节纹理 + 模型细化）（`a5fcbee`）→ 阶段 8 怪物朝向修复+原版化贴图+天空盒跟随（见下方备忘）。设计文档 v0.10、README 已同步。
 
-剩余规划（见 `docs/lan-multiplayer-design.md` §11，待用户确认范围）：
+剩余规划（见 `docs/lan-multiplayer-design.md` §11）：
 
-- **阶段 8（规划，原阶段 7 清单）**：手持物品 3D 化渲染；快捷栏槽位完整可见；死亡掉落拾取归属细同步；管理面板多账号/token 轮换；插值延迟加入 RTT 直测辅助。
+- **阶段 9（规划）**：方块材质重绘贴近原版（原版配色 + 结构化像素画：砖缝/木板拼条/圆石砌块/年轮/矿石晶簇），注册名与 SVG 管线不变。
+- **阶段 10（规划，原阶段 8 清单）**：手持物品 3D 化渲染；快捷栏槽位完整可见；死亡掉落拾取归属细同步；管理面板多账号/token 轮换；插值延迟加入 RTT 直测辅助。
 
 ### 阶段 5 关键实现备忘（防回退）
 
@@ -222,3 +241,12 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
 - **面朝向亮度**：`MobTextures.js` `FACE_BRIGHTNESS`（front 1.0 / back 0.80 / left 1.05 / right 0.88）在生成 cell 时逐像素乘系数——方向光之外的静态体积感，夜晚也保持辨识。改色板 `C.*` 时保持 rgb 数组。
 - **模型**：蜘蛛由 4 腿改为 **8 腿（4 对）+ 头胸 + 腹部**（SPIDER_PARTS 10 部件 → 240 顶点）；苦力怕身体更方；人形臂略细腿加粗。box 仍为 `[minX,minY,minZ,maxX,maxY,maxZ]`，原点脚底 y=0。
 - **验证**：浏览器断言 `geo.attributes.normal` 存在、单位向量、各轴平均绝对值≈1/3（axial 法线分布）；`npm run build`（45 模块）；服务器单测不涉及（仅前端渲染）。
+
+### 阶段 8 关键实现备忘（防回退）—— 怪物朝向 + 原版化贴图 + 天空盒
+
+- **"脸贴头顶"根因 = top/bot 复用 front cell**：旧 `FACE_COL` 把 top→0 / bot→1，头顶画的是"脸"。修复：atlas 64×64 → **96×64（4 行 × 6 列，col 4=top / col 5=bot 独立绘制）**，`FACE_COL = {front:0, back:1, left:2, right:3, top:4, bot:5}`，`FACE_BRIGHTNESS` 增补 4:0.96 / 5:0.70。**`MobTextures.MOB_ATLAS` 导出尺寸常量，`buildMaterials` 画布必须 `canvas.width=96` + `drawImage(img,0,0,96,64)` 同步**（不同步会把 96 宽图压进 64 画布，UV 全错）。
+- **"蜘蛛头在身后"根因 = yaw 公式反向**：`Mob.js` 的 `yaw = atan2(-nx,-nz)` 使局部 +Z（脸/头面）指向移动反方向。修复为 `atan2(nx, nz)`（chase 与 wander 两处）。**勿回退**。验证法：chase 中 `dot((sin yaw, cos yaw), normalize(playerPos-mobPos)) ≈ 1`。
+- **侧面贴图镜像修复**：FACE_DEFS 每面带显式 `uvs` 选择器（侧面 `[[1,0],[1,1],[0,0],[0,1]]`、顶底 `[[0,0],[1,0],[0,1],[1,1]]`），`uvs.push(us ? uv.u1 : uv.u0, vs ? uv.v1 : uv.v0)`。旧 `c<2 ? u0 : u1` 是镜像根源。
+- **原版化皮肤**：僵尸无发 + 青衫 + **HUMANOID_PARTS 手臂沿 +Z 前伸**（box y 1.28..1.50，z 0.14..0.89）；骷髅用 **SKELETON_PARTS**（细肢 0.14 宽，MobTypes.skeleton 引用）+ 全骨白；苦力怕经典脸（眼 4×4 @ rows4-7，嘴上窄中宽下分叉）；蜘蛛头前红眼。改皮肤时保持 6 面 partCells 结构。
+- **天空盒跟随（防"远处纯黑"）**：`Sky.update()` 必须 `skyMesh.position.set(playerPos)` + 构造时 `frustumCulled = false`。天空球半径 500 固定在原点时，玩家离原点 >far(1000)−500 后球面被远裁剪面裁掉露出黑色 clearColor。
+- **验证**：agent-browser 冒烟——atlas 96×64 断言（`mobTextures.get('zombie').image.width===96`）、top-cell UV 使用断言（u∈[0.667,0.833]）、4 怪正午特写截图（脸在头正面/手臂前伸/经典脸/蜘蛛红眼）、传送 (2500,95,2500) 天空蓝天无黑。拍摄技巧：`spawnEnabled=false` + `detectionRange=0` + `burningInDay=false` 防走位/爆炸/燃烧干扰；旁观模式瞬移后相机有平滑，需置 `_specSmoothed/_specSmoothYaw/_specSmoothPitch = null`。

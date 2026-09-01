@@ -1,24 +1,27 @@
 // MobTextures.js -- 怪物皮肤 SVG + 模型定义（cuboid box-parts）
-// 每种怪用自己的 64×64 皮肤 atlas（4 行 × 4 列，每 cell 16×16 像素）：
-//   row 0 = head, row 1 = body, row 2 = arm(s), row 3 = leg(s)
-//   col 0 = front, col 1 = back, col 2 = left, col 3 = right
-// 顶/底面复用 front/back col（视觉上够辨识）。
+// 每种怪用自己的 96×64 皮肤 atlas（4 行 × 6 列，每 cell 16×16 方形像素）：
+//   row 0 = head, row 1 = body, row 2 = 前组肢体(臂/前腿), row 3 = 后组肢体(腿/后腿)
+//   col 0 = front, col 1 = back, col 2 = left, col 3 = right, col 4 = top, col 5 = bottom
+// 阶段 8：top/bottom 不再复用 front/back（此前"脸贴到头顶"的根因），每面独立绘制；
+// 皮肤配色/特征按原版 Minecraft 重画（僵尸无发青衫、骷髅全骨肋架、苦力怕经典脸、蜘蛛红眼）。
 // 每个 face 生成时按朝向套一层基础明暗（front 基准、back/side 变暗），
 // 配合 MobManager 的每面法线 + 场景方向光做出立体感。
 import { SVGTextures } from '../render/SVGTextures.js';
 
 const { rng } = SVGTextures;
 
-// === atlas 布局常量（64×64，cell 16×16 方形，修掉原 16×8 拉伸） ===
-const ATLAS_W = 64;
-const ATLAS_H = 64;
+// === atlas 布局常量（96×64，cell 16×16 方形；MobManager 按 MOB_ATLAS 建画布） ===
+export const MOB_ATLAS = { w: 96, h: 64 };
+const ATLAS_W = MOB_ATLAS.w;
+const ATLAS_H = MOB_ATLAS.h;
 const CELL_W = 16;
 const CELL_H = 16;
 
 // face 朝向基础亮度（模拟简单体积感；方向光之外再补一层，夜晚也保持辨识）
-const FACE_BRIGHTNESS = { 0: 1.0, 1: 0.80, 2: 1.05, 3: 0.88 };
+// 0=front 1=back 2=left 3=right 4=top 5=bottom
+const FACE_BRIGHTNESS = { 0: 1.0, 1: 0.80, 2: 1.05, 3: 0.88, 4: 0.96, 5: 0.70 };
 
-// row, col  → { u0, v0, u1, v1 }（atlas UV）
+// row, col  → { u0, v0, u1, v1 }（atlas UV；flipY=true 时 v1 对应 cell 图像顶行）
 export function mobSkinUV(partRow, faceCol) {
   const cx = faceCol * CELL_W;
   const cy = partRow * CELL_H;
@@ -82,17 +85,19 @@ function makeCell(row, col, baseFn, paintFn) {
   return { row, col, x: col * CELL_W, y: row * CELL_H, w: CELL_W, h: CELL_H, pixels: px };
 }
 
-// 同一部件的 4 个 face 一次性生成（features 可只给部分面）
+// 同一部件的 6 个 face 一次性生成（features 可只给部分面：front/back/left/right/top/bot）
 function partCells(row, baseFn, features = {}) {
   return [
     makeCell(row, 0, baseFn, features.front),
     makeCell(row, 1, baseFn, features.back),
     makeCell(row, 2, baseFn, features.left),
     makeCell(row, 3, baseFn, features.right),
+    makeCell(row, 4, baseFn, features.top),
+    makeCell(row, 5, baseFn, features.bot),
   ];
 }
 
-// 把 16 个 cells 序列化为整张 64×64 SVG
+// 把所有 cells 序列化为整张 96×64 SVG
 function buildSkinSVG(cells) {
   let rects = '';
   for (const c of cells) {
@@ -106,163 +111,135 @@ function buildSkinSVG(cells) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${ATLAS_W}" height="${ATLAS_H}" viewBox="0 0 ${ATLAS_W} ${ATLAS_H}" shape-rendering="crispEdges">${rects}</svg>`;
 }
 
-// 便捷色板
+// 便捷色板（按原版怪物配色校准）
 const C = {
-  black: [24, 26, 24],
-  dark: [18, 18, 22],
-  // 僵尸
-  zSkin: [112, 146, 106], zSkinD: [74, 102, 70], zHair: [36, 56, 36],
-  zShirt: [52, 92, 94], zShirtD: [36, 70, 72], zBelt: [36, 34, 40], zBuckle: [172, 150, 62],
-  zPants: [46, 52, 84], zPantsD: [33, 38, 62], zShoe: [62, 46, 36], zMouth: [66, 40, 34],
-  zTeeth: [208, 214, 196],
-  // 骷髅
-  kBone: [214, 214, 200], kBoneD: [172, 176, 162], kBoneHi: [238, 238, 222],
-  kShirt: [96, 96, 96], kShirtD: [72, 72, 72], kRib: [176, 176, 168], kSternum: [212, 212, 196],
-  kPants: [70, 70, 80], kPantsD: [52, 52, 60], kShoe: [46, 46, 52],
-  // 苦力怕
-  cGreen: [96, 146, 76], cGreenD: [58, 94, 50], cGreenDk: [40, 66, 38], cBelly: [80, 124, 62],
-  // 蜘蛛
-  sDark: [42, 36, 46], sDk: [28, 24, 32], sMid: [60, 54, 68], sAbo: [48, 42, 54],
-  sRed: [226, 40, 40],
+  black: [18, 20, 18],
+  dark: [16, 16, 20],
+  // 僵尸：绿皮 + 青衫 + 蓝紫裤（原版配色，无头发）
+  zSkin: [106, 152, 98], zSkinD: [82, 122, 76], zSkinDD: [60, 94, 58],
+  zShirt: [40, 116, 116], zShirtD: [30, 90, 90],
+  zPants: [58, 64, 122], zPantsD: [44, 48, 94], zShoe: [40, 36, 34],
+  // 骷髅：全骨白（原版无衣）
+  kBone: [206, 206, 192], kBoneD: [166, 168, 154], kBoneHi: [234, 234, 220],
+  kJoint: [130, 132, 120],
+  // 苦力怕：斑驳绿
+  cGreen: [98, 168, 82], cGreenD: [62, 118, 52], cGreenDk: [40, 82, 36], cGreenHi: [128, 190, 104],
+  // 蜘蛛：近黑 + 红眼
+  sDark: [40, 34, 42], sDk: [26, 22, 28], sMid: [58, 50, 62], sAbo: [48, 42, 54],
+  sRed: [222, 44, 40], sRedD: [150, 24, 24],
 };
 
-// === 各怪皮肤 SVG 生成 ===
+// === 各怪皮肤 SVG 生成（原版风） ===
 
 function zombieSkinSVG() {
-  const headBase = noisy(C.zSkin, 18, 201);
-  const bodyBase = noisy(C.zShirt, 12, 202);
-  const armBase = noisy(C.zSkin, 14, 203);
-  const legBase = noisy(C.zPants, 10, 204);
+  const headBase = noisy(C.zSkin, 10, 201);
+  const bodyBase = noisy(C.zShirt, 8, 202);
+  const armBase = noisy(C.zSkin, 10, 203);
+  const legBase = noisy(C.zPants, 8, 204);
 
-  const headFront = (x, y, base) => {
-    // 头发帘 + 两侧头发
-    if (y <= 2 || x <= 1 || x >= 14) return C.zHair;
-    if (y <= 7 && (x <= 2 || x >= 13)) return C.zHair;
-    // 眼睛（左/右 2 格黑）
-    if (y >= 6 && y <= 7 && ((x >= 4 && x <= 5) || (x >= 10 && x <= 11))) return C.black;
-    // 眼下阴影
-    if (y === 8 && x >= 3 && x <= 12) return C.zSkinD;
-    // 鼻子
-    if (y >= 8 && y <= 9 && x >= 7 && x <= 8) return C.zSkinD;
-    // 嘴（暗红） + 3 颗牙
-    if (y >= 11 && y <= 12 && x >= 5 && x <= 10) return C.zMouth;
-    if (y === 11 && (x === 6 || x === 8 || x === 10)) return C.zTeeth;
-    // 下巴阴影
-    if (y >= 14) return C.zSkinD;
+  // 脸：黑眼 4×2 + 深绿嘴线（对应原版 8×8 脸的 2 倍尺度，无头发）
+  const headFront = (x, y) => {
+    if (y >= 8 && y <= 9 && ((x >= 2 && x <= 5) || (x >= 10 && x <= 13))) return C.black;
+    if (y >= 12 && y <= 13 && x >= 6 && x <= 9) return C.zSkinDD;
     return null;
   };
-  const headBack = (x, y) => (y <= 8 ? C.zHair : null);
-  const headSide = (x, y) => {
-    if (y <= 3) return C.zHair;
-    if (y === 8 && x >= 7 && x <= 8) return C.zSkinD; // 耳朵窝
-    return null;
-  };
+  const headBack = (x, y) => (y >= 14 ? C.zSkinD : null);
+  const headSide = (x, y) => (y >= 14 ? C.zSkinD : null);
+  const headTop = (x, y) => (hash01(x, y, 205) < 0.18 ? C.zSkinD : null);
+  const headBot = () => C.zSkinDD;
 
-  const bodyFront = (x, y, base) => {
-    // 领口
-    if (y === 0) return C.zShirtD;
-    // 胸前中缝
-    if (x >= 7 && x <= 8 && y >= 1 && y <= 11) return C.zShirtD;
-    // 破洞露皮
-    if ((x === 2 || x === 3) && y >= 8 && y <= 9) return C.zSkin;
-    // 皮带 + 扣
-    if (y >= 13 && y <= 14) return C.zBelt;
-    if (y >= 13 && y <= 14 && x >= 7 && x <= 8) return C.zBuckle;
+  // 青衫：领口/下摆暗线（原版全衫）
+  const bodyFront = (x, y) => {
+    if (y <= 1) return C.zShirtD;
+    if (y >= 14) return C.zShirtD;
     return null;
   };
-  const bodyBack = (x, y) => (y === 0 ? C.zShirtD : null);
-  const bodySide = (x, y) => (y === 0 ? C.zShirtD : null);
+  const bodyBack = (x, y) => (y <= 1 ? C.zShirtD : (y >= 14 ? C.zShirtD : null));
+  const bodySide = (x, y) => (y >= 14 ? C.zShirtD : null);
+  const bodyTop = (x, y) => (hash01(x, y, 206) < 0.2 ? C.zShirtD : null);
+  const bodyBot = () => C.zShirtD;
 
-  const armAll = (x, y) => {
-    // 肩膀衣袖
-    if (y <= 2) return C.zShirt;
-    if (y === 3 && (x <= 3 || x >= 12)) return C.zShirtD; // 撕裂袖口
-    // 手
-    if (y >= 13) return C.zSkinD;
-    return null;
-  };
+  // 臂（前伸）：肩端 2 行衬衫袖 + 手端暗皮
+  const armFront = (x, y) => (y >= 12 ? C.zSkinD : null);         // 手端（+Z）
+  const armBack = (x, y) => (y <= 3 ? C.zShirt : null);           // 肩端（-Z）
+  const armSide = (x, y) => (y <= 3 ? C.zShirt : (y >= 12 ? C.zSkinD : null));
+  const armTop = (x, y) => (y <= 3 ? C.zShirt : null);
+  const armBot = () => C.zSkinD;
+
+  // 腿：裤 + 膝部微暗 + 鞋
   const legAll = (x, y) => {
-    // 裤腰
-    if (y <= 1) return C.zPantsD;
-    // 膝盖磨破
-    if (y >= 8 && y <= 9) return C.zPantsD;
-    // 鞋
     if (y >= 13) return C.zShoe;
+    if (y >= 7 && y <= 8) return C.zPantsD;
     return null;
   };
+  const legTop = () => C.zPantsD;
+  const legBot = () => C.zShoe;
 
   const cells = [
-    ...partCells(0, headBase, { front: headFront, back: headBack, left: headSide, right: headSide }),
-    ...partCells(1, bodyBase, { front: bodyFront, back: bodyBack, left: bodySide, right: bodySide }),
-    ...partCells(2, armBase, { front: armAll, back: armAll, left: armAll, right: armAll }),
-    ...partCells(3, legBase, { front: legAll, back: legAll, left: legAll, right: legAll }),
+    ...partCells(0, headBase, { front: headFront, back: headBack, left: headSide, right: headSide, top: headTop, bot: headBot }),
+    ...partCells(1, bodyBase, { front: bodyFront, back: bodyBack, left: bodySide, right: bodySide, top: bodyTop, bot: bodyBot }),
+    ...partCells(2, armBase, { front: armFront, back: armBack, left: armSide, right: armSide, top: armTop, bot: armBot }),
+    ...partCells(3, legBase, { front: legAll, back: legAll, left: legAll, right: legAll, top: legTop, bot: legBot }),
   ];
   return buildSkinSVG(cells);
 }
 
 function skeletonSkinSVG() {
-  const headBase = noisy(C.kBone, 12, 211);
-  const bodyBase = noisy(C.kShirt, 6, 212);
-  const armBase = noisy(C.kBone, 10, 213);
-  const legBase = noisy(C.kPants, 6, 214);
+  const boneBase = noisy(C.kBone, 8, 211);
 
-  const headFront = (x, y, base) => {
-    // 头顶高光
-    if (y <= 1) return C.kBoneHi;
-    // 大眼窝
-    if (y >= 4 && y <= 8 && ((x >= 4 && x <= 6) || (x >= 9 && x <= 11))) return C.dark;
-    // 鼻孔
-    if (y >= 8 && y <= 9 && x >= 7 && x <= 8) return [42, 42, 48];
-    // 颧骨
-    if (y >= 8 && y <= 11 && (x === 3 || x === 12)) return C.kBoneD;
-    // 牙列（白/暗交替竖条）
-    if (y >= 12 && y <= 14 && x >= 5 && x <= 10) {
-      return (x % 2 === 1) ? [244, 244, 228] : [124, 128, 118];
-    }
-    // 下颌阴影
+  // 骷髅脸：大眼窝 + 鼻孔 + 牙列（原版全骨无衣）
+  const headFront = (x, y) => {
+    if (y >= 6 && y <= 8 && ((x >= 4 && x <= 6) || (x >= 9 && x <= 11))) return C.dark;
+    if (y >= 9 && y <= 10 && x >= 7 && x <= 8) return [76, 78, 84];
+    if (y >= 12 && y <= 14 && x >= 4 && x <= 11) return (x % 2 === 0) ? C.kBoneHi : C.kBoneD;
     if (y === 15) return C.kBoneD;
     return null;
   };
-  const headBack = (x, y) => (y <= 1 ? C.kBoneHi : null);
-  const headSide = (x, y) => {
-    if (y <= 1) return C.kBoneHi;
-    if (y >= 6 && y <= 9 && x >= 6 && x <= 9) return C.kBoneD; // 颞窝
+  const headBack = (x, y) => {
+    if (y >= 6 && y <= 12 && hash01(x, y, 212) < 0.25) return C.kBoneD; // 颅后缝
     return null;
   };
+  const headSide = (x, y) => {
+    if (y >= 7 && y <= 10 && x >= 6 && x <= 9) return C.kBoneD; // 颞窝
+    return null;
+  };
+  const headTop = (x, y) => {
+    if (x === 7 || x === 8) return C.kBoneHi; // 颅顶矢状缝高光
+    return null;
+  };
+  const headBot = () => C.kBoneD;
 
-  const bodyFront = (x, y, base) => {
-    // 肋骨（亮横条）
-    if (y === 2 || y === 4 || y === 6 || y === 8 || y === 10) {
-      if (x >= 3 && x <= 12) return C.kRib;
-    }
-    // 胸骨
-    if (x >= 7 && x <= 8 && y >= 1 && y <= 11) return C.kSternum;
-    // 腰带
-    if (y >= 13 && y <= 14) return [46, 46, 50];
+  // 躯干 = 肋骨架：亮肋横条 + 暗间隙 + 胸骨
+  const bodyFront = (x, y) => {
+    if (y >= 1 && y <= 12 && y % 2 === 0 && x >= 2 && x <= 13) return C.kBoneHi; // 肋
+    if (y >= 13) return C.kBoneD; // 骨盆
     return null;
   };
   const bodyBack = (x, y) => {
-    if (x >= 7 && x <= 8 && y >= 1 && y <= 12) return C.kShirtD; // 脊柱
+    if (x >= 6 && x <= 9 && y >= 1 && y <= 13) return C.kBoneD; // 脊柱
     return null;
   };
+  const bodySide = (x, y) => {
+    if (y >= 1 && y <= 12 && y % 2 === 0) return C.kBoneD; // 肋端
+    return null;
+  };
+  const bodyTop = (x, y) => (x >= 5 && x <= 10 && y >= 5 && y <= 10 ? C.kBoneD : null); // 锁骨围
+  const bodyBot = () => C.kBoneD;
 
-  const armAll = (x, y) => {
-    // 腕骨 + 手骨
-    if (y >= 11) return C.kBoneD;
+  // 骨肢：中段关节暗环
+  const limbAll = (x, y) => {
+    if (y >= 7 && y <= 8) return C.kJoint;
+    if (y >= 14) return C.kBoneD;
     return null;
   };
-  const legAll = (x, y) => {
-    if (y <= 1) return C.kPantsD;
-    if (y >= 8 && y <= 9) return C.kPantsD;
-    if (y >= 13) return C.kShoe;
-    return null;
-  };
+  const limbTop = () => C.kBoneHi;
+  const limbBot = () => C.kBoneD;
 
   const cells = [
-    ...partCells(0, headBase, { front: headFront, back: headBack, left: headSide, right: headSide }),
-    ...partCells(1, bodyBase, { front: bodyFront, back: bodyBack }),
-    ...partCells(2, armBase, { front: armAll, back: armAll, left: armAll, right: armAll }),
-    ...partCells(3, legBase, { front: legAll, back: legAll, left: legAll, right: legAll }),
+    ...partCells(0, boneBase, { front: headFront, back: headBack, left: headSide, right: headSide, top: headTop, bot: headBot }),
+    ...partCells(1, boneBase, { front: bodyFront, back: bodyBack, left: bodySide, right: bodySide, top: bodyTop, bot: bodyBot }),
+    ...partCells(2, boneBase, { front: limbAll, back: limbAll, left: limbAll, right: limbAll, top: limbTop, bot: limbBot }),
+    ...partCells(3, boneBase, { front: limbAll, back: limbAll, left: limbAll, right: limbAll, top: limbTop, bot: limbBot }),
   ];
   return buildSkinSVG(cells);
 }
@@ -272,39 +249,33 @@ function creeperSkinSVG() {
   const bodyBase = mottle(C.cGreen, C.cGreenD, 10, 222);
   const legBase = mottle(C.cGreenD, C.cGreenDk, 8, 223);
 
-  const headFront = (x, y, base) => {
-    // 眼睛（4 宽大眼）
-    if (y >= 3 && y <= 5 && ((x >= 3 && x <= 6) || (x >= 9 && x <= 12))) return C.black;
-    // 标志性嘴（向下渐宽的裂口）
-    if (y === 8 && x >= 7 && x <= 8) return C.black;
-    if (y === 9 && x >= 6 && x <= 9) return C.black;
-    if (y >= 10 && y <= 11 && x >= 5 && x <= 10) return C.black;
-    if (y === 12 && x >= 6 && x <= 9) return C.black;
-    if (y === 13 && x >= 7 && x <= 8) return C.black;
-    // 下巴暗面
-    if (y === 15) return C.cGreenD;
+  // 经典脸：4×4 黑眼 + 上窄中宽下分叉的裂口嘴（原版 8×8 脸 2 倍尺度）
+  const headFront = (x, y) => {
+    if (y >= 4 && y <= 7 && ((x >= 2 && x <= 5) || (x >= 10 && x <= 13))) return C.black;
+    if (y === 8 || y === 9) { if (x >= 6 && x <= 9) return C.black; }
+    else if (y >= 10 && y <= 13) { if (x >= 4 && x <= 11) return C.black; }
+    else if (y >= 14) { if ((x >= 4 && x <= 5) || (x >= 10 && x <= 11)) return C.black; }
     return null;
   };
-  const headBack = (x, y) => {
-    if (y === 0 || y === 15) return C.cGreenD;
-    return null;
-  };
+  const headTop = (x, y) => (hash01(x, y, 224) < 0.25 ? C.cGreenHi : null);
+  const headBot = () => C.cGreenDk;
 
-  const bodyFront = (x, y, base) => {
-    // 腹部偏暗
-    if (y >= 9 && y <= 11 && x >= 4 && x <= 11) return C.cBelly;
-    if (y >= 13) return C.cGreenD;
+  const bodyFront = (x, y) => {
+    if (y >= 12) return C.cGreenD;
     return null;
   };
-  const bodyBack = (x, y) => (y >= 13 ? C.cGreenD : null);
+  const bodyTop = (x, y) => (hash01(x, y, 225) < 0.25 ? C.cGreenHi : null);
+  const bodyBot = () => C.cGreenDk;
 
-  const legAll = (x, y) => (y >= 13 ? C.cGreenDk : null);
+  const legAll = (x, y) => (y >= 14 ? C.cGreenDk : null);
+  const legTop = () => C.cGreenD;
+  const legBot = () => C.cGreenDk;
 
   const cells = [
-    ...partCells(0, headBase, { front: headFront, back: headBack }),
-    ...partCells(1, bodyBase, { front: bodyFront, back: bodyBack }),
-    ...partCells(2, legBase, { front: legAll, back: legAll, left: legAll, right: legAll }),
-    ...partCells(3, legBase, { front: legAll, back: legAll, left: legAll, right: legAll }),
+    ...partCells(0, headBase, { front: headFront, top: headTop, bot: headBot }),
+    ...partCells(1, bodyBase, { front: bodyFront, top: bodyTop, bot: bodyBot }),
+    ...partCells(2, legBase, { front: legAll, back: legAll, left: legAll, right: legAll, top: legTop, bot: legBot }),
+    ...partCells(3, legBase, { front: legAll, back: legAll, left: legAll, right: legAll, top: legTop, bot: legBot }),
   ];
   return buildSkinSVG(cells);
 }
@@ -314,64 +285,76 @@ function spiderSkinSVG() {
   const bodyBase = mottle(C.sAbo, C.sDk, 8, 232);
   const legBase = noisy(C.sMid, 8, 233);
 
-  const headFront = (x, y, base) => {
-    // 8 只红眼（2 行 × 4 列）
-    if (y >= 4 && y <= 5 && (x === 5 || x === 7 || x === 9 || x === 11)) return C.sRed;
-    // 口器/螯肢
-    if (y >= 10 && y <= 12 && x >= 7 && x <= 8) return [78, 70, 86];
+  // 脸：1 对大红眼 + 下方 1 对小暗红眼（原版蜘蛛眼位）
+  const headFront = (x, y) => {
+    if (y >= 6 && y <= 7 && ((x >= 3 && x <= 6) || (x >= 9 && x <= 12))) return C.sRed;
+    if (y >= 10 && y <= 11 && ((x >= 5 && x <= 6) || (x >= 9 && x <= 10))) return C.sRedD;
+    if (y >= 14 && x >= 6 && x <= 9) return C.sMid; // 口器
     return null;
   };
-  const headSide = (x, y) => {
-    if (y >= 4 && y <= 5 && x >= 7 && x <= 8) return C.sRed;
-    return null;
-  };
+  const headTop = (x, y) => (hash01(x, y, 234) < 0.2 ? C.sMid : null);
+  const headBot = () => C.sDk;
 
-  const bodyFront = (x, y, base) => {
-    // 腹部前端花纹
-    if (y === 15) return C.sDk;
+  // 腹部背斑（top 面：浅色斑纹，原版蜘蛛背面的浅灰斑）
+  const bodyTop = (x, y) => {
+    const t = hash01(x, y, 99);
+    if (t < 0.3) return [74, 66, 82];
+    if (t < 0.4) return C.sDk;
     return null;
   };
-  const bodyBack = (x, y) => {
-    // 腹部背面浅斑
-    if (hash01(x, y, 99) < 0.5) return [58, 52, 66];
-    return null;
-  };
+  const bodyBot = () => C.sDk;
 
-  const legAll = (x, y) => (y >= 13 ? C.sDk : null);
+  const legAll = (x, y) => {
+    if (y >= 7 && y <= 8) return C.sDk; // 腿关节
+    return null;
+  };
+  const legTop = () => C.sMid;
+  const legBot = () => C.sDk;
 
   const cells = [
-    ...partCells(0, headBase, { front: headFront, left: headSide, right: headSide }),
-    ...partCells(1, bodyBase, { front: bodyFront, back: bodyBack }),
-    ...partCells(2, legBase, { front: legAll, back: legAll, left: legAll, right: legAll }),
-    ...partCells(3, legBase, { front: legAll, back: legAll, left: legAll, right: legAll }),
+    ...partCells(0, headBase, { front: headFront, top: headTop, bot: headBot }),
+    ...partCells(1, bodyBase, { top: bodyTop, bot: bodyBot }),
+    ...partCells(2, legBase, { front: legAll, back: legAll, left: legAll, right: legAll, top: legTop, bot: legBot }),
+    ...partCells(3, legBase, { front: legAll, back: legAll, left: legAll, right: legAll, top: legTop, bot: legBot }),
   ];
   return buildSkinSVG(cells);
 }
 
-// === 部位定义 ===
-// box = [minX, minY, minZ, maxX, maxY, maxZ]，局部坐标，原点在脚 y=0，+Z 朝玩家
+// === 部件定义 ===
+// box = [minX, minY, minZ, maxX, maxY, maxZ]，局部坐标，原点在脚 y=0，+Z 朝脸的方向
+// （Mob.js yaw=atan2(nx,nz) 使 +Z 指向移动方向：脸朝玩家、蜘蛛头在前）
 
-// humanoid 6 部位：头 / 身 / 2 臂 / 2 腿（臂略细、腿加粗，更接近原版比例）
+// humanoid（僵尸）6 部位：头 / 身 / 2 臂（前伸，原版标志性姿势）/ 2 腿
 const HUMANOID_PARTS = [
   { name: 'head',  row: 0, box: [-0.25, 1.50, -0.25,  0.25, 2.00, 0.25] },
   { name: 'body',  row: 1, box: [-0.28, 0.75, -0.16,  0.28, 1.50, 0.16] },
-  { name: 'armR',  row: 2, box: [-0.52, 0.75, -0.11, -0.30, 1.50, 0.11] },
-  { name: 'armL',  row: 2, box: [ 0.30, 0.75, -0.11,  0.52, 1.50, 0.11] },
+  { name: 'armR',  row: 2, box: [-0.52, 1.28,  0.14, -0.30, 1.50, 0.89] },
+  { name: 'armL',  row: 2, box: [ 0.30, 1.28,  0.14,  0.52, 1.50, 0.89] },
   { name: 'legR',  row: 3, box: [-0.20, 0,    -0.11,  0.00, 0.75, 0.11] },
   { name: 'legL',  row: 3, box: [ 0.00, 0,    -0.11,  0.20, 0.75, 0.11] },
 ];
 
-// 苦力怕：头 / 身 / 4 条腿（身更方更壮，贴近原版 8×12×4 比例）
-const CREEPER_PARTS = [
-  { name: 'head',  row: 0, box: [-0.25, 1.20, -0.25,  0.25, 1.70, 0.25] },
-  { name: 'body',  row: 1, box: [-0.25, 0.50, -0.14,  0.25, 1.20, 0.14] },
-  { name: 'legFR', row: 3, box: [-0.24, 0,     0.02,  -0.02, 0.50, 0.24] },
-  { name: 'legFL', row: 3, box: [ 0.02, 0,     0.02,   0.24, 0.50, 0.24] },
-  { name: 'legBR', row: 3, box: [-0.24, 0,    -0.24,  -0.02, 0.50, -0.02] },
-  { name: 'legBL', row: 3, box: [ 0.02, 0,    -0.24,   0.24, 0.50, -0.02] },
+// 骷髅：同僵尸布局但四肢更细（原版 2px 肢体比例）
+const SKELETON_PARTS = [
+  { name: 'head',  row: 0, box: [-0.25, 1.50, -0.25,  0.25, 2.00, 0.25] },
+  { name: 'body',  row: 1, box: [-0.28, 0.75, -0.16,  0.28, 1.50, 0.16] },
+  { name: 'armR',  row: 2, box: [-0.44, 1.30,  0.14, -0.30, 1.44, 0.89] },
+  { name: 'armL',  row: 2, box: [ 0.30, 1.30,  0.14,  0.44, 1.44, 0.89] },
+  { name: 'legR',  row: 3, box: [-0.21, 0,    -0.07, -0.07, 0.75, 0.07] },
+  { name: 'legL',  row: 3, box: [ 0.07, 0,    -0.07,  0.21, 0.75, 0.07] },
 ];
 
-// 蜘蛛：头胸(前小) + 腹部(后大) + 8 条腿（原版简化前是 4 腿，这次补全 4 对）
+// 苦力怕：头 / 身 / 4 条腿（身 8×12×4 原版比例：宽 0.5、深 0.28）
+const CREEPER_PARTS = [
+  { name: 'head',  row: 0, box: [-0.25, 1.20, -0.25,  0.25, 1.70, 0.25] },
+  { name: 'body',  row: 1, box: [-0.25, 0.40, -0.14,  0.25, 1.20, 0.14] },
+  { name: 'legFR', row: 2, box: [-0.24, 0,     0.02,  -0.02, 0.40, 0.24] },
+  { name: 'legFL', row: 2, box: [ 0.02, 0,     0.02,   0.24, 0.40, 0.24] },
+  { name: 'legBR', row: 3, box: [-0.24, 0,    -0.24,  -0.02, 0.40, -0.02] },
+  { name: 'legBL', row: 3, box: [ 0.02, 0,    -0.24,   0.24, 0.40, -0.02] },
+];
+
+// 蜘蛛：头胸(前) + 腹部(后) + 8 条腿（4 对）
 // 腿用薄长 box 斜向外摆（无旋转盒的像素风折衷）
 const SPIDER_PARTS = [
   { name: 'head',   row: 0, box: [-0.24, 0.22,  0.26,  0.24, 0.58, 0.60] },
@@ -432,7 +415,7 @@ export const MobTypes = {
     detectionRange: 16,
     ranged: true,
     burningInDay: true,
-    model: { parts: HUMANOID_PARTS, kind: 'cuboid' },
+    model: { parts: SKELETON_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'bone', min: 0, max: 2 },
       { name: 'arrow', min: 0, max: 2 },
