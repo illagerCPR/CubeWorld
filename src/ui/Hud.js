@@ -61,7 +61,24 @@ export class Hud {
     document.body.appendChild(this.damageOverlay);
     this.damageTimerId = 0;
 
+    // 水下屏幕滤镜（全屏蓝色薄纱，透明度过渡）
+    this.underwaterOverlay = document.createElement('div');
+    this.underwaterOverlay.style.cssText = `
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 5; opacity: 0;
+      background: radial-gradient(ellipse at center,
+        rgba(20, 70, 130, 0.28) 0%,
+        rgba(12, 45, 95, 0.45) 100%);
+      transition: opacity 0.3s ease-out;
+    `;
+    document.body.appendChild(this.underwaterOverlay);
+
     this.updateVisibility('creative');
+  }
+
+  // 水下滤镜开关（Game.update 按 inWater 每帧调用，on=false 时淡出）
+  setUnderwater(on) {
+    this.underwaterOverlay.style.opacity = on ? '1' : '0';
   }
 
   heartSvg(filled, half = false) {

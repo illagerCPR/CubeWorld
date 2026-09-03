@@ -343,6 +343,19 @@ export class MobManager {
       // 普通帧
       mob.update(dt, player, sky, this.physics);
 
+      // 体素光染色：按怪物所在格光照（max(天光×昼夜, 方块光)）调制 material 颜色，
+      // 洞穴里变暗、火把旁带暖色；受击/死亡的 emissive 反馈走独立通道不冲突
+      if (mob.mesh && mob.mesh.material && this.world) {
+        const p = mob.mesh.position;
+        const bx = Math.floor(p.x), by = Math.floor(p.y + 0.5), bz = Math.floor(p.z);
+        const skyL = this.world.getSkyLight(bx, by, bz) / 15;
+        const blkL = this.world.getBlockLightAt(bx, by, bz) / 15;
+        const day = 0.10 + 0.90 * (sky ? sky.getLightLevel() : 1);
+        const l = Math.max(skyL * day, blkL);
+        const v = 0.55 + 0.45 * l;
+        mob.mesh.material.color.setRGB(v * (1 + 0.18 * blkL), v, v * (1 - 0.10 * blkL));
+      }
+
       // 处理爆炸请求
       if (mob.pendingExplosion) {
         this.pendingExplosions.push(mob.pendingExplosion);

@@ -1,7 +1,8 @@
-// World.js -- 世界管理：区块加载/卸载、方块访问
+// World.js -- 世界管理：区块加载/卸载、方块访问、体素光照
 import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from './Chunk.js';
 import { TerrainGenerator } from '../world/terrain.js';
 import { BlockRegistry } from './BlockRegistry.js';
+import { LightEngine } from './LightEngine.js';
 
 export class World {
   constructor(seed = 0) {
@@ -10,6 +11,7 @@ export class World {
     this.generator = new TerrainGenerator(seed);
     this.modifiedBlocks = new Map(); // 存档：全局坐标 -> 方块 id
     this.onLocalBlockChange = null;  // 本地发起方块修改回调 (x,y,z,id)，由 NetworkManager 注册（联机上报）
+    this.lightEngine = new LightEngine(this); // 体素光照（纯客户端视觉，不进存档/协议）
   }
 
   key(cx, cz) { return `${cx},${cz}`; }
@@ -27,6 +29,8 @@ export class World {
       // 应用修改
       this.applyModifications(c);
       this.chunks.set(k, c);
+      // 光照初始化（含从已加载邻居导入边界光，改动的邻居会被标 dirty）
+      this.lightEngine.initChunkLight(c);
     }
     return c;
   }
@@ -67,17 +71,40 @@ export class World {
     const cx = Math.floor(gx / CHUNK_SIZE);
     const cz = Math.floor(gz / CHUNK_SIZE);
     const c = this.ensureChunk(cx, cz);
-    c.set(gx - cx * CHUNK_SIZE, gy, gz - cz * CHUNK_SIZE, id);
+    const lx = gx - cx * CHUNK_SIZE;
+    const lz = gz - cz * CHUNK_SIZE;
+    const oldId = c.get(lx, gy, lz);
+    c.set(lx, gy, lz, id);
     c.dirty = true;
     if (recordMod) this.modifiedBlocks.set(`${gx},${gy},${gz}`, id);
     if (this.onLocalBlockChange) this.onLocalBlockChange(gx, gy, gz, id);
     // 标记邻居区块 dirty（边界方块）
-    const lx = gx - cx * CHUNK_SIZE;
-    const lz = gz - cz * CHUNK_SIZE;
     if (lx === 0) { const n = this.getChunk(cx - 1, cz); if (n) n.dirty = true; }
     if (lx === CHUNK_SIZE - 1) { const n = this.getChunk(cx + 1, cz); if (n) n.dirty = true; }
     if (lz === 0) { const n = this.getChunk(cx, cz - 1); if (n) n.dirty = true; }
     if (lz === CHUNK_SIZE - 1) { const n = this.getChunk(cx, cz + 1); if (n) n.dirty = true; }
+    // 增量光照更新（天光 + 方块光），受影响区块同样被标 dirty
+    this.lightEngine.onBlockChanged(gx, gy, gz, oldId, id);
+  }
+
+  // 体素光查询（网格构建采样用；未加载区块按露天/无方块光兜底）
+  getSkyLight(gx, gy, gz) {
+    if (gy >= CHUNK_HEIGHT) return 15;
+    if (gy < 0) return 0;
+    const cx = Math.floor(gx / CHUNK_SIZE);
+    const cz = Math.floor(gz / CHUNK_SIZE);
+    const c = this.getChunk(cx, cz);
+    if (!c || !c.hasLight) return 15;
+    return c.getSky(gx - cx * CHUNK_SIZE, gy, gz - cz * CHUNK_SIZE);
+  }
+
+  getBlockLightAt(gx, gy, gz) {
+    if (gy < 0 || gy >= CHUNK_HEIGHT) return 0;
+    const cx = Math.floor(gx / CHUNK_SIZE);
+    const cz = Math.floor(gz / CHUNK_SIZE);
+    const c = this.getChunk(cx, cz);
+    if (!c || !c.hasLight) return 0;
+    return c.getBlockLight(gx - cx * CHUNK_SIZE, gy, gz - cz * CHUNK_SIZE);
   }
 
   // 获取高度图（用于玩家生成位置）

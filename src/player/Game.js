@@ -23,6 +23,7 @@ import { ChatBox } from '../ui/ChatBox.js';
 import { CHUNK_SIZE } from '../core/Chunk.js';
 import { matchRecipe } from '../core/Crafting.js';
 import { MobManager } from '../entity/MobManager.js';
+import { VoxelLightUniforms } from '../render/VoxelLight.js';
 import { RedstoneSystem } from '../core/RedstoneSystem.js';
 import { SaveSystem } from '../core/SaveSystem.js';
 import { FirstPersonHand } from '../render/FirstPersonHand.js';
@@ -513,6 +514,10 @@ export class Game {
       this.sky.update(dt, this.player.position);
     }
     
+    // 体素光昼夜系数与天光染色：所有区块材质共享 uniform，逐帧更新无需重建网格
+    VoxelLightUniforms.uDayLight.value = 0.10 + 0.90 * this.sky.getLightLevel();
+    if (this.sky.sunTint) VoxelLightUniforms.uSunTint.value.copy(this.sky.sunTint);
+
     // 水下视野雾效
     const fog = this.renderer.scene.fog;
     if (fog) {
@@ -524,6 +529,13 @@ export class Game {
         fog.near = 60;
         fog.far = 160;
       }
+    }
+    // 水下屏幕滤镜（HUD 蓝色薄纱）
+    this.hud.setUnderwater(this.player.inWater);
+
+    // 水面流动（水纹理 UV 沿 v 滚动，RepeatWrapping）
+    if (this.waterTexture) {
+      this.waterTexture.offset.y = (this.waterTexture.offset.y + dt * 0.06) % 1;
     }
     // 滚轮切换
     if (this.controls.wheelDelta !== 0) {
@@ -1028,6 +1040,7 @@ export class Game {
     if (this.net) this.net.close();
     this.networkMode = false;
     if (this.infoBar) this.infoBar.hide();
+    if (this.hud) this.hud.setUnderwater(false);
     this.paused = false;
     if (this.controls) this.controls.enabled = false;
     if (document.pointerLockElement) document.exitPointerLock();

@@ -95,15 +95,27 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 
 ### 区块、网格与光照
 
-- 区块 16×16×256，`Uint8Array` 存储方块 ID，海平面 Y=64。
+- 区块 16×16×256，`Uint8Array` 存储方块 ID，海平面 Y=64。每区块另有 `light` 数组（高 4 位天光 / 低 4 位方块光，0-15），由 `LightEngine` 维护，`hasLight` 标记是否已初始化。
 - 渲染距离 6 区块半径，每帧最多重建 2 个脏区块网格。
-- 贪心网格合并（Greedy Meshing）在 `src/render/ChunkMesh.js`。
+- 网格构建：实体方块逐块生成面，**只有水顶面**做贪心合并（`_mergeWaterTops`）；build 前先填 18×256×18 局部方块缓存（`_fillCache`，跨构建复用 scratch）+ 不透明 LUT，剔除/AO/光照采样全走缓存查表。
 - `World.setBlock` 会把当前 chunk 和边界邻居标记 `dirty=true`；任何写方块的路径必须走 `setBlock`，否则网格不更新。
 - `ChunkMeshBuilder.build()` 输出三个 mesh：`solid` / `water`（半透明 DoubleSide） / `light`。`light` 是 `light >= 13` 的方块（火把/红石火把/荧石/海晶灯/岩浆/红石灯）单独用 `MeshBasicMaterial` 重画一遍，使其夜里也明亮。`Game.rebuildDirtyChunks` 和卸载逻辑必须同时处理三者。
 - **UV 朝向陷阱**：solid 面 UV 顺序为 `(u0,v0)(u0,v1)(u1,v0)(u1,v1)`（顶点顺序 [底,顶,底,顶]，方块顶部对应 SVG 顶部）。cross 类型（火把/花/按钮）UV 顺序相同。颠倒这顺序会导致草侧面、火把等纹理上下倒置。
 - **水体纹理独立于图集**：水面/侧面/底面用 `waterTexture`（独立 `CanvasTexture`，`RepeatWrapping`，16×16），UV 按**世界坐标** `(x+offX, z+offZ)` 平铺，跨 chunk 连续（不要改回图集子区域 UV，否则远处水面会出方格分界）。`ChunkMeshBuilder` 构造函数第 4 个参数接收 `waterTexture`；water mesh 的材质 `map` 必须指向它。
 - **水下方块面剔除陷阱**：`ChunkMesh.build()` 中三段面剔除：① 邻居是不透明非流体 → 剔除；② 当前是水且邻居是同 id 水 → 剔除；③ 非水方块相邻流体且流体不透明 → 剔除。**关键**：水和岩浆都是 `transparent: true`，故其二段"剔除"条件包含 `&& !neighborDef.transparent`，否则水下方块（沙子/石头与水相邻的方向）会被错误剔除，导致水里看不到任何方块。曾经 bug 表现为"水下方块不渲染、远处只见 chunk 边界"——远 chunk 未生成时 `getBlock` 返回 0（air），邻居 air 时不触发任何剔除，所以 chunk 边界方块反而画了。
 - **跨 chunk 邻居查询**：`ChunkMeshBuilder.build()` 的 `getBlock` 在 `x/z` 越界时调 `world.getBlock(gx,gy,gz)`（line 76-78）；`y` 越界直接返回 0（air）。`World.getBlock` 在 chunk 不存在时也返回 0，远 chunk 边界因此被当成 air 看——这是"远处只见区块边界"的隐藏成因。
+
+### 体素光照管线（光影改造，防回退）
+
+- **双通道体素光**：`src/core/LightEngine.js`——天光（日光柱 + BFS 横向扩散）与方块光（`def.light>=13` 作源）各 0-15。天光特例：**垂直向下穿过全透格无衰减（15 保持 15）**；其他方向 -1-不透明度。方块光每步 -1-不透明度。
+- **增量更新**：`World.setBlock` 末尾调 `lightEngine.onBlockChanged(oldId, newId)`——移除走**双队列算法**（removal BFS + 前沿重泛洪），天光 removal 有"向下 15 光柱一并移除"特例；挖开方块走"列重播种（`_reseedColumn`）+ 邻居流入"；新光源直接 set+BFS。**任何写方块必须走 `World.setBlock`**，光照才会跟着更新（远程方块改动同样经它，视觉自动同步）。
+- **新区块**：`ensureChunk` 生成+应用修改后立即 `initChunkLight`（列播种 + 光源 + 已加载邻居边界光入队，泛洪自然完成双向导入导出并标脏邻居）。未加载区块采样兜底：天光按 15、方块光按 0。
+- **着色**：`ChunkMesh.js` 顶点携带 `voxelLight`（skyL/blockL 归一化）+ `color`（面向系数 × AO）。平滑光照 = 面邻格 + AO 三格中不透明格跳过后的均值；AO 用 `AO_SAMPLES` 静态偏移表 + `AO_CURVE`，**各向异性时翻转对角线**（`a[1]+a[2] > a[0]+a[3]` → 换对角索引，绕向不变）。cross 植物取自身格光；合并水顶面取每角上方格光。
+- **材质**：solid/water 是 builder 上的**共享 MeshBasicMaterial**（`applyVoxelLight` 注入 onBeforeCompile：`max(uSunTint*skyL*uDayLight, uTorchTint*blockL)` 再抬底 `uMinLight=0.035`）。**勿改回 Lambert**——场景方向光/环境光会把洞穴再次照亮，体素光失效；**勿改回每区块新建材质**（泄漏 + uniform 失联）。发光方块 light mesh 保持全亮 Basic，**不乘 AO/voxelLight**。
+- **昼夜**：`Game.update` 每帧只更新共享 uniform（`uDayLight = 0.10+0.90*getLightLevel()`、`uSunTint` 晨昏暖/夜晚冷，来源 `Sky.sunTint`）——**时间流逝零网格重建**。
+- **怪物受光**：`MobManager.update` 普通帧按所在格光调制 `material.color`（洞穴变暗/火把旁暖色）；受击/死亡 emissive 反馈是独立通道不冲突。
+- **边界**：光照纯客户端视觉，**不进存档**（由方块数据重算）、**不进联机协议**；服务器测试零感知。
+- **性能锚点**（headless 软渲染）：单 chunk build ≈ 7ms（基线 3.5ms），仍在 2 chunk/帧预算内；真实 GPU 环境更宽裕。改动采样逻辑后必须重测。
 
 ### 天空与昼夜（修改前必读）
 

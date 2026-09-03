@@ -1,8 +1,9 @@
-// ChunkMesh.js -- 贪心网格合并（Greedy Meshing）
+// ChunkMesh.js -- 区块网格构建（局部方块缓存 + 逐顶点 AO + 平滑体素光照 + 水面贪心合并）
 import * as THREE from 'three';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from '../core/Chunk.js';
 import { SVGTextures } from './SVGTextures.js';
+import { applyVoxelLight } from './VoxelLight.js';
 
 // 6 个面的方向定义：[dx, dy, dz]
 const FACES = [
@@ -29,12 +30,71 @@ const faceCorners = [
   [[0,0,0],[0,1,0],[1,0,0],[1,1,0]]
 ];
 
+// 光照系数（简单 AO：顶面最亮，底面最暗）
+const FACE_LIGHT = [0.7, 0.7, 1.0, 0.5, 0.85, 0.85];
+
+// AO 档位 → 顶点色乘子（0=无遮蔽，3=两侧+对角全遮蔽）
+const AO_CURVE = [1.0, 0.8, 0.62, 0.45];
+
+// 逐面逐顶点的 AO 采样偏移（相对方块坐标）：[side1, side2, corner]
+// 由 FACES + faceCorners 在模块加载时静态推导，热循环零分配
+const AO_SAMPLES = FACES.map((face, f) => {
+  const ax = face.dir[0] !== 0 ? 0 : (face.dir[1] !== 0 ? 1 : 2);
+  const t1 = ax === 0 ? 1 : 0;
+  const t2 = ax === 2 ? 1 : 2;
+  return faceCorners[f].map((c) => {
+    const o1 = c[t1] === 1 ? 1 : -1;
+    const o2 = c[t2] === 1 ? 1 : -1;
+    const mk = (u1, u2) => {
+      const p = [face.dir[0], face.dir[1], face.dir[2]];
+      p[t1] += u1;
+      p[t2] += u2;
+      return p;
+    };
+    return [mk(o1, 0), mk(0, o2), mk(o1, o2)];
+  });
+});
+
+// 缓存尺寸：区块四周各垫 1 格（18×256×18），AO/剔除查表全走本地数组
+const PAD = CHUNK_SIZE + 2; // 18
+
 export class ChunkMeshBuilder {
   constructor(world, atlasTexture, atlasUV, waterTexture) {
     this.world = world;
     this.atlasTexture = atlasTexture;
     this.atlasUV = atlasUV;
     this.waterTexture = waterTexture;  // 独立水纹理（RepeatWrapping，世界坐标 UV）
+
+    // 共享材质：跨区块复用（此前每次 build 新建材质且从不释放，存在泄漏）；
+    // geometry 仍按区块创建/释放，材质生命周期与 builder 一致。
+    // 体素光照接管方块明暗（天光×昼夜 + 方块光暖色），材质用 Basic 避开场景光二次照明
+    this.solidMaterial = new THREE.MeshBasicMaterial({
+      map: this.atlasTexture,
+      vertexColors: true,
+      alphaTest: 0.1,
+      transparent: false,
+      side: THREE.FrontSide
+    });
+    applyVoxelLight(this.solidMaterial);
+    this.waterMaterial = new THREE.MeshBasicMaterial({
+      map: this.waterTexture,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.7,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    applyVoxelLight(this.waterMaterial);
+    this.lightMaterial = new THREE.MeshBasicMaterial({
+      map: this.atlasTexture,
+      side: THREE.FrontSide,
+      alphaTest: 0.1,
+    });
+
+    // 局部方块缓存 scratch（跨构建复用，避免每帧分配 83KB）
+    this._cache = new Uint8Array(PAD * CHUNK_HEIGHT * PAD);
+    this._curChunk = null;
+    this._opaqueLUT = new Uint8Array(256);
   }
 
   // 判断方块面是否可见
@@ -48,12 +108,84 @@ export class ChunkMeshBuilder {
     return def.transparent;
   }
 
+  // 缓存索引：x,z ∈ -1..16，y ∈ 0..255（越界 y 由调用方处理）
+  _cidx(x, y, z) {
+    return (y * PAD + z + 1) * PAD + x + 1;
+  }
+
+  // 采样缓存方块（y 越界视为空气）
+  _solidAt(x, y, z) {
+    if (y < 0 || y >= CHUNK_HEIGHT) return 0;
+    return this._cache[(y * PAD + z + 1) * PAD + x + 1];
+  }
+
+  // 天光采样：本地格直读区块光数组，边界格走 world（未加载按露天 15）
+  _skyAt(x, y, z) {
+    if (y >= CHUNK_HEIGHT) return 15;
+    if (y < 0) return 0;
+    const chunk = this._curChunk;
+    if (x >= 0 && x < CHUNK_SIZE && z >= 0 && z < CHUNK_SIZE) {
+      return chunk.getSky(x, y, z);
+    }
+    return this.world.getSkyLight(chunk.cx * CHUNK_SIZE + x, y, chunk.cz * CHUNK_SIZE + z);
+  }
+
+  // 方块光采样（同上，未加载按 0）
+  _blockLAt(x, y, z) {
+    if (y < 0 || y >= CHUNK_HEIGHT) return 0;
+    const chunk = this._curChunk;
+    if (x >= 0 && x < CHUNK_SIZE && z >= 0 && z < CHUNK_SIZE) {
+      return chunk.getBlockLight(x, y, z);
+    }
+    return this.world.getBlockLightAt(chunk.cx * CHUNK_SIZE + x, y, chunk.cz * CHUNK_SIZE + z);
+  }
+
+  // 填充局部缓存：内部直接拷贝，边界查 world
+  _fillCache(chunk) {
+    const cache = this._cache;
+    const blocks = chunk.blocks;
+    const ox = chunk.cx * CHUNK_SIZE;
+    const oz = chunk.cz * CHUNK_SIZE;
+    for (let y = 0; y < CHUNK_HEIGHT; y++) {
+      for (let z = -1; z <= CHUNK_SIZE; z++) {
+        const rowBase = (y * PAD + z + 1) * PAD;
+        if (z >= 0 && z < CHUNK_SIZE) {
+          // 内部整行快速拷贝
+          const src = (y * CHUNK_SIZE + z) * CHUNK_SIZE;
+          cache.set(blocks.subarray(src, src + CHUNK_SIZE), rowBase + 1);
+          // x 方向边界
+          cache[rowBase] = this.world.getBlock(ox - 1, y, oz + z);
+          cache[rowBase + PAD - 1] = this.world.getBlock(ox + CHUNK_SIZE, y, oz + z);
+        } else {
+          // z 方向边界整行（含四角）
+          for (let x = -1; x <= CHUNK_SIZE; x++) {
+            cache[rowBase + x + 1] = this.world.getBlock(ox + x, y, oz + z);
+          }
+        }
+      }
+    }
+  }
+
+  // 刷新不透明 LUT（与面剔除一致的遮挡定义：非 transparent 且非 fluid）
+  _refreshOpaqueLUT() {
+    const lut = this._opaqueLUT;
+    for (let id = 1; id < 256; id++) {
+      const def = BlockRegistry.getById(id);
+      lut[id] = def && !def.transparent && !def.fluid ? 1 : 0;
+    }
+  }
+
   build(chunk) {
+    this._curChunk = chunk;
+    this._fillCache(chunk);
+    this._refreshOpaqueLUT();
+
     const positions = [];
     const normals = [];
     const uvs = [];
     const indices = [];
     const colors = [];
+    const voxLight = []; // solid 顶点体素光 (skyL, blockL) 归一化
     let idx = 0;
 
     const waterPositions = [];
@@ -61,6 +193,7 @@ export class ChunkMeshBuilder {
     const waterUvs = [];
     const waterIndices = [];
     const waterColors = [];
+    const waterVoxLight = [];
     let wIdx = 0;
 
     const lightPos = [];
@@ -78,37 +211,18 @@ export class ChunkMeshBuilder {
     // 的 chunk 一旦重建就 ReferenceError，rAF 链断裂画面冻结（阶段 9 修复）。
     const yOff = 0.001;
 
-    const getBlock = (x, y, z) => {
-      if (x < 0 || x >= CHUNK_SIZE || z < 0 || z >= CHUNK_SIZE) {
-        return this.world.getBlock(chunk.cx * CHUNK_SIZE + x, y, chunk.cz * CHUNK_SIZE + z);
-      }
-      if (y < 0 || y >= CHUNK_HEIGHT) return 0;
-      return chunk.get(x, y, z);
-    };
-
-    const pushFace = (targetPos, targetNorm, targetUv, targetIdx, startIdx, posArr, nrmArr, uvArr, face, uv, yOff, isCross = false) => {
-      for (let c = 0; c < 4; c++) {
-        const [cx, cy, cz] = posArr[c];
-        targetPos.push(cx, cy + (cy === 1 && !isCross ? yOff : 0), cz);
-        targetNorm.push(nrmArr[c][0], nrmArr[c][1], nrmArr[c][2]);
-      }
-      targetUv.push(uvArr[0], uvArr[1], uvArr[2], uvArr[3], uvArr[4], uvArr[5], uvArr[6], uvArr[7]);
-      targetIdx.push(startIdx, startIdx + 1, startIdx + 2, startIdx + 2, startIdx + 1, startIdx + 3);
-      return startIdx + 4;
-    };
-
     for (let y = 0; y < CHUNK_HEIGHT; y++) {
       for (let z = 0; z < CHUNK_SIZE; z++) {
         for (let x = 0; x < CHUNK_SIZE; x++) {
-          const id = chunk.get(x, y, z);
+          const id = this._solidAt(x, y, z);
           if (id === 0) continue;
           const def = BlockRegistry.getById(id);
           if (!def) continue;
           if (def.renderType === 'cross') {
-            this.addCross(positions, normals, uvs, colors, indices, x, y, z, def, idx);
+            this.addCross(positions, normals, uvs, colors, indices, x, y, z, def, idx, voxLight);
             idx += 4;
             if (def.light >= 13) {
-              this.addCross(lightPos, lightNorm, lightUv, lightCol, lightIdx, x, y, z, def, lIdx);
+              this.addCross(lightPos, lightNorm, lightUv, lightCol, lightIdx, x, y, z, def, lIdx, null);
               lIdx += 4;
             }
             continue;
@@ -126,7 +240,7 @@ export class ChunkMeshBuilder {
           for (let f = 0; f < 6; f++) {
             const face = FACES[f];
             const nx = x + face.dir[0], ny = y + face.dir[1], nz = z + face.dir[2];
-            const neighborId = getBlock(nx, ny, nz);
+            const neighborId = this._solidAt(nx, ny, nz);
             const neighborDef = BlockRegistry.getById(neighborId);
 
             // 面剔除
@@ -144,19 +258,49 @@ export class ChunkMeshBuilder {
             const texName = def[face.uvFace] || def.side;
             const uv = this.atlasUV.get(texName) || { u0: 0, v0: 0, u1: 1, v1: 1 };
             const corners = faceCorners[f];
+            const faceLight = FACE_LIGHT[f];
 
-            // 光照系数（简单 AO：顶面最亮，底面最暗）
-            let light = 1.0;
-            if (f === 2) light = 1.0;
-            else if (f === 3) light = 0.5;
-            else if (f === 0 || f === 1) light = 0.7;
-            else light = 0.85;
+            // 逐顶点 AO + 平滑体素光照：面外相邻层的 侧1/侧2/对角 三格
+            const a = [0, 0, 0, 0];
+            const skyV = [0, 0, 0, 0];
+            const blkV = [0, 0, 0, 0];
+            if (!isWater) {
+              const lut = this._opaqueLUT;
+              const samples = AO_SAMPLES[f];
+              // 面邻格（N）光值为平滑基准
+              const nSky = this._skyAt(nx, ny, nz);
+              const nBlk = this._blockLAt(nx, ny, nz);
+              for (let c = 0; c < 4; c++) {
+                const s = samples[c];
+                const s1 = lut[this._solidAt(x + s[0][0], y + s[0][1], z + s[0][2])];
+                const s2 = lut[this._solidAt(x + s[1][0], y + s[1][1], z + s[1][2])];
+                const cc = lut[this._solidAt(x + s[2][0], y + s[2][1], z + s[2][2])];
+                a[c] = (s1 && s2) ? 3 : s1 + s2 + cc;
+                // 平滑光照均值：N 必算，不透明格不参与，两侧全挡时对角也不参与
+                let skySum = nSky, blkSum = nBlk, cnt = 1;
+                if (!s1) { skySum += this._skyAt(x + s[0][0], y + s[0][1], z + s[0][2]); blkSum += this._blockLAt(x + s[0][0], y + s[0][1], z + s[0][2]); cnt++; }
+                if (!s2) { skySum += this._skyAt(x + s[1][0], y + s[1][1], z + s[1][2]); blkSum += this._blockLAt(x + s[1][0], y + s[1][1], z + s[1][2]); cnt++; }
+                if (!cc && !(s1 && s2)) { skySum += this._skyAt(x + s[2][0], y + s[2][1], z + s[2][2]); blkSum += this._blockLAt(x + s[2][0], y + s[2][1], z + s[2][2]); cnt++; }
+                skyV[c] = skySum / cnt / 15;
+                blkV[c] = blkSum / cnt / 15;
+              }
+            } else {
+              // 水侧面：取面邻格光
+              const nSky = this._skyAt(nx, ny, nz) / 15;
+              const nBlk = this._blockLAt(nx, ny, nz) / 15;
+              skyV[0] = skyV[1] = skyV[2] = skyV[3] = nSky;
+              blkV[0] = blkV[1] = blkV[2] = blkV[3] = nBlk;
+            }
+            const targetLight = isWater ? waterVoxLight : voxLight;
 
+            // 顶点色 = 面向系数 × AO；AO 各向异性时翻转对角线避免暗色斜纹
             for (let c = 0; c < 4; c++) {
               const [cx, cy, cz] = corners[c];
               targetPos.push(x + cx, y + cy, z + cz);
               targetNorm.push(face.dir[0], face.dir[1], face.dir[2]);
-              targetCol.push(light, light, light);
+              const l = faceLight * AO_CURVE[a[c]];
+              targetCol.push(l, l, l);
+              targetLight.push(skyV[c], blkV[c]);
             }
             // UV：水面/侧面/底面使用世界坐标平铺（1 unit per tile，RepeatWrapping）
             // 非水方块用图集子区域
@@ -185,8 +329,12 @@ export class ChunkMeshBuilder {
               // 图集 UV：顶点顺序为 [底,顶,底,顶]，让方块顶部对应纹理 v=v1（SVG 顶部）
               targetUv.push(uv.u0, uv.v0, uv.u0, uv.v1, uv.u1, uv.v0, uv.u1, uv.v1);
             }
-            // 索引
-            targetIdx.push(curIdx, curIdx + 1, curIdx + 2, curIdx + 2, curIdx + 1, curIdx + 3);
+            // 索引（AO 各向异性时换对角线：v1-v2 ↔ v0-v3，绕向不变）
+            if (!isWater && a[1] + a[2] > a[0] + a[3]) {
+              targetIdx.push(curIdx, curIdx + 1, curIdx + 3, curIdx, curIdx + 3, curIdx + 2);
+            } else {
+              targetIdx.push(curIdx, curIdx + 1, curIdx + 2, curIdx + 2, curIdx + 1, curIdx + 3);
+            }
             curIdx += 4;
 
             if (hasLight) {
@@ -206,7 +354,7 @@ export class ChunkMeshBuilder {
     }
 
     // 贪心合并水面（顶面），消除网格分界
-    wIdx = this._mergeWaterTops(waterTops, waterPositions, waterNormals, waterUvs, waterColors, waterIndices, wIdx, chunk);
+    wIdx = this._mergeWaterTops(waterTops, waterPositions, waterNormals, waterUvs, waterColors, waterVoxLight, waterIndices, wIdx, chunk);
 
     const meshes = {};
     if (positions.length) {
@@ -215,15 +363,9 @@ export class ChunkMeshBuilder {
       geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
       geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
       geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      geo.setAttribute('voxelLight', new THREE.Float32BufferAttribute(voxLight, 2));
       geo.setIndex(indices);
-      const mat = new THREE.MeshLambertMaterial({
-        map: this.atlasTexture,
-        vertexColors: true,
-        alphaTest: 0.1,
-        transparent: false,
-        side: THREE.FrontSide
-      });
-      meshes.solid = new THREE.Mesh(geo, mat);
+      meshes.solid = new THREE.Mesh(geo, this.solidMaterial);
       meshes.solid.position.set(chunk.cx * CHUNK_SIZE, 0, chunk.cz * CHUNK_SIZE);
     }
     if (waterPositions.length) {
@@ -232,16 +374,9 @@ export class ChunkMeshBuilder {
       geo.setAttribute('normal', new THREE.Float32BufferAttribute(waterNormals, 3));
       geo.setAttribute('uv', new THREE.Float32BufferAttribute(waterUvs, 2));
       geo.setAttribute('color', new THREE.Float32BufferAttribute(waterColors, 3));
+      geo.setAttribute('voxelLight', new THREE.Float32BufferAttribute(waterVoxLight, 2));
       geo.setIndex(waterIndices);
-      const mat = new THREE.MeshLambertMaterial({
-        map: this.waterTexture,
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.7,
-        side: THREE.DoubleSide,
-        depthWrite: false
-      });
-      meshes.water = new THREE.Mesh(geo, mat);
+      meshes.water = new THREE.Mesh(geo, this.waterMaterial);
       meshes.water.position.set(chunk.cx * CHUNK_SIZE, 0, chunk.cz * CHUNK_SIZE);
     }
     if (lightPos.length) {
@@ -250,19 +385,14 @@ export class ChunkMeshBuilder {
       geo.setAttribute('normal', new THREE.Float32BufferAttribute(lightNorm, 3));
       geo.setAttribute('uv', new THREE.Float32BufferAttribute(lightUv, 2));
       geo.setIndex(lightIdx);
-      const mat = new THREE.MeshBasicMaterial({
-        map: this.atlasTexture,
-        side: THREE.FrontSide,
-        alphaTest: 0.1,
-      });
-      meshes.light = new THREE.Mesh(geo, mat);
+      meshes.light = new THREE.Mesh(geo, this.lightMaterial);
       meshes.light.position.set(chunk.cx * CHUNK_SIZE, 0, chunk.cz * CHUNK_SIZE);
     }
     return meshes;
   }
 
   // 贪心合并水面顶面，消除方块边界网格
-  _mergeWaterTops(waterTops, wPos, wNorm, wUv, wCol, wIdx, startIdx, chunk) {
+  _mergeWaterTops(waterTops, wPos, wNorm, wUv, wCol, wVLight, wIdx, startIdx, chunk) {
     if (waterTops.length === 0) return startIdx;
     const WATER_Y_OFF = -0.1;
     const offX = chunk.cx * CHUNK_SIZE;
@@ -311,6 +441,11 @@ export class ChunkMeshBuilder {
           wPos.push(x0, sy, z0, x0, sy, z1, x1, sy, z0, x1, sy, z1);
           wNorm.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0);
           wCol.push(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
+          // 顶点体素光：取每角上方格（空气）的光
+          const cornerL = (cxr, czr) => {
+            wVLight.push(this._skyAt(cxr, y + 1, czr) / 15, this._blockLAt(cxr, y + 1, czr) / 15);
+          };
+          cornerL(x0, z0); cornerL(x0, z1); cornerL(x1, z0); cornerL(x1, z1);
           // UV：world-space 平铺，每世界单位 1 tile（水纹理 RepeatWrapping）
           // 顶点顺序 (x0,z0)(x0,z1)(x1,z0)(x1,z1) 对应 UV (u0,v0)(u0,v1)(u1,v0)(u1,v1)
           wUv.push(x0 + offX, z0 + offZ, x0 + offX, z1 + offZ, x1 + offX, z0 + offZ, x1 + offX, z1 + offZ);
@@ -322,19 +457,22 @@ export class ChunkMeshBuilder {
     return idx;
   }
 
-  // 十字形渲染（火把/花）
-  addCross(positions, normals, uvs, colors, indices, x, y, z, def, idx) {
+  // 十字形渲染（火把/花）；voxLight 非空时写入自身格光照（发光体 light mesh 传 null 跳过）
+  addCross(positions, normals, uvs, colors, indices, x, y, z, def, idx, voxLight) {
     const texName = def.side;
     const uv = this.atlasUV.get(texName) || { u0: 0, v0: 0, u1: 1, v1: 1 };
     const corners = [
       [[0,0,0],[0,1,0],[1,0,1],[1,1,1]],
       [[1,0,0],[1,1,0],[0,0,1],[0,1,1]]
     ];
+    const skyL = voxLight ? this._skyAt(x, y, z) / 15 : 0;
+    const blkL = voxLight ? this._blockLAt(x, y, z) / 15 : 0;
     for (const cross of corners) {
       for (const [cx, cy, cz] of cross) {
         positions.push(x + cx, y + cy, z + cz);
         normals.push(0, 1, 0);
         colors.push(1, 1, 1);
+        if (voxLight) voxLight.push(skyL, blkL);
       }
       uvs.push(uv.u0, uv.v0, uv.u0, uv.v1, uv.u1, uv.v0, uv.u1, uv.v1);
       indices.push(idx, idx + 1, idx + 2, idx + 2, idx + 1, idx + 3);
