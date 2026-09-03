@@ -28,10 +28,17 @@ npm install --prefix server ws   # 联机服务器依赖
 ### 启动开发服务器
 
 ```bash
+# Windows (PowerShell)
 .\start.cmd start      # 启动 Vite dev server → http://127.0.0.1:5173
 .\start.cmd stop       # 停止
 .\start.cmd restart    # 重启
 .\start.cmd status     # 查看状态
+
+# Linux / macOS
+./start.sh start       # 启动 Vite dev server（默认动作，可省略参数）
+./start.sh stop
+./start.sh restart
+./start.sh status
 ```
 
 浏览器打开 `http://127.0.0.1:5173` 即可开始单机游戏。
@@ -60,8 +67,13 @@ npm run preview        # 预览构建产物
 ### 1. 启动房间服务器
 
 ```bash
-.\start.cmd server     # 启动联机服务器 → ws://0.0.0.0:3001/ws
+# Windows (PowerShell)
+.\start.cmd server       # 启动联机服务器 → ws://0.0.0.0:3001/ws
 .\start.cmd server-stop  # 停止
+
+# Linux / macOS
+./start.sh server        # 启动联机服务器（缺依赖时自动在 server/ 下 npm install）
+./start.sh server-stop   # 停止
 ```
 
 > Windows 首次监听可能弹出防火墙授权，需放行 TCP 3001。
@@ -154,7 +166,8 @@ project-mc/
 │   └── client-sim.mjs   # 双端验证模拟客户端
 ├── docs/
 │   └── lan-multiplayer-design.md  # 局域网联机设计文档（含分阶段路线）
-├── start.cmd            # 开发/联机服务器启停脚本
+├── start.cmd            # 开发/联机服务器启停脚本（Windows）
+├── start.sh             # 开发/联机服务器启停脚本（Linux/macOS，对标 start.cmd）
 └── .gitignore
 ```
 

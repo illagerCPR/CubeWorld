@@ -8,24 +8,33 @@
 ## 开发命令
 
 ```bash
+# Windows (PowerShell)
 .\start.cmd start    # 启动 Vite 开发服务器 (127.0.0.1:5173)，后台常驻
 .\start.cmd stop     # 停止服务器
 .\start.cmd restart  # 重启
 .\start.cmd status   # 查看是否在跑
+
+# Linux / macOS
+./start.sh start     # 同上（默认动作，可省略参数）
+./start.sh stop      # 停止服务器
+./start.sh restart   # 重启
+./start.sh status    # 查看是否在跑
+
 npm run build        # 生产构建
 npm run preview      # 预览构建产物
 node --check <file>  # 语法检查（唯一可自动化验证手段）
 ```
 
-- 不走 `npm run dev`：`start.cmd` 直接后台拉起 `node node_modules\vite\bin\vite.js`，最小化窗口标题 `vite-dev-server`。端口 5173 无响应时先 `.\start.cmd status`，必要时 `restart`。
+- 不走 `npm run dev`：`start.cmd`（Windows，最小化窗口标题 `vite-dev-server`）/ `start.sh`（Linux，`nohup` 后台常驻 + 日志 `dev-out.log`/`dev-err.log`）都直接后台拉起 `node node_modules/vite/bin/vite.js`。端口 5173 无响应时先 `status`，必要时 `restart`。
 - 无测试框架、无 lint、无 typecheck。修改后必须 `node --check` 改动的每个文件，再用浏览器/playwright 手测。
 - Vite 5 + Three.js 0.160，ESM 原生导入，无打包工具链额外配置。
 
 ## 验证 / playwright-cli
 
-- 不要直接 `playwright-cli open <url>`（启动失败）。要用带 `.cmd` 扩展的完整路径：
+- （Windows）不要直接 `playwright-cli open <url>`（启动失败）。要用带 `.cmd` 扩展的完整路径：
   `& "C:\Users\illag\AppData\Roaming\npm\playwright-cli.cmd" reload|click|eval|console <args>`
-- `playwright-cli eval` 中的字符串字面量常被 PowerShell 吃掉引号/反引号；传含 `name: "torch"` 之类参数时改用 `String.fromCharCode(...)` 拼接，或把脚本写到临时文件再 `eval --filename`。
+- （Linux/macOS）直接 `playwright-cli reload|click|eval|console <args>`，无 `.cmd` 后缀问题。
+- `playwright-cli eval` 中的字符串字面量常被 PowerShell 吃掉引号/反引号（Windows）；传含 `name: "torch"` 之类参数时改用 `String.fromCharCode(...)` 拼接，或把脚本写到临时文件再 `eval --filename`。Linux/macOS 下 bash 引号规则正常，此陷阱不适用。
 - playwright 无 pointer lock 能力，ESC 暂停 / 死亡屏幕等 pointer-lock 相关流程只能 `eval` 直接调用 `pauseMenu.show()`/`deathScreen.show()` 验证。
 - PNG 截图可直接用 Read 工具（read_image）查看，用于画面级渲染验证。
 
@@ -33,7 +42,7 @@ node --check <file>  # 语法检查（唯一可自动化验证手段）
 
 agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第二套浏览器冒烟工具**，与 playwright-cli 互补。核心差异：**能捕获指针锁 + 真实键盘/鼠标输入 → 单机与联机都能真实移动/转向/挖/放/聊天**（playwright-cli 做不到）。DOM UI 用快照 + `@eN` 语义引用（无需选择器），HUD DOM 直接桥接实时 3D 状态（坐标/生物群系/时间/准星方块）。详细实测见 `docs/agent-browser-eval.md`。
 
-**PowerShell 使用注意（每条命令都要记住）**：
+**PowerShell 使用注意（仅 Windows，每条命令都要记住；Linux/macOS 下会话变量用内联前缀 `AGENT_BROWSER_SESSION=my-session agent-browser <cmd>`，bash 不吃 `@` 但建议引号）**：
 - `$env:AGENT_BROWSER_SESSION` 在**每次 pwsh 调用间不保留**（新进程）——每条命令内联设置：`$env:AGENT_BROWSER_SESSION="my-session"; agent-browser <cmd>`。
 - `@eN` 参数会被 PowerShell 吃掉 `@`——必须加引号：`agent-browser click '@e7'`。
 - `eval` 要传**表达式** `"(...)"`；传函数 `() => {...}` 会返回函数本身（显示 `{}`）而非结果。等价于 playwright-cli 的 eval，可读任意 game 状态。
@@ -189,14 +198,15 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 
 ## 平台
 
-- Windows 开发环境，PowerShell 5.1。链式命令用 `;` + `if ($?)`，不要用 `&&`。
-- 路径含空格的可执行文件用 call 操作符 `& "..."`。
-- `Read` 工具对长文件有重复返回前几行的 bug，长文件请改 `Get-Content ... | Select-Object -Skip N -First M` 或 `Select-String`。
+- 双平台开发环境：Windows（PowerShell 5.1，脚本 `start.cmd`）与 Linux/macOS（bash，脚本 `start.sh`），两脚本动作与语义对标。
+- Windows：链式命令用 `;` + `if ($?)`，不要用 `&&`；路径含空格的可执行文件用 call 操作符 `& "..."`。
+- Linux/macOS：标准 bash 语法，链式命令可用 `&&`；后台常驻进程由 `start.sh` 用 `nohup` 封装（pid 兜底在 `.run/`，日志落 `*.log`，均已 gitignore）。
+- `Read` 工具对长文件有重复返回前几行的 bug，长文件请改用 `Read` 的 offset/limit 分段，或 `Select-String`（Windows）/ `grep`（Linux）。
 
 ## 局域网联机（LAN 多人，阶段 0-10 已完成）
 
 - **架构 thin-host（方案C）**：Node 服务器 = 房间管理 + 方块/掉落物账本 + 消息中继 + 时间权威；每个客户端本地自模拟世界（确定性生成 `TerrainGenerator(seed)`，不用 Math.random），只同步增量。消息键 `t`（type），`server/protocol.js` 集中定义；S2C 表见 `docs/lan-multiplayer-design.md` §7。
-- **端口**：服务器 TCP **3001**（`.\start.cmd server`），前端 5173（`.\start.cmd start`），管理面板 `http://127.0.0.1:3001/`。
+- **端口**：服务器 TCP **3001**（`.\start.cmd server` / `./start.sh server`），前端 5173（`.\start.cmd start` / `./start.sh start`），管理面板 `http://127.0.0.1:3001/`。
 - **多房间（阶段3）**：`RoomManager = Map<房间名, Room>`，同名房间 = 同世界，种子首次创建固定。`welcome.players` 恒为 `[]`，已有玩家经 join_room 里 `player_join` 重放。世界落盘 `server/store.js`（`server/world/<房间名>.json`，`server/*.json` 已 gitignore），重启恢复（hostId=null → 首个加入者成 host）。**换房（阶段5）**：游戏中 `/room <名>` 或 `switch_room` 直接换（保持连接，目标满则拒），客户端用新 seed 重启本地世界。
 - **怪物/红石（阶段2）**：方案①事件同步——host 权威生成 + 攻击位置纠正，掉落只由击杀侧发；红石方块状态同步 + 周期性状态缓解。
 - **玩家名着色**：`src/net/playerColor.js`（HUES 调色板）。
