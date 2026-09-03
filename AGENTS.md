@@ -235,6 +235,16 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 
 后续候选（见 `docs/lan-multiplayer-design.md` §11 阶段 11）：手持物挥动联动挖掘进度、远端玩家头顶快捷栏可视化（hotbar 数据已同步）、房间白名单/账号权限分级、插值延迟结合抖动方差。
 
+### CubeWorld 改造批次备忘（防回退）—— 改名/全景/粒子/物品重绘/视频设置
+
+- **仓库已改名 CubeWorld**（原 Web-MC），GitHub 仓库与本地 remote 均为新地址；**localStorage 存档前缀 `project-mc-save-` 特意不改**（改名会孤立所有浏览器现有存档）。物理目录 `project-mc/` 保留（会话工作目录依赖）。
+- **主菜单全景背景**：`src/render/Panorama.js`（app 级单例，main.js 创建并经 `menu.onShow/onHide` 联动启停）。固定种子 20250903 半径 3 区块小世界 + 独立 scene/camera，**全部区块建完才 ready**（无头软渲染按帧预算会露出半成品），构建期定期 `setTimeout(0)` 让出主线程；用共享 WebGLRenderer 渲染 + `Game.running` 早退双保险；菜单期体素光共享 uniform 由全景驱动（固定早上），**勿删这段**否则回菜单沿用上一局深夜亮度把菜单压黑。雾距必须拉远（Sky 默认 far=160 会把小世界整个泡进雾里）。激活期画布 CSS `blur(5px)+brightness(0.85)`，游戏期必须清除。
+- **粒子系统**：`src/render/ParticleSystem.js`（THREE.Points + 顶点色 + 对象池 1600 swap-with-last）。两个实例：`game.particles`（方块碎屑 size 0.12，生成时从图集 canvas 采样贴图像素色并按体素光衰减）/ `game.fireParticles`（火焰烟 size 0.09，自发光不衰减）。**新建型子系统**：`start()` 创建、`_disposeWorld()` dispose。爆炸碎屑经 `redstone.onBlockDestroyed` / `mobManager.onBlockDestroyed` 回调（Game.start 注入，回调内必须判空 `this.particles`）。熔岩点燃：`_updateWaterState` 判脚/眼在熔岩 → `player.onFire=3`（入水即灭），`_updateFireEffects` 每秒 1 血（低频伤害不走红屏）+ 火焰粒子 + `hud.setOnFire` 火屏滤镜。
+- **视频设置**：`src/core/Settings.js`（localStorage key `cubeworld-settings`，全局不按存档）+ `src/ui/VideoSettings.js`（**app 级单例**，PauseMenu 与 MenuScreen 共用）。渲染距离改的是 `game.settings.renderDistance`（旧 RENDER_DISTANCE 常量已删）；平滑光照开关写 `ChunkMesh.js` 导出的 `RenderQuality`，**切换后必须 `world.markAllDirty()`**；MenuScreen 的入口按钮用**事件委托挂构造期**（render() 重建 innerHTML 后仍有效，勿改回 per-render 绑定）。VideoSettings 的 ESC 用 document capture 拦截（stopPropagation），防止同一次按键穿透到暂停菜单切换。
+- **物品重绘**：`ItemDefs.js` 用 `art()` 助手（g.s/g.r/g.d/g.h 对角柄/g.spi 撒点）+ `P` 调色板（[亮,基,暗] 三色纪律）；**撒点必须用确定性 `rng(seed)`**，勿回退 Math.random（破坏确定性生成约定）。注册名与 def 字段（stack/food/tool/tier/durability/damage）是存档/合成兼容面，**不得改动**。
+- **Hud 准星**：构造期默认 display:none（原 updateVisibility('creative') 初始化会让准星在主菜单可见）；进游戏后 update()/updateVisibility() 按模式接管。
+- **无头截图伪影**：本环境 agent-browser screenshot 对持续渲染的 WebGL 画布可能在数秒后冻结在旧帧（合成器表面不更新），**验证全景/粒子等画面以 `gl.readPixels` 帧缓冲导出为准**（eval 内 render→readPixels→小画布→toDataURL），DOM 截图不受影响。
+
 ### 阶段 10 关键实现备忘（防回退）—— 手持物 3D 化 + 快捷栏同步 + 掉落归属锁 + 多账号 + RTT
 
 - **手持物 3D 化**：`src/render/HeldItemMesh.js`（模板缓存进程级，clone 复用；方块=六面贴图立方体、`renderType==='cross'` 方块=交叉双面薄片、物品=双面薄片；材质 `MeshLambertMaterial` + `emissiveMap` 同贴图 0.35 自发光，夜晚可见；**勿改回 sprite billboard**）。`src/render/FirstPersonHand.js` 第一人称：**camera 必须加入 scene（`scene.add(camera)`）其子节点才渲染**（`Game.constructor` 一次性挂载，属共享型子系统——`start()` 里重置 `currentName=undefined` 强制重建）；按住左键自动连续挥动（0.3s 冷却），放置/食用/命中命中时 `hand.swing()`。`RemotePlayer._setHeld` 挂 `armR.pivot`（dispose 只 remove 不 dispose，几何/材质为共享缓存）。
