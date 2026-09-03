@@ -58,6 +58,7 @@ export class MobManager {
     this.onDropTaken = null;  // 联机拾取回调 (dropId) => void，由 Game 注入（通知服务器移除）
     this.getSelfId = null;    // 阶段10：返回本地玩家联机 id（归属锁判定），由 Game 注入；null=单机
     this.mobNet = null;       // 联机怪物事件接口（sendMobSpawn/sendMobAttack/sendMobDied），由 Game 注入
+    this.onBlockDestroyed = null; // 爆炸销毁方块回调 (x,y,z,def)，由 Game 注入（碎屑粒子）
   }
 
   // 异步初始化：mob 用私有 skin atlas，不再注入全局 atlas
@@ -474,6 +475,7 @@ export class MobManager {
               const def = BlockRegistry.getById(id);
               if (def && def.hardness >= 0 && def.name !== 'bedrock') {
                 this.world.setBlock(bx, by, bz, 0);
+                if (this.onBlockDestroyed) this.onBlockDestroyed(bx, by, bz, def); // 碎屑粒子出口（Game 注入）
               }
             }
           }

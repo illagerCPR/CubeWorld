@@ -73,6 +73,20 @@ export class Hud {
     `;
     document.body.appendChild(this.underwaterOverlay);
 
+    // 着火屏幕滤镜（橙色边缘火光，onFire>0 时显示）
+    this.fireOverlay = document.createElement('div');
+    this.fireOverlay.style.cssText = `
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 5; opacity: 0;
+      background: radial-gradient(ellipse at center,
+        rgba(200, 80, 0, 0) 45%,
+        rgba(230, 100, 10, 0.30) 80%,
+        rgba(180, 60, 0, 0.45) 100%);
+      transition: opacity 0.25s ease-out;
+    `;
+    document.body.appendChild(this.fireOverlay);
+    this._onFireShown = false;
+
     // 初始全隐藏（主菜单不显示准星/血条）；进游戏后 update()/updateVisibility() 按模式设置
     this.el.style.display = 'none';
     this.xpBar.style.display = 'none';
@@ -82,6 +96,13 @@ export class Hud {
   // 水下滤镜开关（Game.update 按 inWater 每帧调用，on=false 时淡出）
   setUnderwater(on) {
     this.underwaterOverlay.style.opacity = on ? '1' : '0';
+  }
+
+  // 着火滤镜开关（同款幂等开关）
+  setOnFire(on) {
+    if (this._onFireShown === on) return;
+    this._onFireShown = on;
+    this.fireOverlay.style.opacity = on ? '1' : '0';
   }
 
   heartSvg(filled, half = false) {

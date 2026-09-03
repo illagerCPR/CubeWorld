@@ -27,6 +27,7 @@ export class RedstoneSystem {
     this.pendingUpdates = new Set(); // 待处理的坐标
     this.buttonTimers = new Map(); // "x,y,z" -> 剩余激活时间
     this.onStateChange = null;    // 红石源状态回调 (x,y,z,on) => void，由 Game 注入（联机广播）
+    this.onBlockDestroyed = null; // TNT 爆炸销毁方块回调 (x,y,z,def)，由 Game 注入（碎屑粒子）
   }
 
   key(x, y, z) { return `${x},${y},${z}`; }
@@ -273,6 +274,7 @@ export class RedstoneSystem {
             this.poweredBlocks.set(this.key(bx, by, bz), true);
           } else {
             this.world.setBlock(bx, by, bz, 0);
+            if (this.onBlockDestroyed) this.onBlockDestroyed(bx, by, bz, def); // 碎屑粒子出口（Game 注入）
           }
         }
       }

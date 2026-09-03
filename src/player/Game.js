@@ -27,6 +27,7 @@ import { VoxelLightUniforms } from '../render/VoxelLight.js';
 import { RedstoneSystem } from '../core/RedstoneSystem.js';
 import { SaveSystem } from '../core/SaveSystem.js';
 import { FirstPersonHand } from '../render/FirstPersonHand.js';
+import { ParticleSystem } from '../render/ParticleSystem.js';
 import { playerColorCss } from '../net/playerColor.js';
 
 // 触发方块/物品定义注册
@@ -136,6 +137,9 @@ export class Game {
     this.breakingProgress = 0;
     if (this.highlight) this.highlight.visible = false;
     if (this.breakMesh) this.breakMesh.visible = false;
+    // 粒子系统（新建型：随世界销毁）
+    if (this.particles) { this.particles.dispose(); this.particles = null; }
+    if (this.fireParticles) { this.fireParticles.dispose(); this.fireParticles = null; }
     // 旧 UI DOM
     if (this.hotbar) { this.hotbar.el.remove(); this.hotbar = null; }
     if (this.inventoryScreen) {
@@ -226,6 +230,16 @@ export class Game {
     // 水面独立纹理：RepeatWrapping + 世界坐标 UV 平铺，避免 chunk 边界方格
     this.waterTexture = await SVGTextures.buildRepeatTexture(allSvgs['water'] || '', 'water');
     this.chunkBuilder = new ChunkMeshBuilder(this.world, atlasTexture, atlasUV, this.waterTexture);
+    // 粒子系统（新建型：每次 start 重建，_disposeWorld 释放）
+    this.particles = new ParticleSystem(this.renderer.scene, atlasTexture, atlasUV, 0.12);
+    this.fireParticles = new ParticleSystem(this.renderer.scene, atlasTexture, atlasUV, 0.09);
+    // 爆炸销毁方块时的碎屑粒子出口（TNT / 苦力怕爆炸共用）
+    this.redstone.onBlockDestroyed = (x, y, z, def) => {
+      if (this.particles) this.particles.burstBlockBreak(x + 0.5, y, z + 0.5, def, this.world, 10);
+    };
+    this.mobManager.onBlockDestroyed = (x, y, z, def) => {
+      if (this.particles) this.particles.burstBlockBreak(x + 0.5, y, z + 0.5, def, this.world, 8);
+    };
     // 用图集初始化怪物材质
     this.mobManager.atlasUV = atlasUV;
     this.mobManager.atlasTexture = atlasTexture;
@@ -446,6 +460,49 @@ export class Game {
       } else {
         p.airTicks = Math.min(300, p.airTicks + 10);
       }
+      // 熔岩点燃（离开熔岩后延续 onFire 秒再熄灭）；入水即灭火
+      if (p.inWater) {
+        p.onFire = 0;
+      } else {
+        const feetDef = BlockRegistry.getById(this.world.getBlock(bx, Math.floor(p.position.y + 0.2), bz));
+        const inLava = !!(def && def.fluid && def.name === 'lava') || !!(feetDef && feetDef.fluid && feetDef.name === 'lava');
+        if (inLava) p.onFire = 3;
+      }
+    }
+  }
+
+  // 燃烧表现：着火实体喷火焰+烟，玩家着火叠屏幕火光
+  _updateFireEffects(dt) {
+    // 玩家自身
+    const p = this.player;
+    if (p.onFire > 0) {
+      if (this.fireParticles) {
+        this.fireParticles.flameBox(p.position.x, p.position.y + 0.3, p.position.z, 0.5, 1.4, 0.5);
+      }
+      if (this.hud) this.hud.setOnFire(true);
+      p.onFire = Math.max(0, p.onFire - dt);
+      // 火焰灼烧：每秒 1 血（生存；低频伤害按约定不走红屏）
+      if (p.survival) {
+        this._fireTick = (this._fireTick || 0) + dt;
+        if (this._fireTick >= 1) {
+          this._fireTick = 0;
+          p.health = Math.max(0, p.health - 1);
+        }
+      }
+    } else {
+      this._fireTick = 0;
+      if (this.hud) this.hud.setOnFire(false);
+    }
+    // 燃烧中的怪物（日光燃烧的僵尸/骷髅等）
+    if (this.fireParticles && this.mobManager && this.mobManager.mobs) {
+      const emit = (this.frame % 5) === 0; // ~0.3s 一波
+      if (emit) {
+        for (const mob of this.mobManager.mobs) {
+          if (!mob.isBurning || mob.dead) continue;
+          this.fireParticles.flameBox(mob.position.x, mob.position.y + 0.2, mob.position.z,
+            Math.max(0.5, mob.width * 0.8), mob.height * 0.95, Math.max(0.5, mob.width * 0.8));
+        }
+      }
     }
   }
 
@@ -532,6 +589,11 @@ export class Game {
     }
     // 水下屏幕滤镜（HUD 蓝色薄纱）
     this.hud.setUnderwater(this.player.inWater);
+
+    // 粒子系统推进
+    if (this.particles) this.particles.update(dt);
+    if (this.fireParticles) this.fireParticles.update(dt);
+    this._updateFireEffects(dt);
 
     // 水面流动（水纹理 UV 沿 v 滚动，RepeatWrapping）
     if (this.waterTexture) {
@@ -768,6 +830,7 @@ export class Game {
       if (!def) return;
       
       if (this.player.creative) {
+        if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
         this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
         if (this.redstone) this.redstone.onBlockChange(hit.block.x, hit.block.y, hit.block.z);
         this.controls.mouseLeft = false;
@@ -779,7 +842,14 @@ export class Game {
         this.breakMesh.visible = true;
         this.breakMesh.position.set(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5);
         this.breakMesh.material.opacity = Math.min(0.5, this.breakingProgress * 0.5);
+        // 挖掘中小碎粒（每 0.25s 一两粒）
+        this._miningPuffTimer = (this._miningPuffTimer || 0) + dt;
+        if (this._miningPuffTimer >= 0.25 && this.particles) {
+          this._miningPuffTimer = 0;
+          this.particles.puffMining(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
+        }
         if (this.breakingProgress >= 1) {
+          if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
           this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
           if (this.redstone) this.redstone.onBlockChange(hit.block.x, hit.block.y, hit.block.z);
           this.breakingProgress = 0;
