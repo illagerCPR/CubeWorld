@@ -1,4 +1,4 @@
-# agent-browser 引入实测评估报告（Web-MC）
+# agent-browser 引入实测评估报告（CubeWorld，原 Web-MC）
 
 > 目的：用实测（而非推测）评估把 agent-browser 引入本项目测试体系带来的变化。
 > 方法：同一台机器、同一个 Vite 开发服务器（http://127.0.0.1:5173），同一套"菜单建档 → 进世界 → 世界内交互"流程，分别用现有工具（playwright-cli）和 agent-browser 各跑一遍，对比能力与摩擦点。
@@ -24,7 +24,7 @@
 
 | 能力 | 结果 | 证据 |
 |---|---|---|
-| 打开页面 / 读标题 | ✅ | goto 5173 → title "Project-MC" |
+| 打开页面 / 读标题 | ✅ | goto 5173 → title "CubeWorld"（实测时为旧名 Project-MC） |
 | DOM 快照读菜单 | ✅ | snapshot 输出 6 槽位 + 模式按钮 + 联机面板 |
 | 点击菜单建档 | ⚠️ 可用但有摩擦 | ref `e8` 点击成功；但 CSS 选择器 `data-slot="1"` 被 PowerShell 吃掉引号 → 非法选择器报错（复现 AGENTS.md 记载的坑） |
 | 定位主 canvas | ❌ 摩擦 | `canvas` 命中 10 个元素（主渲染 + 9 个 UI 图标小 canvas）→ strict mode 违规，需 `canvas[data-engine]` 精确定位 |

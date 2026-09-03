@@ -1,5 +1,6 @@
 // MenuScreen.js -- 主菜单 + 存档槽选择
 import { SaveSystem, MAX_SAVE_SLOTS } from '../core/SaveSystem.js';
+import logoUrl from '../../res/logo-cubeworld-js-edition.png';
 
 const MODE_LABEL = { creative: '创造模式', survival: '生存模式', spectator: '旁观模式' };
 const MODE_COLOR = {
@@ -63,8 +64,10 @@ export class MenuScreen {
     }
 
     this.el.innerHTML = `
-      <div style="font-size: 44px; font-weight: bold; text-shadow: 3px 3px 0 #000; letter-spacing: 4px; margin-bottom: 4px;">PROJECT-MC</div>
-      <div style="font-size: 13px; color: #ccc; margin-bottom: 16px;">网页版 3D Minecraft · 选择存档</div>
+      <img src="${logoUrl}" alt="CubeWorld" style="
+        width: 500px; max-width: 92vw; image-rendering: pixelated;
+        filter: drop-shadow(5px 6px 0 rgba(0,0,0,0.45)); margin-bottom: 2px;" />
+      <div style="font-size: 13px; color: #ccc; margin-bottom: 16px;">JavaScript 版 3D 沙盒游戏 · 选择存档</div>
       <div style="display:flex; flex-direction:column; margin-bottom:16px;">
         ${slotsHtml}
       </div>

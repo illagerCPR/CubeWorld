@@ -1,8 +1,8 @@
-# Project-MC
+# CubeWorld（JavaScript Edition）
 
-[![CI](https://github.com/illagerCPR/Web-MC/actions/workflows/ci.yml/badge.svg)](https://github.com/illagerCPR/Web-MC/actions/workflows/ci.yml)
+[![CI](https://github.com/illagerCPR/CubeWorld/actions/workflows/ci.yml/badge.svg)](https://github.com/illagerCPR/CubeWorld/actions/workflows/ci.yml)
 
-网页版 3D Minecraft（Web 版我的世界），基于 **Vite 5 + Three.js 0.160** 的纯前端体素游戏，支持**单机存档**与**局域网联机**。
+网页版 3D 沙盒游戏（Web 版我的世界），基于 **Vite 5 + Three.js 0.160** 的纯前端体素游戏，支持**单机存档**与**局域网联机**。仓库：`https://github.com/illagerCPR/CubeWorld.git`（原 Project-MC / Web-MC）。
 
 - 程序化生成无限世界（确定性种子，联机时各端生成一致地形）
 - 创造 / 生存 / 旁观三种模式
@@ -143,7 +143,7 @@ node server/test-stage10.mjs # 阶段 10 回归（41 项：RTT 回显/完整快�
 ## 项目结构
 
 ```
-project-mc/
+CubeWorld/
 ├── src/
 │   ├── main.js          # 入口：Game + MenuScreen + NetworkManager
 │   ├── player/          # Game(中枢/主循环)、Player、Controls、Physics、Inventory、Raycast
