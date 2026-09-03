@@ -19,6 +19,9 @@ server/*.json
 !server/package.json
 !server/package-lock.json
 
+# 启动脚本运行时状态（pid 文件等）
+.run/
+
 # 系统/编辑器
 .DS_Store
 Thumbs.db
