@@ -18,7 +18,9 @@ const FACE_SRCS = [pxImg, nxImg, pyImg, nyImg, pzImg, nzImg]; // CubeTexture 面
 export class Panorama {
   constructor(game) {
     this.game = game;
-    this.renderer = game.renderer;
+    // 必须取底层 THREE.WebGLRenderer：game.renderer 是 Renderer 包装类，
+    // 其 render() 无参且固定渲染游戏场景——传 (scene, camera) 会被静默忽略导致菜单白屏
+    this.renderer = game.renderer.renderer;
     this.active = true;          // 菜单可见时 true（main.js 经 MenuScreen.onShow/onHide 切换）
     this.ready = false;
     this.scene = new THREE.Scene();
