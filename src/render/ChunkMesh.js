@@ -36,6 +36,12 @@ const FACE_LIGHT = [0.7, 0.7, 1.0, 0.5, 0.85, 0.85];
 // AO 档位 → 顶点色乘子（0=无遮蔽，3=两侧+对角全遮蔽）
 const AO_CURVE = [1.0, 0.8, 0.62, 0.45];
 
+// 渲染质量开关（视频设置面板写入；改动后需 markAllDirty 重建区块网格生效）
+export const RenderQuality = {
+  smoothLighting: true,  // 平滑光照（四角取邻格均值）
+  aoEnabled: true,       // 环境光遮蔽
+};
+
 // 逐面逐顶点的 AO 采样偏移（相对方块坐标）：[side1, side2, corner]
 // 由 FACES + faceCorners 在模块加载时静态推导，热循环零分配
 const AO_SAMPLES = FACES.map((face, f) => {
@@ -270,19 +276,29 @@ export class ChunkMeshBuilder {
               // 面邻格（N）光值为平滑基准
               const nSky = this._skyAt(nx, ny, nz);
               const nBlk = this._blockLAt(nx, ny, nz);
-              for (let c = 0; c < 4; c++) {
-                const s = samples[c];
-                const s1 = lut[this._solidAt(x + s[0][0], y + s[0][1], z + s[0][2])];
-                const s2 = lut[this._solidAt(x + s[1][0], y + s[1][1], z + s[1][2])];
-                const cc = lut[this._solidAt(x + s[2][0], y + s[2][1], z + s[2][2])];
-                a[c] = (s1 && s2) ? 3 : s1 + s2 + cc;
-                // 平滑光照均值：N 必算，不透明格不参与，两侧全挡时对角也不参与
-                let skySum = nSky, blkSum = nBlk, cnt = 1;
-                if (!s1) { skySum += this._skyAt(x + s[0][0], y + s[0][1], z + s[0][2]); blkSum += this._blockLAt(x + s[0][0], y + s[0][1], z + s[0][2]); cnt++; }
-                if (!s2) { skySum += this._skyAt(x + s[1][0], y + s[1][1], z + s[1][2]); blkSum += this._blockLAt(x + s[1][0], y + s[1][1], z + s[1][2]); cnt++; }
-                if (!cc && !(s1 && s2)) { skySum += this._skyAt(x + s[2][0], y + s[2][1], z + s[2][2]); blkSum += this._blockLAt(x + s[2][0], y + s[2][1], z + s[2][2]); cnt++; }
-                skyV[c] = skySum / cnt / 15;
-                blkV[c] = blkSum / cnt / 15;
+              if (RenderQuality.smoothLighting || RenderQuality.aoEnabled) {
+                for (let c = 0; c < 4; c++) {
+                  const s = samples[c];
+                  const s1 = lut[this._solidAt(x + s[0][0], y + s[0][1], z + s[0][2])];
+                  const s2 = lut[this._solidAt(x + s[1][0], y + s[1][1], z + s[1][2])];
+                  const cc = lut[this._solidAt(x + s[2][0], y + s[2][1], z + s[2][2])];
+                  a[c] = RenderQuality.aoEnabled ? ((s1 && s2) ? 3 : s1 + s2 + cc) : 0;
+                  if (RenderQuality.smoothLighting) {
+                    // 平滑光照均值：N 必算，不透明格不参与，两侧全挡时对角也不参与
+                    let skySum = nSky, blkSum = nBlk, cnt = 1;
+                    if (!s1) { skySum += this._skyAt(x + s[0][0], y + s[0][1], z + s[0][2]); blkSum += this._blockLAt(x + s[0][0], y + s[0][1], z + s[0][2]); cnt++; }
+                    if (!s2) { skySum += this._skyAt(x + s[1][0], y + s[1][1], z + s[1][2]); blkSum += this._blockLAt(x + s[1][0], y + s[1][1], z + s[1][2]); cnt++; }
+                    if (!cc && !(s1 && s2)) { skySum += this._skyAt(x + s[2][0], y + s[2][1], z + s[2][2]); blkSum += this._blockLAt(x + s[2][0], y + s[2][1], z + s[2][2]); cnt++; }
+                    skyV[c] = skySum / cnt / 15;
+                    blkV[c] = blkSum / cnt / 15;
+                  } else {
+                    skyV[c] = nSky / 15;
+                    blkV[c] = nBlk / 15;
+                  }
+                }
+              } else {
+                // 平滑光照与 AO 全关：四角统一取面邻格光
+                for (let c = 0; c < 4; c++) { skyV[c] = nSky / 15; blkV[c] = nBlk / 15; }
               }
             } else {
               // 水侧面：取面邻格光

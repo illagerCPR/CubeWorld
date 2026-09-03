@@ -5,9 +5,14 @@ import { SaveSystem } from './core/SaveSystem.js';
 import { MenuScreen } from './ui/MenuScreen.js';
 import { NetworkManager } from './net/NetworkManager.js';
 import { Panorama } from './render/Panorama.js';
+import { VideoSettings } from './ui/VideoSettings.js';
 
 const app = document.getElementById('app');
 const game = new Game(app);
+
+// 视频设置面板（ESC 暂停菜单与主菜单共用的单例）
+const videoSettings = new VideoSettings(game);
+game.videoSettings = videoSettings;
 
 // 主菜单全景背景（原版 MC 风格：固定种子小世界 + 慢速旋转 + 画布模糊）
 const panorama = new Panorama(game);
@@ -26,6 +31,7 @@ const menu = new MenuScreen((mode, seed, loadData, slot, cheatsEnabled) => {
 // 菜单显隐联动全景启停（game.running 期间全景循环自身也会早退）
 menu.onHide = () => panorama.setActive(false);
 menu.onShow = () => panorama.setActive(true);
+menu.videoSettings = videoSettings; // 主菜单"视频设置"入口
 window.panorama = panorama; // 调试暴露
 
 game.onExit = () => {

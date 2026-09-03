@@ -107,6 +107,11 @@ export class World {
     return c.getBlockLight(gx - cx * CHUNK_SIZE, gy, gz - cz * CHUNK_SIZE);
   }
 
+  // 全部区块标记脏（视频设置改平滑光照/AO 后重建网格用）
+  markAllDirty() {
+    for (const [, c] of this.chunks) c.dirty = true;
+  }
+
   // 获取高度图（用于玩家生成位置）
   getHeightAt(wx, wz) {
     return this.generator.getBaseHeight(wx, wz);

@@ -24,6 +24,12 @@ export class MenuScreen {
       color: #fff; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
     `;
     document.body.appendChild(this.el);
+    // 视频设置入口：事件委托挂容器上（render() 重建 innerHTML 无需重绑；构造期只挂一次）
+    this.el.addEventListener('click', (e) => {
+      if (e.target && e.target.id === 'video-settings-btn' && this.videoSettings) {
+        this.videoSettings.show();
+      }
+    });
     this.render();
   }
 
@@ -80,6 +86,9 @@ export class MenuScreen {
         <button data-mode="creative" style="padding:10px 20px; font-size:14px; background:#4a8a4a; color:#fff; border:2px solid #2a5a2a; cursor:pointer; font-weight:bold;">创造模式</button>
         <button data-mode="survival" style="padding:10px 20px; font-size:14px; background:#8a4a4a; color:#fff; border:2px solid #5a2a2a; cursor:pointer; font-weight:bold;">生存模式</button>
         <button data-mode="spectator" style="padding:10px 20px; font-size:14px; background:#4a4a8a; color:#fff; border:2px solid #2a2a5a; cursor:pointer; font-weight:bold;">旁观模式</button>
+      </div>
+      <div style="margin-bottom: 16px;">
+        <button id="video-settings-btn" style="padding:8px 24px; font-size:13px; background:#3a3a3a; color:#fff; border:2px solid #5a5a5a; cursor:pointer; font-weight:bold;">⚙ 视频设置</button>
       </div>
       <div id="mc-cheats" style="margin-bottom: 16px; display:flex; align-items:center; gap:8px;">
         <label style="font-size:14px; cursor:pointer; display:flex; align-items:center; gap:6px;">

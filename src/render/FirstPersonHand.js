@@ -67,9 +67,10 @@ export class FirstPersonHand {
 
   update(dt, moving, sprinting) {
     if (!this.visible) return;
-    // 走路 bob（移动时幅度更大、频率更高）
+    // 走路 bob（移动时幅度更大、频率更高）；视频设置可关
+    const bobOn = !(this.game.settings && this.game.settings.viewBobbing === false);
     this.bobPhase += dt * (moving ? (sprinting ? 11 : 8) : 2.5);
-    const amp = moving ? 0.016 : 0.004;
+    const amp = bobOn ? (moving ? 0.016 : 0.004) : 0;
     const bobY = Math.sin(this.bobPhase * 2) * amp;
     const bobX = Math.cos(this.bobPhase) * amp * 1.4;
 

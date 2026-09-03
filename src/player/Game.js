@@ -28,6 +28,7 @@ import { RedstoneSystem } from '../core/RedstoneSystem.js';
 import { SaveSystem } from '../core/SaveSystem.js';
 import { FirstPersonHand } from '../render/FirstPersonHand.js';
 import { ParticleSystem } from '../render/ParticleSystem.js';
+import { loadSettings, applySettings } from '../core/Settings.js';
 import { playerColorCss } from '../net/playerColor.js';
 
 // 触发方块/物品定义注册
@@ -35,8 +36,6 @@ import '../blocks/BlockDefs.js';
 import '../items/ItemDefs.js';
 import { BlockSVGDefinitions } from '../blocks/BlockDefs.js';
 import { ItemSVGDefinitions } from '../items/ItemDefs.js';
-
-const RENDER_DISTANCE = 6; // 区块半径
 
 export class Game {
   constructor(container) {
@@ -49,6 +48,9 @@ export class Game {
     this.inventory = new Inventory();
     this.hud = new Hud();
     this.infoBar = new InfoBar();
+    // 视频设置：加载并实时套用（FOV/亮度/云/灵敏度/AO 等，主菜单期即可生效）
+    this.settings = loadSettings();
+    applySettings(this);
     this.raycast = null;
     this.chunkBuilder = null;
     this.world = null;
@@ -240,6 +242,8 @@ export class Game {
     this.mobManager.onBlockDestroyed = (x, y, z, def) => {
       if (this.particles) this.particles.burstBlockBreak(x + 0.5, y, z + 0.5, def, this.world, 8);
     };
+    // 新建的粒子系统按视频设置套密度（其余项已在构造时套用，跨存档不变）
+    applySettings(this);
     // 用图集初始化怪物材质
     this.mobManager.atlasUV = atlasUV;
     this.mobManager.atlasTexture = atlasTexture;
@@ -686,19 +690,20 @@ export class Game {
   updateChunks() {
     const pcx = Math.floor(this.player.position.x / CHUNK_SIZE);
     const pcz = Math.floor(this.player.position.z / CHUNK_SIZE);
-    
+    const renderDistance = this.settings ? this.settings.renderDistance : 6;
+
     // 加载
-    for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
-      for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
+    for (let dx = -renderDistance; dx <= renderDistance; dx++) {
+      for (let dz = -renderDistance; dz <= renderDistance; dz++) {
         const cx = pcx + dx, cz = pcz + dz;
         if (!this.world.getChunk(cx, cz)) {
           this.world.ensureChunk(cx, cz);
         }
       }
     }
-    
+
     // 卸载（距离过远）
-    const maxDist = RENDER_DISTANCE + 2;
+    const maxDist = renderDistance + 2;
     for (const [key, chunk] of this.world.chunks) {
       const dx = chunk.cx - pcx, dz = chunk.cz - pcz;
       if (Math.abs(dx) > maxDist || Math.abs(dz) > maxDist) {

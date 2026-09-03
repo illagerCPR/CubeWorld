@@ -10,6 +10,7 @@ export class Controls {
     this.lastJumpTap = 0;
     this.wheelDelta = 0;
     this.enabled = false;
+    this.sensitivityScale = 1; // 视频设置：鼠标灵敏度倍率
     
     this.onKeyDown = this.onKeyDown.bind(this);
     this.onKeyUp = this.onKeyUp.bind(this);
@@ -65,7 +66,7 @@ export class Controls {
 
   onMouseMove(e) {
     if (!this.locked) return;
-    const sensitivity = 0.0022;
+    const sensitivity = 0.0022 * this.sensitivityScale;
     this.player.yaw -= e.movementX * sensitivity;
     this.player.pitch -= e.movementY * sensitivity;
     const lim = Math.PI / 2 - 0.01;
