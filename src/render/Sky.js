@@ -77,6 +77,9 @@ function makeCloudTexture() {
   });
 }
 
+// 导出供 Panorama 播放器叠加动态云层（与游戏内云同款周期噪声块状云）
+export { makeCloudTexture };
+
 export class Sky {
   constructor(scene) {
     this.scene = scene;

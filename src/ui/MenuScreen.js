@@ -20,7 +20,7 @@ export class MenuScreen {
       position: absolute; inset: 0; display: flex; flex-direction: column;
       align-items: center; justify-content: flex-start; padding-top: 6vh;
       z-index: 50; overflow-y: auto;
-      background: linear-gradient(180deg, rgba(10,25,45,0.30) 0%, rgba(5,15,30,0.50) 100%);
+      background: linear-gradient(180deg, rgba(10,25,45,0.16) 0%, rgba(5,15,30,0.34) 100%);
       color: #fff; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
     `;
     document.body.appendChild(this.el);
