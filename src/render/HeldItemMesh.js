@@ -10,6 +10,26 @@ import { ItemSVGDefinitions } from '../items/ItemDefs.js';
 
 const cache = new Map(); // name -> Promise<THREE.Group|null> 模板（内部 mesh 尺寸归一为 1，挂载方自行缩放）
 
+// SVG 全缺失时的兜底贴图（中性灰），保证多贴图方块在图集查不到时也不会"隐形"
+let fallbackTex = null;
+function getFallbackTexture() {
+  if (!fallbackTex) {
+    const cv = document.createElement('canvas');
+    cv.width = 8; cv.height = 8;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillRect(0, 0, 8, 8);
+    ctx.fillStyle = '#777';
+    ctx.fillRect(0, 0, 4, 4);
+    ctx.fillRect(4, 4, 4, 4);
+    fallbackTex = new THREE.CanvasTexture(cv);
+    fallbackTex.magFilter = THREE.NearestFilter;
+    fallbackTex.minFilter = THREE.NearestFilter;
+    fallbackTex.colorSpace = THREE.SRGBColorSpace;
+  }
+  return fallbackTex;
+}
+
 // SVG -> 32×32 CanvasTexture（像素风最近邻采样）
 async function svgTexture(svg) {
   if (!svg) return null;
@@ -35,14 +55,23 @@ function heldMaterial(tex) {
 }
 
 // 方块类：普通方块 = 1×1×1 立方体，六面材质 [+x, -x, +y(top), -y(bottom), +z, -z]；
-// cross 方块（火把/拉杆/按钮/线）= 两张交叉双面薄片（与 ChunkMesh 的 cross 渲染同构）
+// cross 方块（火把/拉杆/按钮/线）= 两张交叉双面薄片（与 ChunkMesh 的 cross 渲染同构）。
+// 注意：BlockRegistry.register 会把 def.textures 规范化成平铺的 top/side/bottom 字段
+//（原 textures 对象不保留），所以这里必须读 def.top/def.side/def.bottom。
 async function buildBlockTemplate(name, def) {
-  const t = def.textures || { top: name, side: name, bottom: name };
-  const pick = (key) => BlockSVGDefinitions[key] || BlockSVGDefinitions[name] || BlockSVGDefinitions[t.side] || '';
+  const t = { top: def.top || name, side: def.side || name, bottom: def.bottom || name };
+  const pick = (key) => BlockSVGDefinitions[key] || '';
   const [sideTex, topTex, botTex] = await Promise.all([
     svgTexture(pick(t.side)), svgTexture(pick(t.top)), svgTexture(pick(t.bottom)),
   ]);
-  if (!sideTex) return null;
+  if (!sideTex) {
+    console.warn(`[HeldItemMesh] 方块 ${name} 找不到贴图 SVG(${t.side})，使用兜底纯色`);
+    const fb = getFallbackTexture();
+    const group = new THREE.Group();
+    const mat = new THREE.MeshLambertMaterial({ map: fb, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat));
+    return group;
+  }
   const group = new THREE.Group();
   if (def.renderType === 'cross') {
     const mat = heldMaterial(sideTex);
