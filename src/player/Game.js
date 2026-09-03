@@ -1118,6 +1118,8 @@ export class Game {
     if (this.hud) this.hud.setUnderwater(false);
     this.paused = false;
     if (this.controls) this.controls.enabled = false;
+    if (this.hand) this.hand.setVisible(false); // 回菜单不显示第一人称手臂
+    if (this.hud) this.hud.setOnFire(false);
     if (document.pointerLockElement) document.exitPointerLock();
     if (this.onExit) this.onExit();
   }

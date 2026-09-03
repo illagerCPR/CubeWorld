@@ -36,7 +36,8 @@ export class FirstPersonHand {
     this.swingT = 1;              // 挥动进度 0..1（1=结束）
     this.bobPhase = 0;
     this._autoSwingCd = 0;        // 按住左键的自动挥动冷却
-    this.visible = true;
+    this.visible = false;         // 默认隐藏（主菜单不显示第一人称手臂），Game.start 里 setVisible(true)
+    this.group.visible = false;
   }
 
   setVisible(v) {
