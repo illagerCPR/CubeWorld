@@ -4,9 +4,13 @@ import { ItemRegistry } from './core/ItemRegistry.js';
 import { SaveSystem } from './core/SaveSystem.js';
 import { MenuScreen } from './ui/MenuScreen.js';
 import { NetworkManager } from './net/NetworkManager.js';
+import { Panorama } from './render/Panorama.js';
 
 const app = document.getElementById('app');
 const game = new Game(app);
+
+// 主菜单全景背景（原版 MC 风格：固定种子小世界 + 慢速旋转 + 画布模糊）
+const panorama = new Panorama(game);
 
 // 局域网联机网络层
 const net = new NetworkManager(game);
@@ -18,6 +22,11 @@ const menu = new MenuScreen((mode, seed, loadData, slot, cheatsEnabled) => {
   menu.hide();
   game.start(mode, seed, loadData, slot, cheatsEnabled);
 }, net);
+
+// 菜单显隐联动全景启停（game.running 期间全景循环自身也会早退）
+menu.onHide = () => panorama.setActive(false);
+menu.onShow = () => panorama.setActive(true);
+window.panorama = panorama; // 调试暴露
 
 game.onExit = () => {
   menu.show();

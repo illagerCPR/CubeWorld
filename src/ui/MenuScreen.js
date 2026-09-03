@@ -20,7 +20,7 @@ export class MenuScreen {
       position: absolute; inset: 0; display: flex; flex-direction: column;
       align-items: center; justify-content: flex-start; padding-top: 6vh;
       z-index: 50; overflow-y: auto;
-      background: linear-gradient(180deg, #5a8fcf 0%, #1a3a5a 100%);
+      background: linear-gradient(180deg, rgba(10,25,45,0.30) 0%, rgba(5,15,30,0.50) 100%);
       color: #fff; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
     `;
     document.body.appendChild(this.el);
@@ -201,6 +201,7 @@ export class MenuScreen {
     return seed;
   }
 
-  hide() { this.el.style.display = 'none'; }
-  show() { this.el.style.display = 'flex'; this.render(); }
+  // onShow/onHide 由 main.js 注入（切换全景背景的启停）
+  hide() { this.el.style.display = 'none'; if (this.onHide) this.onHide(); }
+  show() { this.el.style.display = 'flex'; this.render(); if (this.onShow) this.onShow(); }
 }

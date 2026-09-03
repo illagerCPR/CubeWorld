@@ -40,7 +40,7 @@ export class Hud {
     this.crosshair = document.createElement('div');
     this.crosshair.style.cssText = `
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      width: 20px; height: 20px; z-index: 10; pointer-events: none;
+      width: 20px; height: 20px; z-index: 10; pointer-events: none; display: none;
       background: linear-gradient(to right, transparent 45%, #fff 45%, #fff 55%, transparent 55%),
                   linear-gradient(to bottom, transparent 45%, #fff 45%, #fff 55%, transparent 55%);
       mix-blend-mode: difference;
@@ -73,7 +73,10 @@ export class Hud {
     `;
     document.body.appendChild(this.underwaterOverlay);
 
-    this.updateVisibility('creative');
+    // 初始全隐藏（主菜单不显示准星/血条）；进游戏后 update()/updateVisibility() 按模式设置
+    this.el.style.display = 'none';
+    this.xpBar.style.display = 'none';
+    this.crosshair.style.display = 'none';
   }
 
   // 水下滤镜开关（Game.update 按 inWater 每帧调用，on=false 时淡出）
