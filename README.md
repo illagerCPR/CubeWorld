@@ -1,5 +1,7 @@
 # Project-MC
 
+[![CI](https://github.com/illagerCPR/Web-MC/actions/workflows/ci.yml/badge.svg)](https://github.com/illagerCPR/Web-MC/actions/workflows/ci.yml)
+
 网页版 3D Minecraft（Web 版我的世界），基于 **Vite 5 + Three.js 0.160** 的纯前端体素游戏，支持**单机存档**与**局域网联机**。
 
 - 程序化生成无限世界（确定性种子，联机时各端生成一致地形）

@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server-regression:
+    name: Build + server regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --no-fund --no-audit
+
+      - name: Install server dependencies
+        run: npm ci --no-fund --no-audit
+        working-directory: server
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run server regression suites (152 assertions)
+        run: ./server/run-all-tests.sh
