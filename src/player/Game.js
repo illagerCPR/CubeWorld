@@ -30,7 +30,7 @@ import { RedstoneSystem } from '../core/RedstoneSystem.js';
 import { SaveSystem } from '../core/SaveSystem.js';
 import { FirstPersonHand } from '../render/FirstPersonHand.js';
 import { ParticleSystem } from '../render/ParticleSystem.js';
-import { loadSettings, applySettings } from '../core/Settings.js';
+import { loadSettings, applySettings, applyFogRange } from '../core/Settings.js';
 import { playerColorCss } from '../net/playerColor.js';
 
 // 触发方块/物品定义注册
@@ -605,7 +605,7 @@ export class Game {
     VoxelLightUniforms.uDayLight.value = 0.10 + 0.90 * this.sky.getLightLevel();
     if (this.sky.sunTint) VoxelLightUniforms.uSunTint.value.copy(this.sky.sunTint);
 
-    // 水下视野雾效
+    // 水下视野雾效（出水恢复的雾距与 applySettings 同源，随渲染距离收口）
     const fog = this.renderer.scene.fog;
     if (fog) {
       if (this.player.inWater) {
@@ -613,8 +613,7 @@ export class Game {
         fog.near = 0;
         fog.far = 24;
       } else {
-        fog.near = 60;
-        fog.far = 160;
+        applyFogRange(fog, this.settings.renderDistance);
       }
     }
     // 水下屏幕滤镜（HUD 蓝色薄纱）

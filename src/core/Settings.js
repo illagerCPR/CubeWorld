@@ -61,6 +61,11 @@ export function applySettings(game) {
   }
   // 亮度
   VoxelLightUniforms.uMinLight.value = brightnessToMinLight(s.brightness);
+  // 雾距必须跟随渲染距离（W1 补修）：旧值 near60/far160 时雾 far(160) > 加载边界
+  // (renderDistance×16=96)，方形区块边界在雾起效前硬截断——海景下呈"固定距离直线分界"
+  if (game.renderer && game.renderer.scene && game.renderer.scene.fog) {
+    applyFogRange(game.renderer.scene.fog, s.renderDistance);
+  }
   // 云（游戏天空与主菜单全景天空都套）
   if (game.sky && game.sky.clouds) game.sky.clouds.visible = s.clouds;
   if (typeof window !== 'undefined' && window.panorama && window.panorama.sky) {
@@ -72,7 +77,7 @@ export function applySettings(game) {
   }
   // 鼠标灵敏度
   if (game.controls) game.controls.sensitivityScale = s.sensitivity / 100;
-  // 渲染距离（无需立即处理：updateChunks 每帧按此值加载/卸载）
+  // 渲染距离（无需立即处理：updateChunks 每帧按此值加载/卸载；雾距已在上方同步）
   // 平滑光照/AO（改动后由面板触发 markAllDirty）
   RenderQuality.smoothLighting = s.smoothLighting;
   RenderQuality.aoEnabled = s.smoothLighting; // AO 随平滑光照开关联动（与原版"平滑光照"语义一致）
@@ -80,4 +85,12 @@ export function applySettings(game) {
   const ds = PARTICLE_SCALE[s.particles] ?? 1;
   if (game.particles) game.particles.densityScale = ds;
   if (game.fireParticles) game.fireParticles.densityScale = ds;
+}
+
+// 雾距按渲染距离收口：far 取加载圈半径的 95%（雾 92%+ 才到边界，方形加载边界不可见），
+// near 取 50%（给远景留层次）。Game.update 出水恢复与此处必须同源。
+export function applyFogRange(fog, renderDistance) {
+  const dist = Math.max(2, Math.min(12, renderDistance || 6)) * 16;
+  fog.near = dist * 0.5;
+  fog.far = dist * 0.95;
 }

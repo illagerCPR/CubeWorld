@@ -267,7 +267,7 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 
 ### W 批次备忘（防回退）—— 水面叠加修复 / 建筑显示与探索 / 自然洞穴
 
-- **水面"区块边界"真因（已修，勿回调 opacity）**：不是剔除/区块 bug——视线先后穿过两片分离水体（近滩+远海）时 α=0.7 叠加 ~91% 遮盖，直线分界实为浅滩等高线。现 opacity=0.48（双层 73%/单层 48%）；调回高 α 会复现"远处水下闷成纯蓝"。定位手法：隐藏 waterMesh 对比 + 沿视线步进数"入水次数"（eval 手写 unproject，window 无 THREE）。
+- **水面"区块边界"两段真因（均已修，勿回退）**：① α 叠加——视线先后穿过两片分离水体（近滩+远海）时 α=0.7 叠 ~91% 遮盖，opacity 已降 0.48；② **雾距大于加载边界（W1 二次修复，主因）**——旧 fog near60/far160 而 6 区块加载圈只有 96 格，方形边界在雾起效前硬截断，"固定距离+直线+跟随玩家"即此（浅滩等高线不会跟随玩家）。现 `Settings.applyFogRange(fog, renderDistance)`：near=dist×0.5、far=dist×0.95，applySettings 与 Game.update 出水恢复**必须同源调用**（出水分支曾写死 60/160，改渲染距离即复发）；VideoSettings 改距离经 applySettings 自动联动。定位手法：先查 `scene.fog.far` 与 `settings.renderDistance×16` 的相对大小，再看水 mesh/α。
 - **洞穴雕刻不变量（terrain.js W3）**：三通道 3D Simplex（seed+6/7/8），世界对齐 4 格采样网格 + 三线性插值——**采样点必须世界对齐**（跨区块连续的根基）；判定 = 意面 `a²+b²<0.006` 或奶酪 `c>0.66`；保护 = y<4 不挖 + 水面列（height<SEA_LEVEL+2）水下 6 格壳（防湖海倒灌，cave-determinism 有断言）+ y≤10 空腔填岩浆。密度锚点：空腔 6-7%、露头 2.3-3.4% 列、单区块 +0.6ms。改阈值先跑漏斗统计（`node` 双 seed 扫 17×17 区块）。
 - **ringPoints 唯一来源**：`stronghold.js` 导出的环带 3 点计算同时供选址（ringAnchor）与命令面板探索列表——公式改动会移动全世界要塞，两处必须共用同一函数（loot-determinism ⑤ 有锚点一致性断言）。
 - **建筑归属查询**：`structureNameAt` 走 recordsAround（抗 LRU），InfoBar 内部 0.5s 节流（performance.now，update 无 dt 参数）；CommandPanel 探索区在 `show()` 时重建（村庄 ±3 cell 扫描 + 要塞 O(1)），新增结构类型在 structureNameAt 加一个分支即可。
