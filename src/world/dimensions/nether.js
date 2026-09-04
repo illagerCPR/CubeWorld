@@ -17,6 +17,7 @@ const NOODLE_FREQ = 0.014, NOODLE_T = 0.010;// 意面通道：a²+b²<t
 const NOODLE_YFREQ = 2.0;                   // 通道 y 频率倍增（压扁管道）
 const PATCH_FREQ = 0.03;                    // 表面斑块 2D 噪声频率
 const SOUL_T = 0.30, GRAVEL_T = -0.42;      // 灵魂沙 / 砂砾斑块阈值
+const VALLEY_FREQ = 0.005, VALLEY_T = 0.34; // 灵魂沙峡谷区域门控（低频大区域 ~200 格尺度）
 const OBSIDIAN_P = 0.06;                    // 熔岩缘黑曜石概率（per-block 哈希）
 const GLOW_FREQ = 0.055, GLOW_T = 0.52;     // 荧石挂顶 3D 噪声门控
 export const SPAWN_SCAN_TOP = 200;          // 天花之下的实体扫描顶（怪物生成共用）
@@ -44,8 +45,12 @@ export class NetherGenerator {
     this.noodleB = new SimplexNoise(seed * 31 + 105);
     this.patchNoise = new SimplexNoise(seed * 31 + 106);
     this.glowNoise = new SimplexNoise(seed * 31 + 107);
+    this.valleyNoise = new SimplexNoise(seed * 31 + 108);
     // 生物群系名表（InfoBar 按 generator.biomeNames 读取；主世界走 biomes.js 的 BiomeNames）
-    this.biomeNames = { wastes: '下界荒地', soul_sand: '灵魂沙平原', gravel: '砂砾荒地', lava_sea: '熔岩海' };
+    this.biomeNames = {
+      wastes: '下界荒地', soul_sand: '灵魂沙平原', gravel: '砂砾荒地', lava_sea: '熔岩海',
+      soul_sand_valley: '灵魂沙峡谷',
+    };
   }
 
   getFloorY(wx, wz) {
@@ -58,9 +63,13 @@ export class NetherGenerator {
     return Math.floor(CEIL_BASE + n * CEIL_AMP);
   }
 
-  // 生物群系（纯函数 of 列坐标，复用生成噪声零新状态）：熔岩海 > 灵魂沙平原 > 砂砾荒地 > 下界荒地
+  // 生物群系（纯函数 of 列坐标，复用生成噪声零新状态）：
+  // 熔岩海 > 灵魂沙峡谷（低频大区域）> 灵魂沙平原 > 砂砾荒地 > 下界荒地
+  // 地表装饰（generateChunk 装饰遍）与怪物生成表都按本函数单一来源取值，勿在别处复刻阈值。
   getBiome(wx, wz) {
     if (this.getFloorY(wx, wz) <= LAVA_SEA) return 'lava_sea';
+    const valley = this.valleyNoise.fbm2D(wx * VALLEY_FREQ, wz * VALLEY_FREQ, 2);
+    if (valley > VALLEY_T) return 'soul_sand_valley';
     const patch = this.patchNoise.fbm2D(wx * PATCH_FREQ, wz * PATCH_FREQ, 2);
     if (patch > SOUL_T) return 'soul_sand';
     if (patch < GRAVEL_T) return 'gravel';
@@ -140,11 +149,12 @@ export class NetherGenerator {
       }
     }
 
-    // ② 装饰遍：荧石挂顶（空气格 + 上方实心 netherrack）+ 地板表面斑块
+    // ② 装饰遍：荧石挂顶（空气格 + 上方实心 netherrack）+ 地板表面按生物群系铺装
     for (let z = 0; z < CHUNK_SIZE; z++) {
       for (let x = 0; x < CHUNK_SIZE; x++) {
         const wx = ox + x, wz = oz + z;
-        const patch = this.patchNoise.fbm2D(wx * PATCH_FREQ, wz * PATCH_FREQ, 2);
+        // 地表铺装以 getBiome 为单一来源（峡谷=整片灵魂沙，与 InfoBar 显示一致）
+        const biome = this.getBiome(wx, wz);
         for (let y = SHELL + 1; y < CHUNK_HEIGHT - 1 - SHELL; y++) {
           const id = blocks[idx(y, z, x)];
           if (id === 0) {
@@ -153,16 +163,31 @@ export class NetherGenerator {
               if (g > GLOW_T) blocks[idx(y, z, x)] = GLOW;
             }
           } else if (id === NR) {
-            // 地板表面 = 上方露天（排除天花底面）；下方为空腔或熔岩（熔岩岸线也做斑块）
+            // 地板表面 = 上方露天（排除天花底面）；下方为空腔或熔岩（熔岩岸线也做铺装）
             const below = blocks[idx(y - 1, z, x)];
             if (blocks[idx(y + 1, z, x)] === 0 && (below === 0 || below === LAVA)) {
               if (y > LAVA_SEA && y <= LAVA_SEA + 6 && hash3(wx, y, wz) < OBSIDIAN_P) {
                 blocks[idx(y, z, x)] = OBS;
-              } else if (patch > SOUL_T) {
+              } else if (biome === 'soul_sand_valley' || biome === 'soul_sand') {
                 blocks[idx(y, z, x)] = SOUL;
-              } else if (patch < GRAVEL_T) {
+              } else if (biome === 'gravel') {
                 blocks[idx(y, z, x)] = GRAVEL;
               }
+            }
+          }
+        }
+        // 峡谷地面盖层：每个空腔地面铺 3 层灵魂沙。原地表规则只覆盖"下方悬空"的薄板面，
+        // 厚实山体顶面永远保持下界岩 → 峡谷在地表不可辨识；盖层让一切可行走地面成为灵魂沙
+        //（仅置换 NR，不覆盖已铺装的荧石/黑曜石/砂砾；岸线熔岩上方的格不触发）
+        if (biome === 'soul_sand_valley') {
+          for (let y = SHELL + 1; y < CHUNK_HEIGHT - 2 - SHELL; y++) {
+            // 地面 = NR 在本格、空气在上一格；向下盖 3 层
+            if (blocks[idx(y, z, x)] !== NR || blocks[idx(y + 1, z, x)] !== 0) continue;
+            for (let d = 0; d < 3; d++) {
+              const yy = y - d;
+              if (yy < SHELL + 1) break;
+              if (blocks[idx(yy, z, x)] === NR) blocks[idx(yy, z, x)] = SOUL;
+              else break;
             }
           }
         }

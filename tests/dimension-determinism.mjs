@@ -138,6 +138,34 @@ for (const def of Object.values(DIMENSIONS)) {
         }
       }
     }
+
+    // ⑧ 下界专属：灵魂沙峡谷群系在场 + 峡谷列可行走地面 = 灵魂沙
+    //（getBiome 单一来源 → 地表盖层一致；种子固定，断言结果稳定）
+    if (def.id === 'nether') {
+      let valleyCol = null;
+      outer:
+      for (let gx = -640; gx <= 640 && !valleyCol; gx += 16) {
+        for (let gz = -640; gz <= 640; gz += 16) {
+          if (fw.gen.getBiome(gx, gz) === 'soul_sand_valley') { valleyCol = [gx, gz]; break outer; }
+        }
+      }
+      if (!valleyCol) fail(`[nether] seed=${seed} ±640 格扫描未见灵魂沙峡谷（VALLEY_T 或频率改动过严？）`);
+      const vcx = Math.floor(valleyCol[0] / 16), vcz = Math.floor(valleyCol[1] / 16);
+      const vc = new Chunk(vcx, vcz);
+      DIMENSIONS.nether.createGenerator(seed).generateChunk(vc);
+      const lx = valleyCol[0] - vcx * 16, lz = valleyCol[1] - vcz * 16;
+      // 下探式找可行走地面：穿过悬挂实心体，落入空气后向下找首个实心 → 即立足地面
+      let surface = -1, sy = 190;
+      while (sy > 4) {
+        if (vc.get(lx, sy, lz) !== 0) { sy--; continue; }
+        while (sy > 4 && vc.get(lx, sy, lz) === 0) sy--;
+        surface = vc.get(lx, sy, lz);
+        break;
+      }
+      if (surface === BlockRegistry.getId('netherrack')) {
+        fail(`[nether] seed=${seed} 峡谷列 @(${valleyCol[0]},${sy},${valleyCol[1]}) 行走地面未铺灵魂沙`);
+      }
+    }
   }
 
   // ⑥ 单区块生成耗时预算
