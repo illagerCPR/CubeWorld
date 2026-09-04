@@ -4,6 +4,7 @@ import { Biomes, BiomeConfig } from './biomes.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from '../core/Chunk.js';
 import { StructureManager } from './structures/StructureManager.js';
+import './structures/catalog.js';
 
 const STONE = () => BlockRegistry.getId('stone');
 const DIRT = () => BlockRegistry.getId('dirt');

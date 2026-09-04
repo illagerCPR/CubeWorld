@@ -24,13 +24,15 @@ function makeRng(seed) {
 export { makeRng, hash32 };
 
 // 注册结构类型。def 字段：
-//   cell        网格边长（区块数），每 cell 至多一个候选锚点
+//   cell        网格边长（区块数），每 cell 至多一个锚点
+//   attempts    每 cell 候选锚点尝试次数（MC 同款：首个通过选址者胜出，提升可放置率且不破坏间距）
 //   radius      结构最大水平半径（方块），决定扫描范围与包围盒
-//   chance      cell 候选通过概率（0-1，哈希门控，用 h 高 16 位与抖动位分离）
+//   chance      单次尝试通过概率（0-1，哈希门控，用 h 高 16 位与抖动位分离）
 //   salt        整型盐，跨类型去相关
 //   biomes      允许的群系数组（null = 不限）
+//   probeR      [内环, 外环] 探针半径（默认 [16,28]；小斑块群系配小环）
 //   minTop/maxTop 地表海拔窗（可选）；maxSlope 平坦度容差（默认 4）
-//   solve(rng, ax, groundY, az) -> { blocks: [[wx,wy,wz,id],...], meta }  纯函数布局求解
+//   solve(rng, ax, groundY, az, gen) -> { blocks: [[wx,wy,wz,id],...], meta }  纯函数布局求解
 //   place(gen, ax, az) -> groundY | -1   可选选址覆盖（要塞等非地表逻辑用），默认走平坦度检查
 const structureTypes = new Map();
 
@@ -53,10 +55,16 @@ export class StructureManager {
     if (this.cache.has(key)) return this.cache.get(key);
 
     let rec = null;
-    const h = hash32(this.seed, ccx, ccz, def.salt);
-    // 概率门用高 16 位，抖动用低 16 位（各 8 位，互不侵占）
-    if ((h >>> 16) / 65536 < def.chance) {
-      const jx = h & 255, jz = (h >>> 8) & 255;
+    // 多次锚点尝试：首个通过选址者胜出（每次尝试独立哈希流，盐加质数步长去相关）
+    const tries = def.attempts || 1;
+    for (let k = 0; k < tries && !rec; k++) {
+      const h = hash32(this.seed, ccx, ccz, def.salt + k * 7919);
+      // 概率门用高 16 位，抖动用低 16 位（各 8 位，互不侵占）
+      if (!((h >>> 16) / 65536 < def.chance)) continue;
+      // 抖动约束在 cell 中心 4..cell-4 区间：保证相邻 cell 锚点最小间距 ≥ 8 区块，避免相邻建筑重叠
+      const span = Math.max(1, def.cell - 8);
+      const jx = 4 + ((h & 255) % span);
+      const jz = 4 + (((h >>> 8) & 255) % span);
       const anchorCx = ccx * def.cell + (jx % def.cell);
       const anchorCz = ccz * def.cell + (jz % def.cell);
       const ax = anchorCx * CHUNK_SIZE + 8;
@@ -64,20 +72,19 @@ export class StructureManager {
       const groundY = def.place
         ? def.place(this.generator, ax, az)
         : this._surfacePlacement(def, ax, az);
-      if (groundY >= 0) {
-        const rng = makeRng(hash32(this.seed, anchorCx, anchorCz, def.salt + 1));
-        const layout = def.solve(rng, ax, groundY, az);
-        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-        for (const b of layout.blocks) {
-          if (b[0] < minX) minX = b[0]; if (b[0] > maxX) maxX = b[0];
-          if (b[2] < minZ) minZ = b[2]; if (b[2] > maxZ) maxZ = b[2];
-        }
-        rec = {
-          name: typeName, ax, az, groundY,
-          blocks: layout.blocks, meta: layout.meta || {},
-          minX, maxX, minZ, maxZ,
-        };
+      if (groundY < 0) continue;
+      const rng = makeRng(hash32(this.seed, anchorCx, anchorCz, def.salt + 1));
+      const layout = def.solve(rng, ax, groundY, az, this.generator);
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      for (const b of layout.blocks) {
+        if (b[0] < minX) minX = b[0]; if (b[0] > maxX) maxX = b[0];
+        if (b[2] < minZ) minZ = b[2]; if (b[2] > maxZ) maxZ = b[2];
       }
+      rec = {
+        name: typeName, ax, az, groundY,
+        blocks: layout.blocks, meta: layout.meta || {},
+        minX, maxX, minZ, maxZ,
+      };
     }
 
     this.cache.set(key, rec);
@@ -97,10 +104,11 @@ export class StructureManager {
     if (def.maxTop !== undefined && y > def.maxTop) return -1;
     const maxSlope = def.maxSlope !== undefined ? def.maxSlope : 4;
     let min = y, max = y;
-    // 12 样点：r=16 八向 + r=32 四正向
+    // 探针环：8 向内环 + 4 向外环（半径可调；村庄用小环适配小型群系斑块）
+    const [r1, r2] = def.probeR || [16, 28];
     const probes = [];
-    for (const [dx, dz] of [[16,0],[-16,0],[0,16],[0,-16],[16,16],[-16,16],[16,-16],[-16,-16]]) probes.push([dx, dz]);
-    probes.push([32, 0], [-32, 0], [0, 32], [0, -32]);
+    for (const [dx, dz] of [[r1,0],[-r1,0],[0,r1],[0,-r1],[r1,r1],[-r1,r1],[r1,-r1],[-r1,-r1]]) probes.push([dx, dz]);
+    probes.push([r2, 0], [-r2, 0], [0, r2], [0, -r2]);
     for (const [dx, dz] of probes) {
       if (gen.getBiome(ax + dx, az + dz) !== biome) return -1;
       const h = gen.getBaseHeight(ax + dx, az + dz);
@@ -160,6 +168,13 @@ export class StructureManager {
       if (dx * dx + dz * dz <= radius * radius) out.push(rec);
     }
     return out;
+  }
+
+  // 运行时按需求解指定 cell 的记录（村庄传送/村民生成定位等），结果同样进缓存
+  ensureRecord(typeName, ccx, ccz) {
+    const def = structureTypes.get(typeName);
+    if (!def) return null;
+    return this._cellRecord(typeName, def, ccx, ccz);
   }
 
   // 调试用：当前缓存中的全部记录（确定性测试断言用）
