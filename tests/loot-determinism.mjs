@@ -101,4 +101,26 @@ if (keys1 !== keys2 || vals1 !== vals2) fail('两端独立求解的 chests 注�
 if (r1.sm.chests.size !== chestCount) fail(`注册表 ${r1.sm.chests.size} 项 ≠ 声明总数 ${chestCount}`);
 console.log(`PASS ③④ 结构箱子: ${r1.found.length} 个结构、${chestCount} 个箱子坐标/表名/方块三向一致，两端注册表逐项一致`);
 
+// ── ⑤ W2:建筑归属查询与要塞环带点 ─────────────────────────────────────
+{
+  const sm = r1.sm;
+  const village = r1.found.find(v => v.name === 'village');
+  if (village) {
+    const at = sm.structureNameAt(village.ax, village.az);
+    const expect = village.meta.variant === 'desert' ? '沙漠村庄' : '村庄';
+    if (at !== expect) fail(`structureNameAt(村庄锚点) = ${at}，期望 ${expect}`);
+  }
+  if (sm.structureNameAt(999999, -999999) !== null) fail('荒野坐标应返回 null');
+  const { ringPoints } = await import('../src/world/structures/stronghold.js');
+  const pts = ringPoints(SEED);
+  if (pts.length !== 3) fail(`环带点数 ${pts.length} ≠ 3`);
+  // 环带点必须与 stronghold 记录锚点一致（同一公式，勿漂移）
+  const strongholds = r1.found.filter(v => v.name === 'stronghold');
+  for (const rec of strongholds) {
+    const hit = pts.some(p => Math.abs(p.x - rec.ax) <= 8 && Math.abs(p.z - rec.az) <= 8);
+    if (!hit) fail(`要塞锚点 (${rec.ax},${rec.az}) 不在 ringPoints 内（公式漂移）`);
+  }
+  console.log(`PASS ⑤ 建筑归属: structureNameAt 正确、ringPoints 3 点与 ${strongholds.length} 座要塞锚点一致`);
+}
+
 console.log('T5 战利品确定性回归: 全部通过');

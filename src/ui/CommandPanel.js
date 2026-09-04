@@ -1,5 +1,9 @@
 // CommandPanel.js -- 命令面板（启用作弊的存档专享，按 C 呼出）
 import { Mob } from '../entity/Mob.js';
+import { ringPoints } from '../world/structures/stronghold.js';
+
+// 探索列表：玩家周围村庄扫描 cell 半径（cell=20 区块 → ±960 格）；要塞环带 3 点全局 O(1)
+const EXPLORE_VILLAGE_CELL_R = 3;
 
 const MODES = [
   { name: 'creative', label: '创造', bg: '#4a8a4a', border: '#2a5a2a' },
@@ -106,6 +110,16 @@ export class CommandPanel {
     tpBtns.appendChild(hereBtn);
     this.panel.appendChild(tpBtns);
 
+    // 1.5) 探索：附近建筑坐标（W2，show() 时刷新；点击行内按钮直接传送）
+    this.panel.appendChild(this._mkLabel('— 探索：附近建筑 —'));
+    this.exploreBox = document.createElement('div');
+    this.exploreBox.style.cssText = `
+      display: flex; flex-direction: column; gap: 3px; font-size: 12px;
+      max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.25);
+      padding: 6px 8px; border: 1px solid #444;
+    `;
+    this.panel.appendChild(this.exploreBox);
+
     // 2) 切换游戏模式
     this.panel.appendChild(this._mkLabel('— 切换游戏模式 —'));
     const modeRow = document.createElement('div');
@@ -182,6 +196,58 @@ export class CommandPanel {
     this._refreshTimeLabel();
   }
 
+  // W2：探索列表 —— 村庄（recordsAround ±3 cell）+ 要塞环带 3 点（seed 直接派生），
+  // 按距离排序；每行带"传送"按钮（落地地表 +2）
+  _refreshExplore() {
+    const box = this.exploreBox;
+    box.innerHTML = '';
+    const world = this.game.world;
+    const sm = world && world.generator && world.generator.structureManager;
+    if (!sm) return;
+    const p = this.game.player.position;
+    const items = [];
+    for (const rec of sm.recordsAround('village', p.x, p.z, EXPLORE_VILLAGE_CELL_R)) {
+      const d = Math.hypot(rec.ax - p.x, rec.az - p.z);
+      items.push({
+        name: rec.meta && rec.meta.variant === 'desert' ? '沙漠村庄' : '村庄',
+        x: rec.ax, z: rec.az, d,
+      });
+    }
+    for (const pt of ringPoints(world.seed)) {
+      items.push({ name: '要塞', x: pt.x, z: pt.z, d: Math.hypot(pt.x - p.x, pt.z - p.z) });
+    }
+    items.sort((a, b) => a.d - b.d);
+    for (const it of items) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 8px;';
+      const label = document.createElement('span');
+      label.style.cssText = 'color: #dde; white-space: nowrap;';
+      label.textContent = `${it.name} (${it.x}, ${it.z}) · ${Math.round(it.d)}m · ${CommandPanel._compass(p.x, p.z, it.x, it.z)}`;
+      row.appendChild(label);
+      const btn = document.createElement('button');
+      btn.textContent = '传送';
+      btn.style.cssText = 'padding: 2px 8px; font-size: 11px; background: #2a6a8a; color: #fff; border: 1px solid #1a4a6a; cursor: pointer;';
+      btn.addEventListener('click', () => {
+        const h = world.getHeightAt(it.x, it.z);
+        this.tpX.value = (it.x + 0.5).toFixed(1);
+        this.tpY.value = (h + 3).toFixed(1);
+        this.tpZ.value = (it.z + 0.5).toFixed(1);
+        this._teleport();
+        this.hide();
+      });
+      row.appendChild(btn);
+      box.appendChild(row);
+    }
+  }
+
+  // 8 方位（本作 -z 为北、+x 为东）
+  static _compass(px, pz, tx, tz) {
+    const dirs = ['北', '东北', '东', '东南', '南', '西南', '西', '西北'];
+    const angle = Math.atan2(tx - px, -(tz - pz));
+    const idx = ((Math.round(angle / (Math.PI / 4)) % 8) + 8) % 8;
+    return dirs[idx];
+  }
+
   _refreshTimeLabel() {
     const t = this.game.sky.time;
     let label;
@@ -236,6 +302,7 @@ export class CommandPanel {
     this.timeInput.value = this.game.sky.time.toFixed(2);
     this._refreshModeHighlight();
     this._refreshTimeLabel();
+    this._refreshExplore();
     this.el.style.display = 'flex';
     if (this.game.inventoryScreen && this.game.inventoryScreen.visible) this.game.inventoryScreen.hide();
     if (this.game.controls) {

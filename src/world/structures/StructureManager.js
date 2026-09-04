@@ -223,6 +223,20 @@ export class StructureManager {
   chestTableAt(x, y, z) {
     return this.chests.get(x + ',' + y + ',' + z) || null;
   }
+
+  // W2：玩家所处建筑名（荒野返回 null）。bbox 判定走 recordsAround（按需重求解，抗 LRU），
+  // 调用方须自行节流（InfoBar 0.5s）——每次调用至多 2 类型 × 9 cell 求解（多数有缓存）。
+  structureNameAt(x, z) {
+    for (const [name] of structureTypes) {
+      for (const rec of this.recordsAround(name, x, z)) {
+        if (x < rec.minX || x > rec.maxX || z < rec.minZ || z > rec.maxZ) continue;
+        if (name === 'village') return rec.meta && rec.meta.variant === 'desert' ? '沙漠村庄' : '村庄';
+        if (name === 'stronghold') return '要塞';
+        return name;
+      }
+    }
+    return null;
+  }
 }
 
 // 便捷导出：布局求解里常用的方块 id 解析（懒取，避免模块加载顺序问题）

@@ -1,5 +1,7 @@
-// InfoBar.js -- 游戏内左上角信息栏：坐标 / 生物群系 / 时间 / 准星目标 /（联机）网络 RTT
+// InfoBar.js -- 游戏内左上角信息栏：坐标 / 生物群系 / 时间 / 准星目标 / 所处建筑 /（联机）网络 RTT
 import { BiomeNames } from '../world/biomes.js';
+
+const BUILDING_CHECK_INTERVAL = 500; // 建筑归属查询节流（毫秒）——recordsAround 按需求解不宜每帧
 
 export class InfoBar {
   constructor() {
@@ -19,15 +21,20 @@ export class InfoBar {
     this.timeLine.style.cssText = 'color: #ffe0a0; margin-top: 2px;';
     this.targetLine = document.createElement('div');
     this.targetLine.style.cssText = 'color: #c0ffc0; margin-top: 2px;';
+    this.buildingLine = document.createElement('div'); // W2：所处建筑（荒野时隐藏）
+    this.buildingLine.style.cssText = 'color: #ffc0e0; margin-top: 2px; display: none;';
     this.rttLine = document.createElement('div'); // 阶段10：联机 RTT（无数据显示且不占行高）
     this.rttLine.style.cssText = 'color: #c8b8ff; margin-top: 2px; display: none;';
     this.el.appendChild(this.coordLine);
     this.el.appendChild(this.biomeLine);
     this.el.appendChild(this.timeLine);
     this.el.appendChild(this.targetLine);
+    this.el.appendChild(this.buildingLine);
     this.el.appendChild(this.rttLine);
     document.body.appendChild(this.el);
     this._biomeCache = new Map();
+    this._buildingCheckAt = 0;
+    this._building = null;
   }
 
   show() { this.el.style.display = 'block'; }
@@ -60,6 +67,20 @@ export class InfoBar {
       this.targetLine.textContent = `${label}: ${crosshairInfo.displayName}`;
     } else {
       this.targetLine.textContent = '';
+    }
+
+    // W2：所处建筑（0.5s 节流；荒野隐藏该行）
+    const now = performance.now();
+    if (now - this._buildingCheckAt > BUILDING_CHECK_INTERVAL) {
+      this._buildingCheckAt = now;
+      const sm = generator && generator.structureManager;
+      this._building = (sm && sm.structureNameAt) ? sm.structureNameAt(x, z) : null;
+    }
+    if (this._building) {
+      this.buildingLine.style.display = 'block';
+      this.buildingLine.textContent = `建筑: ${this._building}`;
+    } else {
+      this.buildingLine.style.display = 'none';
     }
 
     if (rttMs != null) {

@@ -7,18 +7,25 @@ import { CHUNK_SIZE } from '../../core/Chunk.js';
 
 const RING_COUNT = 3;
 
-// 环带锚点：seed 派生方位角（120° 间隔 ± 抖动）与半径（700-900）；
-// 仅当环带点落在该 cell 的区块范围内时返回锚点（else null）
-function ringAnchor(sm, ccx, ccz) {
-  const cell = 48;
+// 环带 3 点全局坐标（seed 派生，O(1) 可得）：要塞选址与命令面板"探索"列表共用此函数，
+// 公式改动会移动全世界要塞——两端确定性一致的前提，勿单改一处。
+export function ringPoints(seed) {
+  const pts = [];
   for (let k = 0; k < RING_COUNT; k++) {
-    const h = hash32(sm.seed, k, 7777, 202);
+    const h = hash32(seed, k, 7777, 202);
     const angle = k * (Math.PI * 2 / 3) + (((h & 1023) / 1024) - 0.5) * 0.6;
     const radius = 700 + ((h >>> 10) & 255);
-    const wx = Math.round(Math.cos(angle) * radius);
-    const wz = Math.round(Math.sin(angle) * radius);
-    const ckx = Math.floor(wx / CHUNK_SIZE);
-    const ckz = Math.floor(wz / CHUNK_SIZE);
+    pts.push({ x: Math.round(Math.cos(angle) * radius), z: Math.round(Math.sin(angle) * radius) });
+  }
+  return pts;
+}
+
+// 环带锚点：仅当环带点落在该 cell 的区块范围内时返回锚点（else null）
+function ringAnchor(sm, ccx, ccz) {
+  const cell = 48;
+  for (const p of ringPoints(sm.seed)) {
+    const ckx = Math.floor(p.x / CHUNK_SIZE);
+    const ckz = Math.floor(p.z / CHUNK_SIZE);
     if (ckx >= ccx * cell && ckx < (ccx + 1) * cell &&
         ckz >= ccz * cell && ckz < (ccz + 1) * cell) {
       return { cx: ckx, cz: ckz };
