@@ -272,6 +272,8 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **ringPoints 唯一来源**：`stronghold.js` 导出的环带 3 点计算同时供选址（ringAnchor）与命令面板探索列表——公式改动会移动全世界要塞，两处必须共用同一函数（loot-determinism ⑤ 有锚点一致性断言）。
 - **建筑归属查询**：`structureNameAt` 走 recordsAround（抗 LRU），InfoBar 内部 0.5s 节流（performance.now，update 无 dt 参数）；CommandPanel 探索区在 `show()` 时重建（村庄 ±3 cell 扫描 + 要塞 O(1)），新增结构类型在 structureNameAt 加一个分支即可。
 
+- **行走卡顿三件套（W-卡顿批次）**：① `LightEngine.initChunkLight` **价差入队**——只把"光照 <15 的格 + 与已处理邻列（左/后）价差 ≥2 的边缘格"入队 BFS，旧版全量入队 5 万+格致 48ms/块（跨区块行走 690ms/帧卡顿主犯），新版 2.2ms（22×）；对照验证：653 万格仅 0.09% 差异且**全部 +1**（新版传播是旧版超集，修复了旧版链式横向光漏一级的缺陷）。**勿回退全量入队**；改光照传播逻辑必须跑 node 新旧对照（653 万格 dark/哈希+单调性）。注意：光照 forward/reverse 顺序本就不幂等（存量，纯视觉不进存档/协议）。② `updateChunks` 分帧预算：缺口按距玩家排序、每帧限时 8ms（至少 1 块）；③ `rebuildDirtyChunks` 时间预算 12ms（洞穴后单块 mesh ~15ms，固定 2 个/帧会叠出 29ms）。实测跨边界：单帧 690ms → 13 帧×≤33ms 渐次补完。已知尖峰残余：30s 自动保存序列化长探索存档的单帧尖峰（未处理）。
+
 
 ### 阶段 10 关键实现备忘（防回退）—— 手持物 3D 化 + 快捷栏同步 + 掉落归属锁 + 多账号 + RTT
 

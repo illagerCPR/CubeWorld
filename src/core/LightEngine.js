@@ -127,7 +127,11 @@ export class LightEngine {
     this._flood(channel, fx, fy, fz);
   }
 
-  // 区块光照全量初始化：天光列播种 + 光源 + 邻居边界导入 + 双通道泛洪
+  // 区块光照全量初始化：天光列播种 + 光源 + 邻居边界导入 + 双通道泛洪。
+  // 性能关键（W-卡顿批次）：**只把"光照价差"格入队 BFS**——露天 15 级直射柱的值即终值，
+  // 横向传播只可能发生在"同 y 相邻两格光照差 ≥2"处（洞口/悬崖/水缘）。逐列处理时与
+  // 已处理邻列（左 x-1、后 z-1）做双向价差检查即可完备捕获；旧版全量入队 5 万+格
+  // 导致 initChunkLight ~48ms/块（跨区块行走的卡顿主犯），价差版入队量降约一个数量级。
   initChunkLight(chunk) {
     this._refreshLUT();
     chunk.light.fill(0);
@@ -135,6 +139,8 @@ export class LightEngine {
     const sx = [], sy = [], sz = [];
     const bx = [], by = [], bz = [];
     const blocks = chunk.blocks;
+    const light = chunk.light;
+    // 天光列播种（自上而下）+ 与已处理邻列的价差入队
     for (let z = 0; z < CHUNK_SIZE; z++) {
       for (let x = 0; x < CHUNK_SIZE; x++) {
         let cur = 15;
@@ -143,20 +149,40 @@ export class LightEngine {
           const op = this._op[id];
           if (op >= 15) cur = 0;
           else if (!(cur === 15 && op === 0)) cur = Math.max(0, cur - 1 - op);
-          if (cur > 1) {
-            chunk.setSky(x, y, z, cur);
+          const i = (y * CHUNK_SIZE + z) * CHUNK_SIZE + x;
+          if (cur > 0) light[i] = (light[i] & 15) | (cur << 4);
+          if (cur > 1 && cur < 15) {
             sx.push(ox + x); sy.push(y); sz.push(oz + z);
+          } else if (cur === 15) {
+            // 15 直射柱：仅在与已处理邻列存在价差（洞口/悬崖缘）时作为横向传播源入队
+            if (x > 0) {
+              const l = light[i - 1] >> 4;
+              if (l > 1 && l <= 13) { sx.push(ox + x); sy.push(y); sz.push(oz + z); }
+            }
+            if (z > 0) {
+              const l2 = light[i - CHUNK_SIZE] >> 4;
+              if (l2 > 1 && l2 <= 13) { sx.push(ox + x); sy.push(y); sz.push(oz + z); }
+            }
+          }
+          if (cur < 14 && x > 0) {
+            const l = light[i - 1] >> 4;
+            if (l - cur >= 2) { sx.push(ox + x - 1); sy.push(y); sz.push(oz + z); }
+          }
+          if (cur < 14 && z > 0) {
+            const l2 = light[i - CHUNK_SIZE] >> 4;
+            if (l2 - cur >= 2) { sx.push(ox + x); sy.push(y); sz.push(oz + z - 1); }
           }
           const def = BlockRegistry.getById(id);
           if (def && def.light >= 13) {
-            chunk.setBlockLight(x, y, z, def.light);
+            light[i] = (light[i] & 0xf0) | (def.light & 15);
             bx.push(ox + x); by.push(y); bz.push(oz + z);
           }
         }
       }
     }
     chunk.hasLight = true;
-    // 邻居边界光入队（邻居已初始化时）：泛洪会自然完成 双向 导入/导出
+    // 邻居边界光导入（价差过滤）：只入价差 ≥2 的格、入较高一侧——露天大平面的边界
+    // 全 15 无价差不再入队（旧版每边 8k+ 格全量入队，泛洪推不动白跑）
     const nbs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
     for (const [dx, dz] of nbs) {
       const n = this.world.getChunk(chunk.cx + dx, chunk.cz + dz);
@@ -165,11 +191,19 @@ export class LightEngine {
         for (let i = 0; i < CHUNK_SIZE; i++) {
           const nlx = dx === -1 ? CHUNK_SIZE - 1 : (dx === 1 ? 0 : i);
           const nlz = dz === -1 ? CHUNK_SIZE - 1 : (dz === 1 ? 0 : i);
-          if (n.getSky(nlx, y, nlz) > 1) {
+          const mx = dx === -1 ? 0 : (dx === 1 ? CHUNK_SIZE - 1 : i);
+          const mz = dz === -1 ? 0 : (dz === 1 ? CHUNK_SIZE - 1 : i);
+          const ns = n.getSky(nlx, y, nlz), ms = chunk.getSky(mx, y, mz);
+          if (ns - ms >= 2 && ns > 1) {
             sx.push(n.cx * CHUNK_SIZE + nlx); sy.push(y); sz.push(n.cz * CHUNK_SIZE + nlz);
+          } else if (ms - ns >= 2 && ms > 1) {
+            sx.push(ox + mx); sy.push(y); sz.push(oz + mz);
           }
-          if (n.getBlockLight(nlx, y, nlz) > 1) {
+          const nb = n.getBlockLight(nlx, y, nlz), mb = chunk.getBlockLight(mx, y, mz);
+          if (nb - mb >= 2 && nb > 1) {
             bx.push(n.cx * CHUNK_SIZE + nlx); by.push(y); bz.push(n.cz * CHUNK_SIZE + nlz);
+          } else if (mb - nb >= 2 && mb > 1) {
+            bx.push(ox + mx); by.push(y); bz.push(oz + mz);
           }
         }
       }

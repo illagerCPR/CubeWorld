@@ -717,13 +717,26 @@ export class Game {
     const pcz = Math.floor(this.player.position.z / CHUNK_SIZE);
     const renderDistance = this.settings ? this.settings.renderDistance : 6;
 
-    // 加载
+    // 加载（分帧预算）：跨入新区块列时一次会缺 13+ 个区块，全量同步生成曾致单帧
+    // 690ms 卡顿。收集缺口 → 按距玩家距离排序（脚下优先）→ 每帧限时生成。
+    // 生成是纯函数且顺序无关（structure-determinism 顺序测试背书），分帧无正确性影响。
+    const missing = [];
     for (let dx = -renderDistance; dx <= renderDistance; dx++) {
       for (let dz = -renderDistance; dz <= renderDistance; dz++) {
-        const cx = pcx + dx, cz = pcz + dz;
-        if (!this.world.getChunk(cx, cz)) {
-          this.world.ensureChunk(cx, cz);
+        if (!this.world.getChunk(pcx + dx, pcz + dz)) {
+          missing.push([pcx + dx, pcz + dz, dx * dx + dz * dz]);
         }
+      }
+    }
+    if (missing.length) {
+      missing.sort((a, b) => a[2] - b[2]);
+      const t0 = performance.now();
+      let made = 0;
+      for (const [cx, cz] of missing) {
+        this.world.ensureChunk(cx, cz);
+        made++;
+        // 至少 1 块保证推进（首次进入世界也按预算渐次补齐）；超 8ms 停手让出帧
+        if (made >= 1 && performance.now() - t0 > 8) break;
       }
     }
 
@@ -741,41 +754,43 @@ export class Game {
   }
 
   rebuildDirtyChunks() {
-    // 每帧最多重建 1 个区块，避免卡顿
+    // 时间预算制（W-卡顿批次）：洞穴后单块 mesh ~15ms，固定"2 个/帧"会叠加出 29ms+
+    // 重建帧；改为限时 ~12ms（至少 1 块保证推进）。遍历序=加载序（近似近处优先）。
+    const t0 = performance.now();
     let count = 0;
     for (const [, chunk] of this.world.chunks) {
-      if (chunk.dirty && count < 2) {
-        if (chunk.mesh) {
-          this.renderer.scene.remove(chunk.mesh);
-          chunk.mesh.geometry.dispose();
-          chunk.mesh = null;
-        }
-        if (chunk.waterMesh) {
-          this.renderer.scene.remove(chunk.waterMesh);
-          chunk.waterMesh.geometry.dispose();
-          chunk.waterMesh = null;
-        }
-        if (chunk.lightMesh) {
-          this.renderer.scene.remove(chunk.lightMesh);
-          chunk.lightMesh.geometry.dispose();
-          chunk.lightMesh = null;
-        }
-        const meshes = this.chunkBuilder.build(chunk);
-        if (meshes.solid) {
-          chunk.mesh = meshes.solid;
-          this.renderer.scene.add(chunk.mesh);
-        }
-        if (meshes.water) {
-          chunk.waterMesh = meshes.water;
-          this.renderer.scene.add(chunk.waterMesh);
-        }
-        if (meshes.light) {
-          chunk.lightMesh = meshes.light;
-          this.renderer.scene.add(chunk.lightMesh);
-        }
-        chunk.dirty = false;
-        count++;
+      if (!chunk.dirty) continue;
+      if (chunk.mesh) {
+        this.renderer.scene.remove(chunk.mesh);
+        chunk.mesh.geometry.dispose();
+        chunk.mesh = null;
       }
+      if (chunk.waterMesh) {
+        this.renderer.scene.remove(chunk.waterMesh);
+        chunk.waterMesh.geometry.dispose();
+        chunk.waterMesh = null;
+      }
+      if (chunk.lightMesh) {
+        this.renderer.scene.remove(chunk.lightMesh);
+        chunk.lightMesh.geometry.dispose();
+        chunk.lightMesh = null;
+      }
+      const meshes = this.chunkBuilder.build(chunk);
+      if (meshes.solid) {
+        chunk.mesh = meshes.solid;
+        this.renderer.scene.add(chunk.mesh);
+      }
+      if (meshes.water) {
+        chunk.waterMesh = meshes.water;
+        this.renderer.scene.add(chunk.waterMesh);
+      }
+      if (meshes.light) {
+        chunk.lightMesh = meshes.light;
+        this.renderer.scene.add(chunk.lightMesh);
+      }
+      chunk.dirty = false;
+      count++;
+      if (count >= 1 && performance.now() - t0 > 12) break;
     }
   }
 
