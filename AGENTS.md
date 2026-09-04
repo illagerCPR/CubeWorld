@@ -254,6 +254,8 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **村民系统**：`MobTypes.villager`（passive: true，damage 0/detectionRange 0，drops 空）；AI 三态 = 村庄绳拴游荡（home 半径 24，flee 时家向偏置防被拖远）/ 玩家 4 格注视 / 8 格敌对逃离（速度 ×1.6）；**僵尸/骷髅索敌含村民**（`findNearestMob` 取玩家与村民较近者；苦力怕/蜘蛛仅玩家——防自爆拆村），怪物咬村民走 `mobAttackMob`（伤害+hitFlash+击退），死亡走 update 通用链（sendMobDied 广播/drops 空）。村民不进存档，随村庄重载重生。
 - **村民生成生命周期**：`MobManager.updateVillageSpawns` 每帧驱动——生成部分仅 host/单机（`spawnEnabled` 门控，联机经 mobNet 广播 mob_spawn，实体由回执创建）；**补挂 home 与随村清扫（村庄卸载 >120 格 → 村民移除+dedup 解除）全端执行**（客户端 spawnEnabled=false，早退会让客户端村民永无 home）。村民死亡本会话不重生；敌对 MAX_MOBS 上限不含村民。
 - **重连丢房间名（存量 bug，已修）**：`NetworkManager` 重连重入房曾发空 payload `JOIN_ROOM {}` → 服务端落到 default 房（房间静默漂移，方块账本/村民全对不上）。重连必须 `JOIN_ROOM { room: this.room }`；排查"联机数据对不上"先查两端 `net.room` 是否一致。
+- **要塞（T3）**：环带锚点走 `anchorForCell`（3 点 seed 派生 120°±抖动、半径 700-900；返回 null 即该 cell 无结构，attempts/chance 门不生效）；`place` 海拔门 60-100 拒绝深水/极峰（**个别 seed 第三座可被合理拒绝**，2-3 座属正常）。`hubY = min(surfaceY-26, minGround-9)`，minGround 取 ±40 步长 5 采样最低地表（步长 10 抓不到局部洼地，房间会戳出山体）。传送门室 = 12 框架环 + 3×3 未激活中心（末地维度另行立项）；风化混排 per-block 哈希 14% 苔/12% 裂。T5 后续候选（本批不做）：末地维度、战利品箱子（容器 UI+存档扩展）、村民交易。
+- **批次性能锚点**：单区块地形生成+结构装饰 ≈ 8-10ms（node 实测，含锚点扫描/村庄求解首算进缓存）；结构装饰对多数区块为 O(cell数) 哈希跳过。基准 7ms 是 mesh build（另一条路径），二者不相加混淆。
 
 
 ### 阶段 10 关键实现备忘（防回退）—— 手持物 3D 化 + 快捷栏同步 + 掉落归属锁 + 多账号 + RTT
