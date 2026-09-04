@@ -309,6 +309,19 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **冒烟陷阱**：单机无 `game.chatBox`（联机才建）；菜单浮层盖 canvas 需 DOM 隐藏后 `click 'canvas[data-engine]'` 抓指针锁；MP 换维重建窗口 10-20s——轮询断言要给足时间（曾三次误判"未触发"实为窗口中）。
 
 
+### 下界优化批次备忘（防回退）—— 灵魂沙峡谷 / 下界要塞 / 下界怪物 / 面板布局
+
+- **峡谷地面盖层**：原地表装饰只覆盖"下方悬空"的薄板面（below 为空腔/熔岩），厚实山体顶面永远保持下界岩 → 群系在地表不可辨识；`soul_sand_valley` 列另走"盖层"遍：NR 在下、空气在上 → 向下置换 3 层灵魂沙（仅置换 NR，不覆盖荧石/黑曜石/砂砾；曾笔误写成荧石挂顶方向"空气在上 NR 在上"致全列不生效）。装饰遍取群系一律走 `getBiome` 单一来源（与 InfoBar 显示一致）。dimension-determinism ⑧：峡谷在场 + 下探式扫描（穿悬挂体）行走地面=灵魂沙。
+- **结构维度作用域**：StructureManager `def.dims`（缺省=任意维度），decorateChunk/recordsNear/recordsAround/ensureRecord/structureNameAt **全入口**按 `generator.dimensionId` 过滤——下界挂 structureManager 后若不过滤，会求解村庄/要塞并在缺少 `getBaseHeight` 的生成器上抛错。四个生成器都带 dimensionId（overworld/nether/end/aether）。
+- **NetherGenerator.generateChunk(chunk, decorate=true)**：装饰开关——findSpawn 出生探测与要塞选址探针必须传 false：结构选址在 generateChunk 内部再入 generateChunk（临时区块），不关装饰会递归。
+- **要塞选址（聚类，曾 0% 接受）**：下界可行走空腔主要在中段高度（50-200，y=90 探针窗口太低全灭）且呈多层分布（同锚点各列地面 92/135 两级）——探针从 y=150 下探穿悬挂体取首个暴露地面，9 列结果做 **±8 聚类取最大簇（≥4 列）以簇中位数定位**；单一中位数+全距门控会 0% 接受。接受率 ~24% × 概率门 0.84 → 每 cell(320 格) ~20% 有要塞。
+- **下界立足面扫描（存量 bug 已修，勿回退）**：有天花维度的实体落点必须"下探穿悬挂体"（trySpawn 与 CommandPanel._spawnMob 两处）——原"首个实心即停 + 头部空间检查"被天花顶面拒绝 ~93% 列 → 下界自然生成近乎不可能；`findGroundY` 同理会命中天花返回 y≈201 把生成物嵌进岩层。
+- **烈焰人仅要塞生成**：`pickNetherSpawn` 纯函数（要塞平台层 70% 烈焰人 / 20% 猪灵 / 10% 凋零骷髅；峡谷 45% 凋零骷髅；荒地 85% 猪灵）；`MobManager._fortressAt` 用 recordsAround+bbox（抗 LRU 驱逐）。要塞庭院刻意无顶 → spawn 下探直达平台层。
+- **中立怪/悬浮怪机制**：`Mob.neutral` + attackMob 内 25s 激怒 + 16 格同族传播（息怒回游荡）；`Mob.flying`（EntityPhysics 已有 flying 分支跳重力）+ update 竖直悬停控制（chase 对齐目标 y、游荡漂回 hoverBaseY、chase 跳跃分支须 !flying）；`igniteOnHit` 命中点燃复用 player.onFire。测试 eval 直调 attackMob 的 rayDir 必须真 Vector3（内部 `rayDir.clone()`）。
+- **命令面板布局**：双列卡片网格（左=传送/探索，右=维度/模式/时间，生成实体整宽 auto-fill 网格，关闭钮在头部）；面板 min(780px,94vw) + max-height 88vh 内滚兜底。生成实体列表 = **MobTypes 动态枚举**（MOB_ORDER 定序，未知类型排尾）——新增生物自动纳入面板，无需改本文件。布局重构不改任何元素 id/回调/refresh 通道；探索行传送用 `rec.groundY+2`（要塞）而 getHeightAt（主世界）。
+- **测试**：`tests/nether-fortress.mjs`（36 断言×2 seeds：维度作用域/记录自洽/布局确定性/区块落地/要塞表确定性）与 `tests/nether-mobs.mjs`（70 断言：类型注册/模型盒一致/生成表分布/中立悬浮标记/全类型可构造）接入 run-all-tests.sh。
+
+
 ### 阶段 10 关键实现备忘（防回退）—— 手持物 3D 化 + 快捷栏同步 + 掉落归属锁 + 多账号 + RTT
 
 - **手持物 3D 化**：`src/render/HeldItemMesh.js`（模板缓存进程级，clone 复用；方块=六面贴图立方体、`renderType==='cross'` 方块=交叉双面薄片、物品=双面薄片；材质 `MeshLambertMaterial` + `emissiveMap` 同贴图 0.35 自发光，夜晚可见；**勿改回 sprite billboard**）。`src/render/FirstPersonHand.js` 第一人称：**camera 必须加入 scene（`scene.add(camera)`）其子节点才渲染**（`Game.constructor` 一次性挂载，属共享型子系统——`start()` 里重置 `currentName=undefined` 强制重建）；按住左键自动连续挥动（0.3s 冷却），放置/食用/命中命中时 `hand.swing()`。`RemotePlayer._setHeld` 挂 `armR.pivot`（dispose 只 remove 不 dispose，几何/材质为共享缓存）。
