@@ -5,6 +5,8 @@
 import { SimplexNoise } from '../noise.js';
 import { BlockRegistry } from '../../core/BlockRegistry.js';
 import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT } from '../../core/Chunk.js';
+import { StructureManager } from '../structures/StructureManager.js';
+import '../structures/catalog.js';
 
 // ── 下界参数 ─────────────────────────────────────────────────────────
 const FLOOR_BASE = 38, FLOOR_AMP = 12;      // 地面高度带
@@ -38,6 +40,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 export class NetherGenerator {
   constructor(seed) {
     this.seed = seed;
+    this.dimensionId = 'nether'; // 结构维度作用域（StructureManager.dimMatches 读取）
     this.floorNoise = new SimplexNoise(seed * 31 + 101);
     this.ceilNoise = new SimplexNoise(seed * 31 + 102);
     this.cheeseNoise = new SimplexNoise(seed * 31 + 103);
@@ -46,6 +49,9 @@ export class NetherGenerator {
     this.patchNoise = new SimplexNoise(seed * 31 + 106);
     this.glowNoise = new SimplexNoise(seed * 31 + 107);
     this.valleyNoise = new SimplexNoise(seed * 31 + 108);
+    // 自然建筑（下界要塞）：decorateChunk 在 generateChunk 尾部调用；
+    // 探测/求解内产生的临时区块用 generateChunk(chunk, false) 关闭装饰防递归
+    this.structureManager = new StructureManager(this, seed);
     // 生物群系名表（InfoBar 按 generator.biomeNames 读取；主世界走 biomes.js 的 BiomeNames）
     this.biomeNames = {
       wastes: '下界荒地', soul_sand: '灵魂沙平原', gravel: '砂砾荒地', lava_sea: '熔岩海',
@@ -103,8 +109,8 @@ export class NetherGenerator {
     return { fA, fB, fC };
   }
 
-  // 生成区块（两遍：① 高度带 + 空腔雕刻 + 熔岩海；② 表面斑块 + 荧石挂顶）
-  generateChunk(chunk) {
+  // 生成区块（decorate=false 供出生点探测/结构选址等临时探测用，跳过装饰与建筑）
+  generateChunk(chunk, decorate = true) {
     const { cx, cz } = chunk;
     const blocks = chunk.blocks;
     const NR = BlockRegistry.getId('netherrack');
@@ -193,6 +199,9 @@ export class NetherGenerator {
         }
       }
     }
+
+    // ③ 自然建筑（下界要塞，锚点网格 + 确定性布局 + 逐区块裁剪）
+    if (decorate) this.structureManager.decorateChunk(chunk);
   }
 
   // 出生点：从原点螺旋外推找"2 格空气 + 实心地板"（熔岩海之上）。
@@ -202,7 +211,7 @@ export class NetherGenerator {
     const chunkAt = (cx, cz) => {
       const k = cx + ',' + cz;
       let c = cache.get(k);
-      if (!c) { c = new Chunk(cx, cz); this.generateChunk(c); cache.set(k, c); }
+      if (!c) { c = new Chunk(cx, cz); this.generateChunk(c, false); cache.set(k, c); }
       return c;
     };
     const probe = (x, z) => {

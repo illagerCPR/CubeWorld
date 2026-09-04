@@ -16,6 +16,7 @@ const SPAWN_ISLE_TOP = 92;    // 出生岛保底顶面
 export class AetherGenerator {
   constructor(seed) {
     this.seed = seed;
+    this.dimensionId = 'aether'; // 结构维度作用域（StructureManager.dimMatches 读取）
     this.isleNoise = new SimplexNoise(seed * 41 + 301);   // 岛屿场
     this.topNoise = new SimplexNoise(seed * 41 + 302);    // 顶面起伏
     this.bottomNoise = new SimplexNoise(seed * 41 + 303); // 岛底起伏

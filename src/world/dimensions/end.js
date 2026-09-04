@@ -25,6 +25,7 @@ function hashSeed(seed, k) {
 export class EndGenerator {
   constructor(seed) {
     this.seed = seed;
+    this.dimensionId = 'end'; // 结构维度作用域（StructureManager.dimMatches 读取）
     this.edgeNoise = new SimplexNoise(seed * 37 + 201);   // 主岛边缘扰动（角度域连续）
     this.topNoise = new SimplexNoise(seed * 37 + 202);    // 顶面高度起伏
     this.bottomNoise = new SimplexNoise(seed * 37 + 203); // 岛底起伏

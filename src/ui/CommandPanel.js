@@ -216,8 +216,9 @@ export class CommandPanel {
     this._refreshTimeLabel();
   }
 
-  // W2：探索列表 —— 村庄（recordsAround ±3 cell）+ 要塞环带 3 点（seed 直接派生），
-  // 按距离排序；每行带"传送"按钮（落地地表 +2）
+  // W2：探索列表 —— 主世界：村庄（recordsAround ±3 cell）+ 要塞环带 3 点（seed 直接派生）；
+  // 下界：下界要塞（recordsAround ±2 cell，带 groundY 传送层）。按距离排序；
+  // 每行带"传送"按钮（主世界落地地表 +2，下界落要塞平台 +2）
   _refreshExplore() {
     const box = this.exploreBox;
     box.innerHTML = '';
@@ -226,15 +227,21 @@ export class CommandPanel {
     if (!sm) return;
     const p = this.game.player.position;
     const items = [];
-    for (const rec of sm.recordsAround('village', p.x, p.z, EXPLORE_VILLAGE_CELL_R)) {
-      const d = Math.hypot(rec.ax - p.x, rec.az - p.z);
-      items.push({
-        name: rec.meta && rec.meta.variant === 'desert' ? '沙漠村庄' : '村庄',
-        x: rec.ax, z: rec.az, d,
-      });
-    }
-    for (const pt of ringPoints(world.seed)) {
-      items.push({ name: '要塞', x: pt.x, z: pt.z, d: Math.hypot(pt.x - p.x, pt.z - p.z) });
+    if (world.dimension === 'nether') {
+      for (const rec of sm.recordsAround('fortress', p.x, p.z, 2)) {
+        items.push({ name: '下界要塞', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
+      }
+    } else {
+      for (const rec of sm.recordsAround('village', p.x, p.z, EXPLORE_VILLAGE_CELL_R)) {
+        const d = Math.hypot(rec.ax - p.x, rec.az - p.z);
+        items.push({
+          name: rec.meta && rec.meta.variant === 'desert' ? '沙漠村庄' : '村庄',
+          x: rec.ax, z: rec.az, d,
+        });
+      }
+      for (const pt of ringPoints(world.seed)) {
+        items.push({ name: '要塞', x: pt.x, z: pt.z, d: Math.hypot(pt.x - p.x, pt.z - p.z) });
+      }
     }
     items.sort((a, b) => a.d - b.d);
     for (const it of items) {
@@ -248,9 +255,9 @@ export class CommandPanel {
       btn.textContent = '传送';
       btn.style.cssText = 'padding: 2px 8px; font-size: 11px; background: #2a6a8a; color: #fff; border: 1px solid #1a4a6a; cursor: pointer;';
       btn.addEventListener('click', () => {
-        const h = world.getHeightAt(it.x, it.z);
+        const ty = it.y != null ? it.y + 2 : world.getHeightAt(it.x, it.z) + 3;
         this.tpX.value = (it.x + 0.5).toFixed(1);
-        this.tpY.value = (h + 3).toFixed(1);
+        this.tpY.value = ty.toFixed(1);
         this.tpZ.value = (it.z + 0.5).toFixed(1);
         this._teleport();
         this.hide();

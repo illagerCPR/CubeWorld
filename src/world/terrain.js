@@ -35,6 +35,7 @@ const CAVE_LAVA_LEVEL = 10;      // 挖空处 y ≤ 此值填岩浆（MC 风格�
 export class TerrainGenerator {
   constructor(seed) {
     this.seed = seed;
+    this.dimensionId = 'overworld'; // 结构维度作用域（StructureManager.dimMatches 读取）
     this.noise = new SimplexNoise(seed);
     this.tempNoise = new SimplexNoise(seed + 1);
     this.humidNoise = new SimplexNoise(seed + 2);

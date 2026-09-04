@@ -40,6 +40,13 @@ const TABLES = {
     ['emerald', 1, 3, 8], ['bucket', 1, 1, 4], ['redstone', 2, 6, 8],
     ['golden_apple', 1, 1, 2], ['ender_pearl', 1, 2, 5], ['blaze_rod', 1, 2, 4],
   ],
+  // 下界要塞：金饰/烈焰系/稀有矿物（箱子在主堡×2、桥头堡、南桥尽头脑）
+  fortress: [
+    ['gold_nugget', 2, 6, 14], ['gold_ingot', 1, 3, 10], ['iron_ingot', 1, 3, 8],
+    ['coal', 3, 8, 12], ['bone', 1, 4, 10], ['obsidian', 2, 4, 8],
+    ['flint', 1, 2, 6], ['blaze_rod', 1, 2, 4], ['golden_apple', 1, 1, 2],
+    ['diamond', 1, 1, 2], ['saddle', 1, 1, 2],
+  ],
 };
 
 // 生成箱子内容：27 槽数组（索引 0-26），空槽为 null

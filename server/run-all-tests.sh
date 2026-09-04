@@ -52,6 +52,15 @@ else
     exit 1
 fi
 
+# 下界要塞结构回归（纯 node：维度作用域/记录自洽/布局确定性/区块落地/战利品表）
+echo "=== nether-fortress ==="
+if node tests/nether-fortress.mjs; then
+    echo "nether-fortress: OK"
+else
+    echo "nether-fortress: FAILED"
+    exit 1
+fi
+
 # 测试非幂等：先确认 3001 空闲，再清空运行时数据保证干净状态
 if (exec 3<>/dev/tcp/127.0.0.1/3001) 2>/dev/null; then
     exec 3>&- 3<&- 2>/dev/null

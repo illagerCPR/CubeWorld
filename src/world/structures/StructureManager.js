@@ -42,6 +42,16 @@ export function registerStructureType(name, def) {
   structureTypes.set(name, def);
 }
 
+// 维度作用域：def.dims 缺省 = 任意维度；声明时仅列出的维度参与
+//（生成器 dimensionId：主世界 overworld / 下界 nether / 末地 end / 天域 aether）。
+// 过滤必须覆盖全部入口（装饰/查询），否则下界的 StructureManager 会求解村庄/要塞
+// 并在缺少 getBaseHeight 等地表接口的生成器上抛错。
+function dimMatches(def, gen) {
+  if (!def || !def.dims || !Array.isArray(def.dims)) return true;
+  const d = gen && gen.dimensionId;
+  return !d || def.dims.indexOf(d) >= 0;
+}
+
 export class StructureManager {
   constructor(generator, seed) {
     this.generator = generator;
@@ -143,6 +153,7 @@ export class StructureManager {
     if (structureTypes.size === 0) return;
     const { cx, cz } = chunk;
     for (const [name, def] of structureTypes) {
+      if (!dimMatches(def, this.generator)) continue;
       const rChunks = Math.ceil(def.radius / CHUNK_SIZE) + 1;
       const c0x = Math.floor((cx - rChunks) / def.cell);
       const c1x = Math.floor((cx + rChunks) / def.cell);
@@ -182,6 +193,7 @@ export class StructureManager {
     for (const rec of this.cache.values()) {
       if (!rec) continue;
       if (typeName && rec.name !== typeName) continue;
+      if (!dimMatches(structureTypes.get(rec.name), this.generator)) continue;
       const dx = Math.max(rec.minX - x, 0, x - rec.maxX);
       const dz = Math.max(rec.minZ - z, 0, z - rec.maxZ);
       if (dx * dx + dz * dz <= radius * radius) out.push(rec);
@@ -192,7 +204,7 @@ export class StructureManager {
   // 运行时按需求解指定 cell 的记录（村庄传送/村民生成定位等），结果同样进缓存
   ensureRecord(typeName, ccx, ccz) {
     const def = structureTypes.get(typeName);
-    if (!def) return null;
+    if (!def || !dimMatches(def, this.generator)) return null;
     return this._cellRecord(typeName, def, ccx, ccz);
   }
 
@@ -200,7 +212,7 @@ export class StructureManager {
   // 村民生成等周期性逻辑用这个而不是 recordsNear——后者只读缓存，长距离探索后记录会被挤出。
   recordsAround(typeName, x, z, r = 1) {
     const def = structureTypes.get(typeName);
-    if (!def) return [];
+    if (!def || !dimMatches(def, this.generator)) return [];
     const cellBlocks = def.cell * CHUNK_SIZE;
     const ccx = Math.floor(x / cellBlocks);
     const ccz = Math.floor(z / cellBlocks);
@@ -227,11 +239,13 @@ export class StructureManager {
   // W2：玩家所处建筑名（荒野返回 null）。bbox 判定走 recordsAround（按需重求解，抗 LRU），
   // 调用方须自行节流（InfoBar 0.5s）——每次调用至多 2 类型 × 9 cell 求解（多数有缓存）。
   structureNameAt(x, z) {
-    for (const [name] of structureTypes) {
+    for (const [name, def] of structureTypes) {
+      if (!dimMatches(def, this.generator)) continue;
       for (const rec of this.recordsAround(name, x, z)) {
         if (x < rec.minX || x > rec.maxX || z < rec.minZ || z > rec.maxZ) continue;
         if (name === 'village') return rec.meta && rec.meta.variant === 'desert' ? '沙漠村庄' : '村庄';
         if (name === 'stronghold') return '要塞';
+        if (name === 'fortress') return '下界要塞';
         return name;
       }
     }
