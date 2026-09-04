@@ -123,6 +123,21 @@ for (const def of Object.values(DIMENSIONS)) {
       if (!below || !below.solid) fail(`[${def.id}] seed=${seed} 出生点地板非实心 @(${bx},${by - 1},${bz})`);
       if (by < 1 || by >= CHUNK_HEIGHT) fail(`[${def.id}] seed=${seed} 出生点 y 越界: ${by}`);
     }
+
+    // ⑦ 生物群系：确定性 + 名表完备（InfoBar 全维度生物群系显示依赖）
+    if (typeof fw.gen.getBiome !== 'function') {
+      fail(`[${def.id}] 缺少 getBiome（InfoBar 全维度生物群系依赖）`);
+    } else {
+      const probes = [[0, 0], [37, -51], [-88, 120], [400, -400]];
+      for (const [px, pz] of probes) {
+        const b1 = fw.gen.getBiome(px, pz);
+        const b2 = DIMENSIONS[def.id].createGenerator(seed).getBiome(px, pz);
+        if (b1 !== b2) fail(`[${def.id}] seed=${seed} 生物群系不确定 @(${px},${pz}): ${b1} vs ${b2}`);
+        if (fw.gen.biomeNames && !fw.gen.biomeNames[b1]) {
+          fail(`[${def.id}] seed=${seed} 生物群系 ${b1} 缺少中文名（generator.biomeNames）`);
+        }
+      }
+    }
   }
 
   // ⑥ 单区块生成耗时预算

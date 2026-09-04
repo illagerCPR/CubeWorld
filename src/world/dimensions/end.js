@@ -29,6 +29,8 @@ export class EndGenerator {
     this.topNoise = new SimplexNoise(seed * 37 + 202);    // 顶面高度起伏
     this.bottomNoise = new SimplexNoise(seed * 37 + 203); // 岛底起伏
     this.outerNoise = new SimplexNoise(seed * 37 + 204);  // 外环小岛场
+    // 生物群系名表（InfoBar 按 generator.biomeNames 读取）
+    this.biomeNames = { main_island: '末地主岛', outer_islands: '末地外岛', void: '末地虚空' };
   }
 
   // 黑曜石柱布局（纯函数 of seed；每次调用结果一致）
@@ -73,6 +75,13 @@ export class EndGenerator {
     const top = 58 + Math.round(this.topNoise.fbm2D(wx * 0.02 + 91, wz * 0.02, 2) * 6);
     const thickness = 4 + Math.round((n - OUTER_T) * 46);
     return { top, bottom: Math.max(8, top - thickness) };
+  }
+
+  // 生物群系（纯函数 of 列坐标）：主岛 > 外环小岛 > 虚空
+  getBiome(wx, wz) {
+    if (this._islandSpan(wx, wz)) return 'main_island';
+    if (this._outerSpan(wx, wz)) return 'outer_islands';
+    return 'void';
   }
 
   generateChunk(chunk) {

@@ -19,6 +19,8 @@ export class AetherGenerator {
     this.isleNoise = new SimplexNoise(seed * 41 + 301);   // 岛屿场
     this.topNoise = new SimplexNoise(seed * 41 + 302);    // 顶面起伏
     this.bottomNoise = new SimplexNoise(seed * 41 + 303); // 岛底起伏
+    // 生物群系名表（InfoBar 按 generator.biomeNames 读取）
+    this.biomeNames = { plains: '浮岛平原', highlands: '浮岛高地', void: '天穹虚空' };
   }
 
   // 岛屿场：低频 fbm + 原点保底 dome（max 合成——无论噪声如何原点必有岛）
@@ -37,6 +39,13 @@ export class AetherGenerator {
     const bottom = this.bottomNoise.fbm2D(wx * 0.03 + 37, wz * 0.03, 2) * 4;
     const thickness = 3 + core * 60 + bottom;
     return { top: Math.min(CHUNK_HEIGHT - 30, top), bottom: Math.max(8, top - Math.round(thickness)) };
+  }
+
+  // 生物群系（纯函数 of 列坐标）：岛心越厚越高地——浮岛高地 > 浮岛平原 > 天穹虚空
+  getBiome(wx, wz) {
+    const n = this._field(wx, wz);
+    if (n <= ISLE_T) return 'void';
+    return n > ISLE_T + 0.20 ? 'highlands' : 'plains';
   }
 
   generateChunk(chunk) {

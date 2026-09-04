@@ -44,6 +44,8 @@ export class NetherGenerator {
     this.noodleB = new SimplexNoise(seed * 31 + 105);
     this.patchNoise = new SimplexNoise(seed * 31 + 106);
     this.glowNoise = new SimplexNoise(seed * 31 + 107);
+    // 生物群系名表（InfoBar 按 generator.biomeNames 读取；主世界走 biomes.js 的 BiomeNames）
+    this.biomeNames = { wastes: '下界荒地', soul_sand: '灵魂沙平原', gravel: '砂砾荒地', lava_sea: '熔岩海' };
   }
 
   getFloorY(wx, wz) {
@@ -54,6 +56,15 @@ export class NetherGenerator {
   getCeilY(wx, wz) {
     const n = this.ceilNoise.fbm2D(wx * 0.01, wz * 0.01, 3, 0.5, 2);
     return Math.floor(CEIL_BASE + n * CEIL_AMP);
+  }
+
+  // 生物群系（纯函数 of 列坐标，复用生成噪声零新状态）：熔岩海 > 灵魂沙平原 > 砂砾荒地 > 下界荒地
+  getBiome(wx, wz) {
+    if (this.getFloorY(wx, wz) <= LAVA_SEA) return 'lava_sea';
+    const patch = this.patchNoise.fbm2D(wx * PATCH_FREQ, wz * PATCH_FREQ, 2);
+    if (patch > SOUL_T) return 'soul_sand';
+    if (patch < GRAVEL_T) return 'gravel';
+    return 'wastes';
   }
 
   // 空腔判定（场插值后的三通道）：奶酪 >t 或意面 a²+b²<t

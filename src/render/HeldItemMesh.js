@@ -47,10 +47,13 @@ async function svgTexture(svg) {
 }
 
 // 手持物材质：白天吃场景光照保留立体感，夜晚用低强度自发光保证可见（MC 手持物同样不会全黑）
+// alphaTest：物品/十字方块的 SVG 贴图背景透明——不开 alphaTest 时透明像素按 RGB(0,0,0) 渲染成黑底；
+// 用 alphaTest（而非 transparent）保持深度写入正确，双面薄片无排序伪影
 function heldMaterial(tex) {
   return new THREE.MeshLambertMaterial({
     map: tex, side: THREE.DoubleSide,
     emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.35,
+    alphaTest: 0.5,
   });
 }
 

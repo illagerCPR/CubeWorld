@@ -43,28 +43,34 @@ export class InfoBar {
   // update(player, generator, sky, crosshairInfo, rttMs = null, dimensionName = null)
   //   crosshairInfo: null 或 { type: 'block'|'mob', displayName, name }
   //   rttMs: 阶段10 联机平滑 RTT（毫秒），null=单机/未测得（隐藏该行）
-  //   dimensionName: 非主世界维度名（显示"维度: X"；null=主世界显示生物群系）
+  //   dimensionName: 非主世界维度名（生物群系行加"维度: X ｜"前缀；null=主世界）
   update(player, generator, sky, crosshairInfo, rttMs = null, dimensionName = null) {
     const x = player.position.x;
     const y = player.position.y;
     const z = player.position.z;
     this.coordLine.textContent = `XYZ: ${x.toFixed(2)} / ${y.toFixed(2)} / ${z.toFixed(2)}`;
 
-    if (dimensionName) {
-      this.biomeLine.textContent = `维度: ${dimensionName}`;
-    } else {
-      const biome = generator.getBiome(x, z);
-      this.biomeLine.textContent = `生物群系: ${BiomeNames[biome] || '未知'}`;
-    }
+    // 生物群系全维度显示：维度生成器自带 biomeNames 名表（主世界走 biomes.js 的 BiomeNames）；
+    // 非主世界额外前缀"维度: X ｜"
+    const biome = generator.getBiome(x, z);
+    const biomeLabel = generator.biomeNames ? generator.biomeNames[biome] : BiomeNames[biome];
+    this.biomeLine.textContent = dimensionName
+      ? `维度: ${dimensionName} ｜ 生物群系: ${biomeLabel || '未知'}`
+      : `生物群系: ${biomeLabel || '未知'}`;
 
     if (sky) {
-      const t = sky.time;
-      const totalMinutes = Math.floor(t * 24 * 60);
-      const hh = Math.floor(totalMinutes / 60) % 24;
-      const mm = totalMinutes % 60;
-      const hhStr = String(hh).padStart(2, '0');
-      const mmStr = String(mm).padStart(2, '0');
-      this.timeLine.textContent = `时间: ${hhStr}:${mmStr}`;
+      if (sky.dimDef && sky.dimDef.noDayCycle) {
+        // 无昼夜维度（下界/末地）：时钟无意义
+        this.timeLine.textContent = '时间: 无昼夜';
+      } else {
+        const t = sky.time;
+        const totalMinutes = Math.floor(t * 24 * 60);
+        const hh = Math.floor(totalMinutes / 60) % 24;
+        const mm = totalMinutes % 60;
+        const hhStr = String(hh).padStart(2, '0');
+        const mmStr = String(mm).padStart(2, '0');
+        this.timeLine.textContent = `时间: ${hhStr}:${mmStr}`;
+      }
     }
 
     if (crosshairInfo) {
