@@ -727,7 +727,9 @@ const BlockCN = {
   oak_log: '橡木原木', spruce_log: '云杉原木', birch_log: '白桦原木', dark_oak_log: '深色橡木原木', acacia_log: '金合欢原木',
   oak_planks: '橡木木板', spruce_planks: '云杉木板', birch_planks: '白桦木板', dark_oak_planks: '深色橡木木板', acacia_planks: '金合欢木板',
   oak_leaves: '橡树树叶', spruce_leaves: '云杉树叶', birch_leaves: '白桦树叶',
-  cobblestone: '圆石', stone_bricks: '石砖', mossy_cobblestone: '苔石', brick_block: '红砖块', nether_bricks: '下界砖块',
+  cobblestone: '圆石', stone_bricks: '石砖', mossy_stone_bricks: '苔石砖', cracked_stone_bricks: '裂石砖',
+  mossy_cobblestone: '苔石', brick_block: '红砖块', nether_bricks: '下界砖块',
+  bookshelf: '书架', end_portal_frame: '末地传送门框架',
   sandstone: '砂岩', red_sandstone: '红砂岩', quartz_block: '石英块',
   crafting_table: '工作台', furnace: '熔炉', tnt: 'TNT',
   glass: '玻璃', glowstone: '荧石', sea_lantern: '海晶灯', torch: '火把',
@@ -816,9 +818,97 @@ reg('birch_leaves', { transparent: true, solid: true, hardness: 0.2 }, { birch_l
 // --- 砖/石砖 ---
 reg('cobblestone', { hardness: 2, tool: 'pickaxe' }, { cobblestone: cobbleTex(81) });
 reg('stone_bricks', { hardness: 1.5, tool: 'pickaxe' }, { stone_bricks: stoneBricksTex(82) });
+reg('mossy_stone_bricks', { hardness: 1.5, tool: 'pickaxe' }, { mossy_stone_bricks: stoneBricksMossyTex(89) });
+reg('cracked_stone_bricks', { hardness: 1.5, tool: 'pickaxe' }, { cracked_stone_bricks: stoneBricksCrackedTex(90) });
 reg('mossy_cobblestone', { hardness: 2, tool: 'pickaxe' }, { mossy_cobblestone: blotchTex([100, 118, 82], 83, { dark: 0.7, light: 1.2 }) });
 reg('brick_block', { hardness: 2, tool: 'pickaxe' }, { brick_block: brickTex(84) });
 reg('nether_bricks', { hardness: 2, tool: 'pickaxe' }, { nether_bricks: brickTexMagenta(85) });
+reg('bookshelf', { hardness: 1.5, tool: 'axe', textures: { top: 'oak_planks', side: 'bookshelf_side', bottom: 'oak_planks' } }, { bookshelf_side: bookshelfSideTex(91) });
+reg('end_portal_frame', { hardness: -1, textures: { top: 'end_portal_frame_top', side: 'end_portal_frame_side', bottom: 'stone_bricks' } }, { end_portal_frame_top: endPortalFrameTopTex(92), end_portal_frame_side: endPortalFrameSideTex(93) });
+
+// 苔石砖：石砖基底 + 苔斑侵蚀（要塞材质）
+function stoneBricksMossyTex(seed) {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      let f = 0.95 + hash2(x, y, seed) * 0.1;
+      if ((x & 7) === 0 || (y & 7) === 0) f *= 1.08;
+      if ((x & 7) === 7 || (y & 7) === 7) f = 0.55;
+      const r = hash2(x + 31, y + 17, seed + 5);
+      if (r < 0.3) px[y * 16 + x] = rgb([96, 122, 70], 0.85 + r);
+      else px[y * 16 + x] = rgb([122, 122, 122], f);
+    }
+  }
+  return pixelSvg(px);
+}
+
+// 裂石砖：石砖基底 + 两条贯穿裂纹
+function stoneBricksCrackedTex(seed) {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      let f = 0.95 + hash2(x, y, seed) * 0.1;
+      if ((x & 7) === 0 || (y & 7) === 0) f *= 1.08;
+      if ((x & 7) === 7 || (y & 7) === 7) f = 0.55;
+      if (x === ((y * 3 + 4) & 15) || x === ((y * 5 + 11) & 15)) f *= 0.55;
+      px[y * 16 + x] = rgb([122, 122, 122], f);
+    }
+  }
+  return pixelSvg(px);
+}
+
+// 书架侧面：木框 + 两排彩色书脊
+function bookshelfSideTex(seed) {
+  const px = makeTex();
+  const plank = [162, 130, 78];
+  const spines = [[178, 60, 48], [62, 98, 158], [92, 132, 60], [168, 140, 58], [120, 70, 140]];
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      let c = plank, f = 0.9 + hash2(x, y, seed) * 0.2;
+      const inShelf = (y >= 2 && y <= 6) || (y >= 9 && y <= 13);
+      if (inShelf) {
+        const shelf = y <= 6 ? 0 : 1;
+        if (x === 0 || x === 15 || hash2(x, y + 40, seed + 3) < 0.15) c = [88, 66, 44];
+        else c = spines[Math.floor(hash2(x, shelf, seed + 9) * 5) % 5];
+        f = 0.85 + hash2(x, y, seed + 5) * 0.3;
+      }
+      px[y * 16 + x] = rgb(c, f);
+    }
+  }
+  return pixelSvg(px);
+}
+
+// 末地传送门框架：顶面绿心石框 / 侧面石身绿带
+function endPortalFrameTopTex(seed) {
+  const px = makeTex();
+  const stone = [136, 136, 136], green = [86, 178, 132], greenD = [52, 116, 88];
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      let c = stone, f = 0.9 + hash2(x, y, seed) * 0.2;
+      const d = Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5));
+      if (d <= 4) c = green;
+      if (d > 3 && d <= 4) c = greenD;
+      if (d > 1.5 && d <= 2) f *= 0.6;
+      px[y * 16 + x] = rgb(c, f);
+    }
+  }
+  return pixelSvg(px);
+}
+
+function endPortalFrameSideTex(seed) {
+  const px = makeTex();
+  const stone = [136, 136, 136], green = [86, 178, 132], greenD = [52, 116, 88];
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      let c = stone, f = 0.9 + hash2(x, y, seed) * 0.2;
+      if (y <= 2) { c = green; if (y === 2) c = greenD; }
+      if (y === 11) f *= 0.6;
+      px[y * 16 + x] = rgb(c, f);
+    }
+  }
+  return pixelSvg(px);
+}
+
 reg('sandstone', { hardness: 0.8, tool: 'pickaxe' }, { sandstone: sandstoneTex(86) });
 reg('red_sandstone', { hardness: 0.8, tool: 'pickaxe' }, { red_sandstone: sandstoneTexR(87) });
 reg('quartz_block', { hardness: 0.8, tool: 'pickaxe' }, { quartz_block: noiseTex([236, 233, 226], 88, { dark: 0.97, light: 1.03, dProb: 0.12, lProb: 0.1 }) });

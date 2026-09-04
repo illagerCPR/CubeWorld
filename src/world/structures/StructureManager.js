@@ -34,6 +34,8 @@ export { makeRng, hash32 };
 //   minTop/maxTop 地表海拔窗（可选）；maxSlope 平坦度容差（默认 4）
 //   solve(rng, ax, groundY, az, gen) -> { blocks: [[wx,wy,wz,id],...], meta }  纯函数布局求解
 //   place(gen, ax, az) -> groundY | -1   可选选址覆盖（要塞等非地表逻辑用），默认走平坦度检查
+//   anchorForCell(sm, ccx, ccz) -> {cx,cz} | null  可选锚点覆盖（环带等非网格锚点；覆盖时
+//   attempts/chance 门不生效，返回 null 即该 cell 无结构）
 const structureTypes = new Map();
 
 export function registerStructureType(name, def) {
@@ -56,17 +58,25 @@ export class StructureManager {
 
     let rec = null;
     // 多次锚点尝试：首个通过选址者胜出（每次尝试独立哈希流，盐加质数步长去相关）
-    const tries = def.attempts || 1;
+    // anchorForCell 覆盖：环带等非网格锚点（要塞）——返回 null 表示该 cell 无锚点
+    const tries = def.anchorForCell ? 1 : (def.attempts || 1);
     for (let k = 0; k < tries && !rec; k++) {
       const h = hash32(this.seed, ccx, ccz, def.salt + k * 7919);
-      // 概率门用高 16 位，抖动用低 16 位（各 8 位，互不侵占）
-      if (!((h >>> 16) / 65536 < def.chance)) continue;
-      // 抖动约束在 cell 中心 4..cell-4 区间：保证相邻 cell 锚点最小间距 ≥ 8 区块，避免相邻建筑重叠
-      const span = Math.max(1, def.cell - 8);
-      const jx = 4 + ((h & 255) % span);
-      const jz = 4 + (((h >>> 8) & 255) % span);
-      const anchorCx = ccx * def.cell + (jx % def.cell);
-      const anchorCz = ccz * def.cell + (jz % def.cell);
+      if (!def.anchorForCell && !((h >>> 16) / 65536 < def.chance)) continue;
+      let anchorCx, anchorCz;
+      if (def.anchorForCell) {
+        const a = def.anchorForCell(this, ccx, ccz);
+        if (!a) break;
+        anchorCx = a.cx; anchorCz = a.cz;
+      } else {
+        // 概率门用高 16 位，抖动用低 16 位（各 8 位，互不侵占）
+        // 抖动约束在 cell 中心 4..cell-4 区间：保证相邻 cell 锚点最小间距 ≥ 8 区块，避免相邻建筑重叠
+        const span = Math.max(1, def.cell - 8);
+        const jx = 4 + ((h & 255) % span);
+        const jz = 4 + (((h >>> 8) & 255) % span);
+        anchorCx = ccx * def.cell + (jx % def.cell);
+        anchorCz = ccz * def.cell + (jz % def.cell);
+      }
       const ax = anchorCx * CHUNK_SIZE + 8;
       const az = anchorCz * CHUNK_SIZE + 8;
       const groundY = def.place

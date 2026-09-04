@@ -2,5 +2,7 @@
 // 新增结构类型在此登记；测试用类型由 tests/ 自行注册，不进本文件。
 import { registerStructureType } from './StructureManager.js';
 import { VILLAGE_DEF } from './village.js';
+import { STRONGHOLD_DEF } from './stronghold.js';
 
 registerStructureType('village', VILLAGE_DEF);
+registerStructureType('stronghold', STRONGHOLD_DEF);
