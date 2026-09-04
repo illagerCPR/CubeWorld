@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
-# run-all-tests.sh -- 一键回归：清状态 → 起真实服务器 → 跑全部 6 个套件 → 停服
+# run-all-tests.sh -- 一键回归：结构确定性（无需服务器）→ 清状态 → 起真实服务器 → 跑全部 6 个套件 → 停服
 # 任何套件失败则整体退出 1；CI 与本地共用同一入口（本地须在 3001 空闲时执行）
 
 set -u
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+
+# 结构生成确定性回归（纯 node，不依赖服务器；放最前避免占用 3001 端口检查）
+echo "=== structure-determinism ==="
+if node tests/structure-determinism.mjs; then
+    echo "structure-determinism: OK"
+else
+    echo "structure-determinism: FAILED"
+    exit 1
+fi
 
 # 测试非幂等：先确认 3001 空闲，再清空运行时数据保证干净状态
 if (exec 3<>/dev/tcp/127.0.0.1/3001) 2>/dev/null; then

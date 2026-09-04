@@ -3,6 +3,7 @@ import { SimplexNoise } from './noise.js';
 import { Biomes, BiomeConfig } from './biomes.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from '../core/Chunk.js';
+import { StructureManager } from './structures/StructureManager.js';
 
 const STONE = () => BlockRegistry.getId('stone');
 const DIRT = () => BlockRegistry.getId('dirt');
@@ -24,6 +25,7 @@ export class TerrainGenerator {
     this.riverNoise = new SimplexNoise(seed + 3);
     this.detailNoise = new SimplexNoise(seed + 4);
     this.oreNoise = new SimplexNoise(seed + 5);
+    this.structureManager = new StructureManager(this, seed);
   }
 
   // 取群系
@@ -109,6 +111,8 @@ export class TerrainGenerator {
     
     // 结构生成（树等）
     this.generateStructures(chunk);
+    // 自然建筑（村庄/要塞等，锚点网格 + 确定性布局 + 逐区块裁剪）
+    this.structureManager.decorateChunk(chunk);
     chunk.generated = true;
     chunk.dirty = true;
   }
