@@ -86,7 +86,9 @@ export class ChunkMeshBuilder {
       map: this.waterTexture,
       vertexColors: true,
       transparent: true,
-      opacity: 0.7,
+      // 0.7 时"视线先后穿过两片分离水体"(近滩+远海)会叠出 ~91% 遮盖，远处水下被闷成
+      // 纯蓝并呈现直线分界(实为浅滩等高线)。0.48 下双层 73%/单层 48%，全域可见水下。
+      opacity: 0.48,
       side: THREE.DoubleSide,
       depthWrite: false
     });
