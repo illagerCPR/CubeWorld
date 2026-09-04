@@ -257,6 +257,14 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **要塞（T3）**：环带锚点走 `anchorForCell`（3 点 seed 派生 120°±抖动、半径 700-900；返回 null 即该 cell 无结构，attempts/chance 门不生效）；`place` 海拔门 60-100 拒绝深水/极峰（**个别 seed 第三座可被合理拒绝**，2-3 座属正常）。`hubY = min(surfaceY-26, minGround-9)`，minGround 取 ±40 步长 5 采样最低地表（步长 10 抓不到局部洼地，房间会戳出山体）。传送门室 = 12 框架环 + 3×3 未激活中心（末地维度另行立项）；风化混排 per-block 哈希 14% 苔/12% 裂。T5 后续候选（本批不做）：末地维度、战利品箱子（容器 UI+存档扩展）、村民交易。
 - **批次性能锚点**：单区块地形生成+结构装饰 ≈ 8-10ms（node 实测，含锚点扫描/村庄求解首算进缓存）；结构装饰对多数区块为 O(cell数) 哈希跳过。基准 7ms 是 mesh build（另一条路径），二者不相加混淆。
 
+### T5 批次备忘（防回退）—— 战利品箱子 / 村民交易
+
+- **容器惰性生成不变量**：箱子内容不在结构求解时生成——solve 只放 chest 方块并在 `meta.chests` 声明 `[x,y,z,表名]`；`StructureManager` 求解记录时注册进 `sm.chests` Map（**只增不减、幂等，不受布局缓存 LRU 驱逐影响**，与 recordsNear 缓存机制不同）。玩家打开箱子时 `World.getOrOpenContainer` 才按 `(seed, 表名, 坐标)` 生成 27 槽 loot；查不到注册 = 玩家自放箱子 = 空容器。`chestLoot`/`villagerTrades` 是纯函数（loot.js），任何改动都会改变全服所有箱子内容——两端一致性的根基，勿引入 Math.random。
+- **联机容器同步**：`container_set` 整箱 27 槽 last-write-wins（与方块账本同策略）；服务器 `sanitizeStack` 将 count<1 清为 null 空槽（曾钳到 1 出过幻影物品，勿改回 Math.max(1,...)）；挖箱 `block_set id=0` 时服务器顺带删容器账本（内容散落由挖掘方 drop_spawn 上报，其他端不重复散落）；joinRoom 回放容器账本（只回放动过的箱子）。客户端收到远端挖箱（applyRemoteBlock）要清本地容器 + 关开着的 ChestScreen。
+- **TradeScreen 交易种子**：`villagerTradeSeed(ax, az, i)` 是单机与 mob_spawn 广播共用的唯一派生函数——**勿在调用处各自造哈希**（两端表不一致即 bug）。`createMobFromNet` 接收广播值；`spawnMob` 内位置哈希只是旧广播/命令面板的兜底。村民不进存档 → 交易进度也不持久化（会话内），与村民生命周期一致。
+- **新建型 UI 惯例**：ChestScreen/TradeScreen 与 InventoryScreen 同组——`start()` 重建、`_disposeWorld()` dispose；ChestScreen 保存 document 监听器引用并在 dispose 移除（InventoryScreen 的 document mousemove 监听器有跨存档残留，属存量问题）。E/ESC 关闭 + `pauseOnUnlock` 防护 + `handleMouseInput` 开头 guard 三处都要挂新 UI 的 visible 检查。
+- **测试**：`tests/loot-determinism.mjs`（5 表确定性/交易表发散/51 箱坐标-表名-方块三向一致/两端 chests 注册表一致）与 `server/test-t5.mjs`（容器协议 14 断言含脏包消毒/挖箱清账/回放/tradeSeed 透传/store 落盘）均接入 `run-all-tests.sh`。
+
 
 ### 阶段 10 关键实现备忘（防回退）—— 手持物 3D 化 + 快捷栏同步 + 掉落归属锁 + 多账号 + RTT
 
