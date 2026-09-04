@@ -19,24 +19,26 @@ const TABLES = {
     ['iron_ingot', 1, 4, 10], ['coal', 3, 8, 10], ['emerald', 1, 3, 8],
     ['compass', 1, 1, 4], ['saddle', 1, 1, 3], ['golden_apple', 1, 1, 2],
     ['bucket', 1, 1, 4], ['oak_sapling', 2, 4, 6],
+    ['ender_pearl', 1, 1, 2], ['blaze_powder', 1, 2, 2],
   ],
   // 要塞枢纽：基础补给
   stronghold_hub: [
     ['bread', 1, 4, 14], ['coal', 3, 8, 14], ['iron_ingot', 1, 3, 10],
     ['torch', 6, 12, 12], ['arrow', 4, 10, 8], ['emerald', 1, 2, 6],
-    ['stick', 4, 10, 8],
+    ['stick', 4, 10, 8], ['ender_pearl', 1, 1, 3], ['blaze_rod', 1, 1, 3],
   ],
   // 要塞图书馆：书类与经验
   stronghold_library: [
     ['book', 1, 3, 20], ['enchanted_book', 1, 1, 4], ['compass', 1, 1, 6], ['book', 1, 2, 12], ['experience_bottle', 1, 3, 8],
     ['emerald', 1, 3, 8], ['apple', 1, 3, 8], ['map', 1, 1, 3],
+    ['ender_pearl', 1, 2, 5], ['blaze_rod', 1, 1, 4],
   ],
   // 要塞储藏室：矿物/弹药
   stronghold_storage: [
     ['iron_ingot', 1, 5, 16], ['gold_ingot', 1, 3, 10], ['coal', 3, 10, 14],
     ['bread', 1, 3, 10], ['arrow', 6, 14, 12], ['string', 1, 4, 8],
     ['emerald', 1, 3, 8], ['bucket', 1, 1, 4], ['redstone', 2, 6, 8],
-    ['golden_apple', 1, 1, 2],
+    ['golden_apple', 1, 1, 2], ['ender_pearl', 1, 2, 5], ['blaze_rod', 1, 2, 4],
   ],
 };
 

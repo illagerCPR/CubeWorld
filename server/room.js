@@ -591,11 +591,13 @@ export class Room {
       const [x, y, z] = key.split(',').map(Number);
       containers.push({ x, y, z, items });
     }
-    // 传送门落点（迭代 M2）：原样回传给换维者本人（仅整数 x/z + portal 名，服务器不校验语义）
+    // 传送门落点（迭代 M2/M3）：原样回传给换维者本人。带 x/z（下界/天域换算落点）或仅 portal
+    // 标记（末地出生点链）均可；服务器不校验语义，非法类型清洗
     let pos = null;
-    if (msg.pos && Number.isFinite(msg.pos.x) && Number.isFinite(msg.pos.z)) {
+    if (msg.pos && (typeof msg.pos.portal === 'string' || (Number.isFinite(msg.pos.x) && Number.isFinite(msg.pos.z)))) {
       pos = {
-        x: msg.pos.x | 0, z: msg.pos.z | 0,
+        x: Number.isFinite(msg.pos.x) ? (msg.pos.x | 0) : null,
+        z: Number.isFinite(msg.pos.z) ? (msg.pos.z | 0) : null,
         portal: typeof msg.pos.portal === 'string' ? msg.pos.portal.slice(0, 16) : null,
       };
     }

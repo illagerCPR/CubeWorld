@@ -113,6 +113,9 @@ addShaped('cookie', 8, ['wheat','wheat','wheat', null, null, null, null, null, n
 
 // 功能
 addShaped('torch', 4, [['coal'],['stick']]);
+// 末地传送门链（迭代 M3）：烈焰棒→2 烈焰粉；烈焰粉+末影珍珠→末影之眼
+addShaped('blaze_powder', 2, [['blaze_rod']]);
+addShaped('ender_eye', 1, [['blaze_powder'],['ender_pearl']]);
 addShaped('furnace', 1, ['cobblestone','cobblestone','cobblestone','cobblestone', null,'cobblestone','cobblestone','cobblestone','cobblestone']);
 addShaped('chest', 1, ['oak_planks','oak_planks','oak_planks','oak_planks', null,'oak_planks','oak_planks','oak_planks','oak_planks']);
 addShaped('tnt', 1, ['gunpowder','gunpowder','gunpowder','sand','sand','sand','sand','sand','sand']);

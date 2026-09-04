@@ -240,6 +240,7 @@ const ItemCN = {
   bow: '弓', arrow: '箭', shield: '盾牌',
   leather_chestplate: '皮革胸甲', iron_chestplate: '铁胸甲', gold_chestplate: '金胸甲', diamond_chestplate: '钻石胸甲',
   ender_pearl: '末影珍珠', blaze_rod: '烈焰棒', ghast_tear: '恶魂之泪',
+  blaze_powder: '烈焰粉', ender_eye: '末影之眼',
   book: '书', enchanted_book: '附魔书', map: '地图', compass: '指南针', clock: '钟',
   bucket: '桶', water_bucket: '水桶', lava_bucket: '岩浆桶',
   saddle: '鞍', name_tag: '命名牌', minecart: '矿车', boat: '船',
@@ -572,6 +573,23 @@ reg('blaze_rod', { stack: 64 }, art(g => {
     g.s(4 + i, 13 - i, 'rgb(248,196,72)');
   }
   g.s(5, 11, 'rgb(255,240,160)'); g.s(9, 7, 'rgb(255,240,160)'); g.s(12, 4, 'rgb(255,240,160)');
+}));
+reg('blaze_powder', { stack: 64 }, art(g => {
+  // 确定性撒点（rng(seed)——物品重绘纪律：禁 Math.random）
+  g.spi(4, 5, 8, 7, 'rgb(226,140,32)', 71, 0.55);
+  g.spi(4, 5, 8, 7, 'rgb(248,196,72)', 72, 0.35);
+  g.spi(5, 4, 6, 9, 'rgb(184,90,20)', 73, 0.2);
+  g.s(8, 8, 'rgb(255,240,160)'); g.s(6, 6, 'rgb(255,240,160)');
+}));
+reg('ender_eye', { stack: 16 }, art(g => {
+  // 末影之眼：绿珠壳 + 黑绿竖瞳 + 高光
+  g.d(8, 8, 5, 5, 'rgb(24,110,84)');
+  g.d(8, 8, 4, 4, 'rgb(36,150,110)');
+  g.d(8, 8, 3, 3, 'rgb(56,190,140)');
+  g.vl(8, 5, 10, 'rgb(10,40,30)');
+  g.vl(7, 6, 9, 'rgb(6,24,18)');
+  g.s(6, 5, 'rgb(160,240,200)'); g.s(5, 6, 'rgb(160,240,200)');
+  g.s(10, 10, 'rgb(12,80,60)'); g.s(11, 9, 'rgb(12,80,60)');
 }));
 reg('ghast_tear', { stack: 64 }, art(g => {
   for (let y = 3; y < 13; y++) {

@@ -294,6 +294,21 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **测试**：`tests/dimension-determinism.mjs`（每实现维度 × 2 seeds：双次字节一致 / 顺序无关 / 孤立=区域 / 出生点确定性+落点安全 / 特征方块存在 / 耗时预算）已接入 `run-all-tests.sh`；新增维度必须先让它在该测试下全绿。
 
 
+### 传送门批次备忘（防回退）—— 手持物透明修复 / 全维度群系 / 原版式传送门
+
+- **手持物透明贴图（黑底曾真出）**：`HeldItemMesh.heldMaterial` 必须 `alphaTest: 0.5`（物品/十字方块 SVG 背景透明，不开 alphaTest 透明像素按 RGB(0,0,0) 渲染成黑底）；用 alphaTest 而非 transparent（保持深度写入、双面薄片无排序伪影）。第一人称与远端玩家手持物共用此材质。
+- **全维度生物群系**：维度生成器实现 `getBiome(x,z)`（纯函数复用生成噪声）+ `biomeNames` 中文名表；InfoBar 按 `generator.biomeNames ? generator.biomeNames[b] : BiomeNames[b]` 统一取名，非主世界行格式 `维度: X ｜ 生物群系: Y`；noDayCycle 维度时间行显示"无昼夜"（读 `sky.dimDef.noDayCycle`）。dimension-determinism ⑦ 断言 getBiome 确定性+名表完备——新增维度必须带这两样。
+- **Portals.js 职责边界**：纯 World 操作（框校验/点火填充/搜门/建门/拆门）；游戏时序（站门计时/武装门控）在 `Game.updatePortals`。`detectPortalInterior` 用轴无关 u 偏移坐标（曾写成 minX/dz 混淆使 z 轴扫描不前进——勿回退）。矩形框规则：内 ≥2 宽 ≥3 高，框边封闭，从点击面外邻格（空气）起检。
+- **传送门发光阈值**：`light: 13` 起才会进光源 LUT + 亮块重绘（引擎源阈值 ≥13）；portal 方块 solid:false + transparent:true + cross（end_portal 为 cube+light:15）。
+- **穿越门控（防回弹三件套）**：`_portalTimer`（站门 2s，末地门即触）+ `_portalArmed`（到达置 false，**离开门体才回 true**）+ `_portalCooldown`（4s 兜底）；start() 里复位三者，start 完成后 `_afterPortalArrival` 再置到达态。Game.update 每帧把手持物同步回选中槽——eval 直调 `hand.setItem` 会被覆盖，测试时改 `inventory.hotbarSelected`。
+- **落点协议**：`switch_dimension`/`dimension_world` 携带可选 `pos={x,z,portal}`；带 x/z（下界÷8/×8、天域 1:1 换算落点）或仅 portal 标记（末地出生点链）均可；服务器清洗后**只回传换维者本人**，非法类型置 null。`_afterPortalArrival`：有坐标 → 账本搜门 24 格吸附（无门自动建 4×5 返程门）；无坐标 + portal==='end' + 落在末地 → `_ensureEndReturnPad`（16 格内已有 end_portal 则跳过，幂等防重连重建；垫建于出生点偏移 +4 防出生即踩回程）。
+- **建门层高语义**：`buildReturnPortal`/`buildEndReturnPad` 的 baseY = `findGroundY`（立地面首格空气层），框/门体在 baseY，**站位 baseY+1**——单测断言按此写（曾两次把期望层高写错）。无立地面按 `ARRIVAL_PLATFORM[dim]` 垫平台（下界/末地黑曜石、天域萤石）。
+- **末地环激活（原版逐框 12 眼）**：`detectEndRing` 扫 5×5 窗口找"12 环位 ∈ {frame, frame_eye} + 中心 3×3 全空气"；**窗口原点相对点击格枚举 [-4..0]**（点击格可落环任一边，曾漏 -4 致远边点击失效——⑨ 远边断言防回退）；右键无眼框 → setBlock frame_eye → 复检 eyes===12 → `fillEndPortalCenter` 填 3×3 门体；散框（非环位）不消耗眼。要塞预填 30%：solve 内 per-block `hash32(...,2027)%100<30`——改 salt/比例会改变预填组合（确定性不受影响，联机两端必须同版本）。
+- **拆框清波**：`removeConnectedPortals` 挂在 Game 两处破坏路径（creative/survival setBlock(0) 之后）——从被破坏格 6 邻域洪水清连通门方块；新增破坏入口（爆炸等）也要挂。
+- **末影之眼获取链**：`blaze_rod→2 blaze_powder`、`blaze_powder+ender_pearl→ender_eye`（shaped，顺序敏感）；pearl/rod 进要塞三箱表 + village_big（powder 也进 village_big）。期望每要塞预填 2-4 眼、需补 ~8-10 眼 ≈ 三要塞+村庄箱子可持续供给。
+- **冒烟陷阱**：单机无 `game.chatBox`（联机才建）；菜单浮层盖 canvas 需 DOM 隐藏后 `click 'canvas[data-engine]'` 抓指针锁；MP 换维重建窗口 10-20s——轮询断言要给足时间（曾三次误判"未触发"实为窗口中）。
+
+
 ### 阶段 10 关键实现备忘（防回退）—— 手持物 3D 化 + 快捷栏同步 + 掉落归属锁 + 多账号 + RTT
 
 - **手持物 3D 化**：`src/render/HeldItemMesh.js`（模板缓存进程级，clone 复用；方块=六面贴图立方体、`renderType==='cross'` 方块=交叉双面薄片、物品=双面薄片；材质 `MeshLambertMaterial` + `emissiveMap` 同贴图 0.35 自发光，夜晚可见；**勿改回 sprite billboard**）。`src/render/FirstPersonHand.js` 第一人称：**camera 必须加入 scene（`scene.add(camera)`）其子节点才渲染**（`Game.constructor` 一次性挂载，属共享型子系统——`start()` 里重置 `currentName=undefined` 强制重建）；按住左键自动连续挥动（0.3s 冷却），放置/食用/命中命中时 `hand.swing()`。`RemotePlayer._setHeld` 挂 `armR.pivot`（dispose 只 remove 不 dispose，几何/材质为共享缓存）。

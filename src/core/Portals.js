@@ -3,18 +3,20 @@
 import { BlockRegistry } from './BlockRegistry.js';
 import { CHUNK_HEIGHT } from './Chunk.js';
 
-// 传送门种类：框材料 → 门方块。下界=黑曜石框，天域=萤石框（迭代决策：原版方式）
+// 传送门种类：框材料 → 门方块。下界=黑曜石框，天域=萤石框（迭代决策：原版方式）。
+// 末地=end_portal（要塞逐框嵌眼激活，无换算坐标；buildReturnPortal 不适用，用 buildEndReturnPad）
 export const PORTAL_KINDS = {
   nether: { frame: 'obsidian', portal: 'nether_portal' },
   aether: { frame: 'glowstone', portal: 'aether_portal' },
+  end: { frame: null, portal: 'end_portal' },
 };
 
-// 各维度生效的传送门种类（末地仅 stronghold 末地门，不在此表）
+// 各维度生效的传送门种类
 export const DIM_PORTAL_KINDS = {
-  overworld: ['nether', 'aether'],
+  overworld: ['nether', 'aether', 'end'],
   nether: ['nether'],
   aether: ['aether'],
-  end: [],
+  end: ['end'],
 };
 
 // 到达落点无立足面时垫平台的材料/高度（按目标维度）
@@ -170,4 +172,76 @@ export function removeConnectedPortals(world, x, y, z) {
       stack.push([px + dx, py + dy, pz + dz]);
     }
   }
+}
+
+// ── 末地传送门（要塞 5×5 环：12 框 + 3×3 心，原版逐框嵌眼激活）───────────────
+
+// 统计 (x,z) 所属的 5×5 环：返回 { w0x, w0z, y, eyes, frames } 或 null。
+// 点击格必须落在环位上；角格不计；中心需全空气（未激活）。
+export function detectEndRing(world, x, y, z, frameId, frameEyeId) {
+  // 窗口原点相对点击格可偏移 -4..0（点击格可能落在环的任一边/角位），扫 [-4..4] 全覆盖
+  for (let ox = -4; ox <= 0; ox++) {
+    for (let oz = -4; oz <= 0; oz++) {
+      const w0x = x + ox, w0z = z + oz;
+      const rx = x - w0x, rz = z - w0z;
+      const onRing = (rx === 0 || rx === 4) !== (rz === 0 || rz === 4); // 边不含角
+      if (!onRing) continue;
+      let eyes = 0, frames = 0, bad = false;
+      for (let ix = 0; ix < 5 && !bad; ix++) {
+        for (let iz = 0; iz < 5; iz++) {
+          const corner = (ix === 0 || ix === 4) && (iz === 0 || iz === 4);
+          const edge = ix === 0 || ix === 4 || iz === 0 || iz === 4;
+          if (!edge || corner) continue;
+          const id = world.getBlock(w0x + ix, y, w0z + iz);
+          if (id === frameEyeId) eyes++;
+          else if (id === frameId) frames++;
+          else { bad = true; break; }
+        }
+      }
+      if (bad || eyes + frames !== 12) continue;
+      // 中心 3×3 必须全空气（未激活环）
+      let centerAir = true;
+      for (let ix = 1; ix <= 3 && centerAir; ix++) {
+        for (let iz = 1; iz <= 3; iz++) {
+          if (world.getBlock(w0x + ix, y, w0z + iz) !== 0) { centerAir = false; break; }
+        }
+      }
+      if (centerAir) return { w0x, w0z, y, eyes, frames };
+    }
+  }
+  return null;
+}
+
+// 激活：中心 3×3 填 end_portal（调用方已确认 12 眼齐）
+export function fillEndPortalCenter(world, ring, portalId) {
+  for (let ix = 1; ix <= 3; ix++) {
+    for (let iz = 1; iz <= 3; iz++) world.setBlock(ring.w0x + ix, ring.y, ring.w0z + iz, portalId);
+  }
+}
+
+// 末地到达回程垫：3×3 end_portal + 12 带眼框环（激活态），落在立地面或垫黑曜石台。
+// 玩家踩上即回主世界。返回垫中心站位。
+export function buildEndReturnPad(world, bx, bz, { top = 140, platformY = 64 } = {}) {
+  const frameId = BlockRegistry.getId('end_portal_frame_eye');
+  const portalId = BlockRegistry.getId('end_portal');
+  const obsId = BlockRegistry.getId('obsidian');
+  let baseY = world.findGroundY(bx + 2, bz + 2, top);
+  if (baseY <= 0 || baseY + 4 >= top) {
+    for (let ix = -1; ix <= 5; ix++) {
+      for (let iz = -1; iz <= 5; iz++) world.setBlock(bx + ix, platformY - 1, bz + iz, obsId);
+    }
+    baseY = platformY;
+  }
+  for (let ix = 0; ix < 5; ix++) {
+    for (let iz = 0; iz < 5; iz++) {
+      const corner = (ix === 0 || ix === 4) && (iz === 0 || iz === 4);
+      const edge = ix === 0 || ix === 4 || iz === 0 || iz === 4;
+      if (!edge) continue;
+      world.setBlock(bx + ix, baseY, bz + iz, corner ? obsId : frameId);
+    }
+  }
+  for (let ix = 1; ix <= 3; ix++) {
+    for (let iz = 1; iz <= 3; iz++) world.setBlock(bx + ix, baseY, bz + iz, portalId);
+  }
+  return { x: bx + 2.5, y: baseY + 1, z: bz + 2.5 };
 }

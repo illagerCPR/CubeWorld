@@ -27,6 +27,7 @@ import {
   PORTAL_KINDS, DIM_PORTAL_KINDS, ARRIVAL_PLATFORM,
   portalBlockId, portalTargetPos, detectPortalInterior, fillPortal,
   findPortalNear, buildReturnPortal, removeConnectedPortals,
+  detectEndRing, fillEndPortalCenter, buildEndReturnPad,
 } from '../core/Portals.js';
 import { matchRecipe } from '../core/Crafting.js';
 import { MobManager } from '../entity/MobManager.js';
@@ -1049,6 +1050,13 @@ export class Game {
             return;
           }
         }
+        // 末地传送门逐框激活：末影之眼右键无眼框架（迭代 M3）
+        if (sel && sel.name === 'ender_eye' && targetDef) {
+          if (this._tryPlaceEndEye(hit, targetDef)) {
+            this.controls.mouseRight = false;
+            return;
+          }
+        }
       }
       
       if (sel) {
@@ -1099,7 +1107,32 @@ export class Game {
     return true;
   }
 
-  // 传送门穿越检测：站入门方块累积 2s 触发；到达后须离开门体才重新武装（防立即回传）
+  // 末影之眼嵌入要塞传送门框架：无眼框→带眼框（消耗 1）；12 眼集齐→中心 3×3 填门体。
+  // 返回 true 表示本次右键已被处理；非环位散框不消耗（原版语义）。
+  _tryPlaceEndEye(hit, targetDef) {
+    if (targetDef.name !== 'end_portal_frame') return false;
+    const { x: bx, y: by, z: bz } = hit.block;
+    const FRAME = BlockRegistry.getId('end_portal_frame');
+    const EYE = BlockRegistry.getId('end_portal_frame_eye');
+    const PORTAL = BlockRegistry.getId('end_portal');
+    if (!detectEndRing(this.world, bx, by, bz, FRAME, EYE)) return false;
+    this.hand.swing();
+    this.world.setBlock(bx, by, bz, EYE);
+    if (this.player.survival) {
+      this.inventory.removeSelected(1);
+      this.hotbar.update();
+    }
+    const after = detectEndRing(this.world, bx, by, bz, FRAME, EYE);
+    if (after && after.eyes === 12) {
+      fillEndPortalCenter(this.world, after, PORTAL);
+      if (this.chatBox) this.chatBox.add('末地传送门被激活了——跳进去！', '#a7f');
+    } else if (after) {
+      if (this.chatBox) this.chatBox.add(`末影之眼嵌入框架（${after.eyes}/12）`, '#a7f');
+    }
+    return true;
+  }
+
+  // 传送门穿越检测：站入门方块累积 2s 触发（末地门即触）；到达后须离开门体才重新武装（防立即回传）
   updatePortals(dt) {
     if (!this.world || this.spectating || !this.player || this.player.dead) return;
     if (this._portalCooldown > 0) {
@@ -1122,6 +1155,13 @@ export class Game {
       return;
     }
     if (!this._portalArmed) return;
+    if (kindIn === 'end') {
+      // 末地门：陷入即触（原版语义）
+      this._portalTimer = 0;
+      this._portalArmed = false;
+      this._usePortal('end');
+      return;
+    }
     this._portalTimer += dt;
     if (this._portalTimer >= 2.0) {
       this._portalTimer = 0;
@@ -1130,24 +1170,46 @@ export class Game {
     }
   }
 
-  // 传送门触发：目标维度 = 门种类配对的另一端（下界 overworld↔nether 1:8 / 天域 overworld↔aether 1:1）
+  // 传送门触发：目标维度 = 门种类配对的另一端
+  //（下界 overworld↔nether 1:8 / 天域 overworld↔aether 1:1 / 末地 overworld↔end 落出生点）
   _usePortal(kind) {
     const dim = this.world.dimension;
-    const pair = kind === 'nether'
-      ? { nether: 'overworld', overworld: 'nether' }
-      : { aether: 'overworld', overworld: 'aether' };
-    const target = pair[dim];
+    let target = null;
+    let arrival = null;
+    if (kind === 'nether') {
+      target = { nether: 'overworld', overworld: 'nether' }[dim];
+      if (target) {
+        const pos = portalTargetPos('nether', dim, this.player.position.x, this.player.position.z);
+        arrival = { x: pos.x, z: pos.z, portal: kind };
+      }
+    } else if (kind === 'aether') {
+      target = { aether: 'overworld', overworld: 'aether' }[dim];
+      if (target) {
+        const pos = portalTargetPos('aether', dim, this.player.position.x, this.player.position.z);
+        arrival = { x: pos.x, z: pos.z, portal: kind };
+      }
+    } else if (kind === 'end') {
+      // 末地：原版语义——去程落末地出生点（到达后自动建回程垫），回程落主世界出生点
+      target = dim === 'end' ? 'overworld' : 'end';
+      arrival = { portal: kind };
+    }
     if (!target) return;
-    const pos = portalTargetPos(kind, dim, this.player.position.x, this.player.position.z);
     const def = getDimension(target);
     if (this.chatBox) this.chatBox.add(`传送门轰鸣着将你送往「${def.name}」…`, '#a7f');
-    this.switchDimension(target, { x: pos.x, z: pos.z, portal: kind });
+    this.switchDimension(target, arrival);
   }
 
-  // 传送门到达落地：半径 24 搜既有同类门 → 吸附站入；无门则在落点自动建造返程门（原版语义）
+  // 传送门到达落地：有坐标落点 → 半径 24 搜既有同类门吸附、无门自动建返程门（原版语义）；
+  // 无坐标落点（末地链）→ 到末地时在出生点旁确保回程垫，回主世界无需建
   _afterPortalArrival(arrival) {
     if (!this.world || !this.running) return;
     const kind = arrival.portal && PORTAL_KINDS[arrival.portal] ? arrival.portal : null;
+    if (!Number.isFinite(arrival.x) || !Number.isFinite(arrival.z)) {
+      if (kind === 'end' && this.world.dimension === 'end') this._ensureEndReturnPad();
+      this._portalCooldown = 4;
+      this._portalArmed = false;
+      return;
+    }
     const portalId = kind ? portalBlockId(kind) : 0;
     let pos = portalId ? findPortalNear(this.world, arrival.x, arrival.z, portalId, 24) : null;
     if (pos) {
@@ -1163,6 +1225,24 @@ export class Game {
     if (pos) this.player.velocity.set(0, 0, 0);
     this._portalCooldown = 4;
     this._portalArmed = false;
+  }
+
+  // 末地出生点旁的回程门垫：16 格内已有 end_portal 则跳过（重连/多端幂等），
+  // 否则在出生点偏移 ~5 格建造（防出生即踩回程门）
+  _ensureEndReturnPad() {
+    const w = this.world;
+    const sp = w.getSpawnPoint();
+    const EP = BlockRegistry.getId('end_portal');
+    for (const [k, id] of w.modifiedBlocks) {
+      if (id !== EP) continue;
+      const p = k.split(',');
+      if ((+p[0] - sp.x) ** 2 + (+p[2] - sp.z) ** 2 <= 256) return;
+    }
+    buildEndReturnPad(w, Math.floor(sp.x) + 4, Math.floor(sp.z) + 4, {
+      top: w.dimDef.spawnScanTop || 140,
+      platformY: 64,
+    });
+    if (this.chatBox) this.chatBox.add('出生点旁出现了一座回程门垫——踩上去返回主世界', '#a7f');
   }
 
   // 传送门落点立足面预解析：临时生成器 + 临时区块探测（纯函数，不碰当前世界）；
@@ -1314,7 +1394,10 @@ export class Game {
       saturation: p.saturation, exhaustion: p.exhaustion,
       xp: p.xp, xpLevel: p.xpLevel, onFire: 0, airTicks: 300
     };
-    if (arrival) {
+    // 传送门落点：带坐标（下界/天域）→ 预解析立足面高度并写进 player 坐标；
+    // 仅带 portal 标记（末地）→ 落维度出生点，到达后由 _afterPortalArrival 建回程垫
+    const hasPos = arrival && Number.isFinite(arrival.x) && Number.isFinite(arrival.z);
+    if (hasPos) {
       const ay = this._resolveArrivalY(dim, arrival.x, arrival.z);
       const plat = ARRIVAL_PLATFORM[dim];
       playerData.x = arrival.x + 0.5;
@@ -1326,7 +1409,7 @@ export class Game {
       gamemode: p.gamemode,
       cheatsEnabled: this.cheatsEnabled,
       dimension: dim,
-      dimensionSpawn: !arrival, // 传送门落点带坐标；否则忽略坐标落到目标维度出生点
+      dimensionSpawn: !hasPos, // 传送门落点带坐标；否则忽略坐标落到目标维度出生点
       player: playerData,
       inventory: this.inventory.serialize(),
       dimensionBlocks: dimBuckets,
@@ -1363,8 +1446,12 @@ export class Game {
         this.world.markAllDirty();
         return true;
       }
-      const arrival = (pos && Number.isFinite(pos.x) && Number.isFinite(pos.z))
-        ? { x: key3(pos.x), z: key3(pos.z), portal: typeof pos.portal === 'string' ? pos.portal : null }
+      const arrival = (pos && (typeof pos.portal === 'string' || (Number.isFinite(pos.x) && Number.isFinite(pos.z))))
+        ? {
+            x: Number.isFinite(pos.x) ? key3(pos.x) : undefined,
+            z: Number.isFinite(pos.z) ? key3(pos.z) : undefined,
+            portal: typeof pos.portal === 'string' ? pos.portal : null,
+          }
         : null;
       const loadData = this._composeSwitchLoadData(dim, dimBlocks, dimContainers, arrival);
       await this.start(loadData.gamemode, loadData.seed, loadData, this.currentSlot, loadData.cheatsEnabled, this.networkMode);

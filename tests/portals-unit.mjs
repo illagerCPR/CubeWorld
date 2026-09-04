@@ -3,7 +3,10 @@ import { BlockRegistry } from '../src/core/BlockRegistry.js';
 import '../src/blocks/BlockDefs.js';
 import {
   detectPortalInterior, fillPortal, findPortalNear, buildReturnPortal, removeConnectedPortals,
+  detectEndRing, fillEndPortalCenter, buildEndReturnPad,
 } from '../src/core/Portals.js';
+import { matchRecipe } from '../src/core/Crafting.js';
+import '../src/items/ItemDefs.js';
 
 function fakeWorld() {
   const blocks = new Map();
@@ -119,6 +122,70 @@ const AP = BlockRegistry.getId('aether_portal');
   const near = findPortalNear(w, 101, 0, NP, 24);
   assert('⑧ 半径内最近门命中 (100,40)', !!near && near.x === 100.5 && near.y === 40);
   assert('⑧ 半径外门不命中', findPortalNear(w, 200, 0, NP, 24) === null);
+}
+
+// ── ⑨ 末地环检测：5×5 环 11 眼 + 1 框 → eyes=11；缺环位 → null ──
+{
+  const w = fakeWorld();
+  const FRAME = BlockRegistry.getId('end_portal_frame');
+  const EYE = BlockRegistry.getId('end_portal_frame_eye');
+  const EP = BlockRegistry.getId('end_portal');
+  const y = 50;
+  for (let ix = 0; ix < 5; ix++) {
+    for (let iz = 0; iz < 5; iz++) {
+      const corner = (ix === 0 || ix === 4) && (iz === 0 || iz === 4);
+      const edge = ix === 0 || ix === 4 || iz === 0 || iz === 4;
+      if (!edge || corner) continue;
+      w.setBlock(10 + ix, y, 10 + iz, (ix + iz) % 2 === 0 ? EYE : FRAME); // 混合 6/6
+    }
+  }
+  const r1 = detectEndRing(w, 12, y, 10, FRAME, EYE); // 点顶边中格（环位）
+  assert('⑨ 混合环检出：eyes+frames=12', !!r1 && r1.eyes + r1.frames === 12 && r1.y === y);
+  const r1b = detectEndRing(w, 14, y, 12, FRAME, EYE); // 点远边格（窗口原点偏移 -4 场景）
+  assert('⑨ 远边格点击同样检出', !!r1b && r1b.eyes + r1b.frames === 12);
+  assert('⑨ 非环位点击 → null', detectEndRing(w, 12, y, 12, FRAME, EYE) === null); // 中心格
+  // 补齐全部 12 眼 → eyes=12
+  for (let ix = 0; ix < 5; ix++) {
+    for (let iz = 0; iz < 5; iz++) {
+      const corner = (ix === 0 || ix === 4) && (iz === 0 || iz === 4);
+      const edge = ix === 0 || ix === 4 || iz === 0 || iz === 4;
+      if (edge && !corner) w.setBlock(10 + ix, y, 10 + iz, EYE);
+    }
+  }
+  const r2 = detectEndRing(w, 12, y, 10, FRAME, EYE);
+  assert('⑨ 12 眼齐：eyes=12', !!r2 && r2.eyes === 12);
+  // 激活：中心 3×3 填门体
+  fillEndPortalCenter(w, r2, EP);
+  const centerAll = [];
+  for (let ix = 1; ix <= 3; ix++) for (let iz = 1; iz <= 3; iz++) centerAll.push(w.getBlock(10 + ix, y, 10 + iz));
+  assert('⑨ 激活后中心 3×3 = end_portal', centerAll.every(c => c === EP));
+  // 已激活环（中心非空气）不再被检出 → 不会重复激活
+  assert('⑨ 已激活环不再检出', detectEndRing(w, 12, y, 10, FRAME, EYE) === null);
+}
+
+// ── ⑩ 末地回程垫：立地面/垫平台 ──
+{
+  const w = fakeWorld();
+  for (let x = -4; x <= 16; x++) for (let z = -4; z <= 16; z++) w.setBlock(x, 30, z, BlockRegistry.getId('end_stone'));
+  const pos = buildEndReturnPad(w, 0, 0, { top: 140, platformY: 64 });
+  const EP = BlockRegistry.getId('end_portal');
+  const EYE = BlockRegistry.getId('end_portal_frame_eye');
+  assert('⑩ 有地面：垫心站位在环心上方', pos.x === 2.5 && pos.y === 32 && pos.z === 2.5);
+  assert('⑩ 垫中心 3×3 = end_portal', [1, 2, 3].every(ix => [1, 2, 3].every(iz => w.getBlock(ix, 31, iz) === EP)));
+  assert('⑩ 环 12 格 = frame_eye（激活态）', w.getBlock(0, 31, 2) === EYE && w.getBlock(4, 31, 2) === EYE);
+  const w2 = fakeWorld(); // 全虚空
+  const pos2 = buildEndReturnPad(w2, 0, 0, { top: 140, platformY: 64 });
+  assert('⑩ 无地面：垫 y64 黑曜石台 + 门垫', pos2.y === 65 && w2.getBlock(-1, 63, -1) === BlockRegistry.getId('obsidian'));
+}
+
+// ── ⑪ 末地合成链：烈焰棒→2 烈焰粉；烈焰粉+末影珍珠→末影之眼 ──
+{
+  const p1 = matchRecipe([['blaze_rod']]);
+  assert('⑪ 烈焰棒合成 2 烈焰粉', !!p1 && p1.name === 'blaze_powder' && p1.count === 2);
+  const p2 = matchRecipe([['blaze_powder'], ['ender_pearl']]);
+  assert('⑪ 烈焰粉+末影珍珠合成末影之眼', !!p2 && p2.name === 'ender_eye' && p2.count === 1);
+  const p3 = matchRecipe([['ender_pearl'], ['blaze_powder']]);
+  assert('⑪ 顺序颠倒不匹配（shaped）', p3 === null);
 }
 
 console.log(fails ? `FAILED: ${fails}` : 'Portals 逻辑单测全部通过');

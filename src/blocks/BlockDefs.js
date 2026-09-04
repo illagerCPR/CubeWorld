@@ -729,7 +729,7 @@ const BlockCN = {
   oak_leaves: '橡树树叶', spruce_leaves: '云杉树叶', birch_leaves: '白桦树叶',
   cobblestone: '圆石', stone_bricks: '石砖', mossy_stone_bricks: '苔石砖', cracked_stone_bricks: '裂石砖',
   mossy_cobblestone: '苔石', brick_block: '红砖块', nether_bricks: '下界砖块',
-  bookshelf: '书架', end_portal_frame: '末地传送门框架',
+  bookshelf: '书架', end_portal_frame: '末地传送门框架', end_portal_frame_eye: '末地传送门框架（已嵌眼）', end_portal: '末地传送门',
   nether_portal: '下界传送门', aether_portal: '天域传送门',
   sandstone: '砂岩', red_sandstone: '红砂岩', quartz_block: '石英块',
   crafting_table: '工作台', furnace: '熔炉', tnt: 'TNT',
@@ -827,6 +827,45 @@ reg('brick_block', { hardness: 2, tool: 'pickaxe' }, { brick_block: brickTex(84)
 reg('nether_bricks', { hardness: 2, tool: 'pickaxe' }, { nether_bricks: brickTexMagenta(85) });
 reg('bookshelf', { hardness: 1.5, tool: 'axe', textures: { top: 'oak_planks', side: 'bookshelf_side', bottom: 'oak_planks' } }, { bookshelf_side: bookshelfSideTex(91) });
 reg('end_portal_frame', { hardness: -1, textures: { top: 'end_portal_frame_top', side: 'end_portal_frame_side', bottom: 'stone_bricks' } }, { end_portal_frame_top: endPortalFrameTopTex(92), end_portal_frame_side: endPortalFrameSideTex(93) });
+
+// 末地传送门框架（已嵌末影之眼）：同框架 + 顶面中央眼球（迭代 M3 逐框激活）
+function endPortalFrameEyeTopTex(seed) {
+  const px = makeTex();
+  const stone = [136, 136, 136], green = [86, 178, 132], greenD = [52, 116, 88];
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      let c = stone, f = 0.9 + hash2(x, y, seed) * 0.2;
+      const d = Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5));
+      if (d <= 4) c = green;
+      if (d > 3 && d <= 4) c = greenD;
+      if (d > 1.5 && d <= 2) f *= 0.6;
+      // 中央眼球：黑绿瞳仁 + 高光（覆盖中心 5×5）
+      const e = Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5));
+      if (e <= 2) c = [10, 40, 30];
+      if (e <= 1) c = [6, 24, 18];
+      if ((x === 6 && y === 6) || (x === 5 && y === 7)) c = [160, 240, 200];
+      px[y * 16 + x] = rgb(c, f);
+    }
+  }
+  return pixelSvg(px);
+}
+reg('end_portal_frame_eye', { hardness: -1, textures: { top: 'end_portal_frame_eye_top', side: 'end_portal_frame_side', bottom: 'stone_bricks' } }, { end_portal_frame_eye_top: endPortalFrameEyeTopTex(99) });
+
+// 末地传送门（激活门体）：星空黑面，solid:false 可陷入触发，light:15 自发光
+function endPortalTex(seed) {
+  const px = makeTex();
+  fillRect(px, 0, 0, 15, 15, rgb([4, 4, 12]));
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const t = hash2(x, y, seed);
+      if (t > 0.90) px[y * 16 + x] = rgb([190, 210, 255], 0.7 + t * 0.4);
+      else if (t > 0.80) px[y * 16 + x] = rgb([110, 130, 210], 0.8 + t * 0.3);
+      else if (t > 0.75) px[y * 16 + x] = rgb([40, 60, 120]);
+    }
+  }
+  return pixelSvg(px);
+}
+reg('end_portal', { displayName: '末地传送门', solid: false, transparent: true, light: 15, hardness: -1 }, { end_portal: endPortalTex(100) });
 
 // 苔石砖：石砖基底 + 苔斑侵蚀（要塞材质）
 function stoneBricksMossyTex(seed) {

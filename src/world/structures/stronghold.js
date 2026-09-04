@@ -53,6 +53,7 @@ export function solveStronghold(rng, ax, surfaceY, az, gen) {
     brick: blockId('stone_bricks'), mossy: blockId('mossy_stone_bricks'),
     cracked: blockId('cracked_stone_bricks'), torch: blockId('torch'),
     shelf: blockId('bookshelf'), frame: blockId('end_portal_frame'),
+    frameEye: blockId('end_portal_frame_eye'),
     chest: blockId('chest'),
   };
   const blocks = [];
@@ -184,14 +185,20 @@ export function solveStronghold(rng, ax, surfaceY, az, gen) {
       for (let x = mx - 2; x <= mx + 2; x++) {
         for (let z = mz - 2; z <= mz + 2; z++) set(x, hubY, z, w(x, hubY, z));
       }
-      // 末地传送门框架环（3×3 心 + 12 框，未激活装饰）
+      // 末地传送门框架环（3×3 心 + 12 框）：per-block 确定性哈希 ~30% 预嵌末影之眼
+      //（原版逐框激活——补齐剩余框即激活；12 框独立派生，两端逐字节一致）
       const py = hubY + 1;
+      const ringCells = [];
       for (let i = -1; i <= 1; i++) {
-        set(mx + i, py, mz - 2, ID.frame);
-        set(mx + i, py, mz + 2, ID.frame);
-        set(mx - 2, py, mz + i, ID.frame);
-        set(mx + 2, py, mz + i, ID.frame);
+        ringCells.push([mx + i, mz - 2]);
+        ringCells.push([mx + i, mz + 2]);
+        ringCells.push([mx - 2, mz + i]);
+        ringCells.push([mx + 2, mz + i]);
       }
+      ringCells.forEach(([rx, rz], ri) => {
+        const pre = hash32(0, (mx + rx) * 31 + ri, (mz + rz) * 17 + py, 2027) % 100 < 30;
+        set(rx, py, rz, pre ? ID.frameEye : ID.frame);
+      });
       meta.portal = [mx, py + 1, mz];
       for (const [tx, tz] of [[mx - 4, mz - 3], [mx + 4, mz - 3], [mx - 4, mz + 3], [mx + 4, mz + 3]]) {
         set(tx, hubY, tz, ID.torch);
