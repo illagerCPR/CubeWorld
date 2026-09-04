@@ -40,8 +40,9 @@ export class CommandPanel {
 
     this.panel = document.createElement('div');
     this.panel.style.cssText = `
-      background: #2a2a2a; border: 3px solid #555; padding: 22px 28px;
-      display: flex; flex-direction: column; gap: 14px; min-width: 360px;
+      background: #2a2a2a; border: 3px solid #555; padding: 14px 18px;
+      display: flex; flex-direction: column; gap: 10px;
+      width: min(780px, 94vw); max-height: 88vh; overflow-y: auto;
     `;
     this.el.appendChild(this.panel);
 
@@ -54,8 +55,19 @@ export class CommandPanel {
   _mkLabel(text) {
     const l = document.createElement('div');
     l.textContent = text;
-    l.style.cssText = 'font-size:13px; color:#bbd; font-weight:bold; letter-spacing:1px; margin-top:4px;';
+    l.style.cssText = 'font-size:12px; color:#bbd; font-weight:bold; letter-spacing:1px;';
     return l;
+  }
+
+  // 卡片容器：标题 + 内容体（双列布局的分区单元）
+  _mkCard(title) {
+    const card = document.createElement('div');
+    card.style.cssText = `
+      background: rgba(0,0,0,0.28); border: 1px solid #444; padding: 8px 10px;
+      display: flex; flex-direction: column; gap: 6px; min-width: 0;
+    `;
+    if (title) card.appendChild(this._mkLabel(title));
+    return card;
   }
 
   _mkBtn(label, bg, border) {
@@ -76,15 +88,35 @@ export class CommandPanel {
   }
 
   _build() {
+    // 头部：标题 + 关闭（原先底部关闭钮上移，压缩纵向长度）
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex; align-items:center; justify-content:space-between;';
     const title = document.createElement('div');
     title.textContent = '命令面板';
-    title.style.cssText = 'font-size:20px; font-weight:bold; text-align:center; letter-spacing:2px; margin-bottom:4px;';
-    this.panel.appendChild(title);
+    title.style.cssText = 'font-size:18px; font-weight:bold; letter-spacing:2px;';
+    header.appendChild(title);
+    const closeBtn = this._mkBtn('关闭 (C / ESC)', '#555', '#333');
+    closeBtn.style.padding = '4px 10px';
+    closeBtn.addEventListener('click', () => this.hide());
+    header.appendChild(closeBtn);
+    this.panel.appendChild(header);
 
-    // 1) 传送
-    this.panel.appendChild(this._mkLabel('— 传送至坐标 —'));
+    // 双列卡片主体：左列 = 传送/探索；右列 = 维度/模式/时间
+    const body = document.createElement('div');
+    body.style.cssText = 'display:flex; gap:10px; align-items:flex-start;';
+    const colL = document.createElement('div');
+    const colR = document.createElement('div');
+    for (const col of [colL, colR]) {
+      col.style.cssText = 'flex:1 1 0; min-width:0; display:flex; flex-direction:column; gap:10px;';
+      body.appendChild(col);
+    }
+    this.panel.appendChild(body);
+
+    // ① 传送（左上）
+    const tpCard = this._mkCard('传送至坐标');
+    colL.appendChild(tpCard);
     const tpRow = document.createElement('div');
-    tpRow.style.cssText = 'display:flex; gap:8px; align-items:center;';
+    tpRow.style.cssText = 'display:flex; gap:6px; align-items:center;';
     tpRow.appendChild(this._mkLabel('X:'));
     this.tpX = this._mkInput('cmd-tp-x', 0);
     tpRow.appendChild(this.tpX);
@@ -94,10 +126,10 @@ export class CommandPanel {
     tpRow.appendChild(this._mkLabel('Z:'));
     this.tpZ = this._mkInput('cmd-tp-z', 0);
     tpRow.appendChild(this.tpZ);
-    this.panel.appendChild(tpRow);
+    tpCard.appendChild(tpRow);
 
     const tpBtns = document.createElement('div');
-    tpBtns.style.cssText = 'display:flex; gap:8px; margin-top:4px;';
+    tpBtns.style.cssText = 'display:flex; gap:6px;';
     const tpBtn = this._mkBtn('传送', '#2a6a8a', '#1a4a6a');
     tpBtn.addEventListener('click', () => this._teleport());
     tpBtns.appendChild(tpBtn);
@@ -118,38 +150,24 @@ export class CommandPanel {
       this.tpZ.value = p.z.toFixed(1);
     });
     tpBtns.appendChild(hereBtn);
-    this.panel.appendChild(tpBtns);
+    tpCard.appendChild(tpBtns);
 
-    // 1.5) 探索：附近建筑坐标（W2，show() 时刷新；点击行内按钮直接传送）
-    this.panel.appendChild(this._mkLabel('— 探索：附近建筑 —'));
+    // ② 探索：附近建筑坐标（W2，show() 时刷新；点击行内按钮直接传送）
+    const exploreCard = this._mkCard('探索：附近建筑');
+    colL.appendChild(exploreCard);
     this.exploreBox = document.createElement('div');
     this.exploreBox.style.cssText = `
       display: flex; flex-direction: column; gap: 3px; font-size: 12px;
       max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.25);
       padding: 6px 8px; border: 1px solid #444;
     `;
-    this.panel.appendChild(this.exploreBox);
+    exploreCard.appendChild(this.exploreBox);
 
-    // 2) 切换游戏模式
-    this.panel.appendChild(this._mkLabel('— 切换游戏模式 —'));
-    const modeRow = document.createElement('div');
-    modeRow.style.cssText = 'display:flex; gap:8px;';
-    this.modeBtns = [];
-    for (const m of MODES) {
-      const b = this._mkBtn(m.label, m.bg, m.border);
-      b.addEventListener('click', () => {
-        this.game.player.setMode(m.name);
-        this._refreshModeHighlight();
-      });
-      modeRow.appendChild(b);
-      this.modeBtns.push({ name: m.name, el: b });
-    }
-    this.panel.appendChild(modeRow);
-
-    // 2.5) 维度传送（仅列已实现维度；联机维度同步 M4 开放）
-    this.panel.appendChild(this._mkLabel('— 维度传送 —'));
+    // ③ 维度传送（右上，仅列已实现维度；联机维度同步 M4 开放）
+    const dimCard = this._mkCard('维度传送');
+    colR.appendChild(dimCard);
     const dimRow = document.createElement('div');
-    dimRow.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap;';
+    dimRow.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap;';
     this.dimBtns = [];
     for (const def of Object.values(DIMENSIONS)) {
       if (!def.implemented) continue;
@@ -161,23 +179,30 @@ export class CommandPanel {
       dimRow.appendChild(b);
       this.dimBtns.push({ id: def.id, el: b });
     }
-    this.panel.appendChild(dimRow);
+    dimCard.appendChild(dimRow);
 
-    // 3) 生成实体（在玩家前方 3 格；全部注册怪物，含村民）
-    this.panel.appendChild(this._mkLabel('— 生成实体（玩家前方 3 格）—'));
-    const mobRow = document.createElement('div');
-    mobRow.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap;';
-    for (const mt of mobEntries()) {
-      const b = this._mkBtn(mt.label, '#6a3a6a', '#4a2a4a');
-      b.addEventListener('click', () => this._spawnMob(mt.name));
-      mobRow.appendChild(b);
+    // ④ 切换游戏模式（右中）
+    const modeCard = this._mkCard('切换游戏模式');
+    colR.appendChild(modeCard);
+    const modeRow = document.createElement('div');
+    modeRow.style.cssText = 'display:flex; gap:6px;';
+    this.modeBtns = [];
+    for (const m of MODES) {
+      const b = this._mkBtn(m.label, m.bg, m.border);
+      b.addEventListener('click', () => {
+        this.game.player.setMode(m.name);
+        this._refreshModeHighlight();
+      });
+      modeRow.appendChild(b);
+      this.modeBtns.push({ name: m.name, el: b });
     }
-    this.panel.appendChild(mobRow);
+    modeCard.appendChild(modeRow);
 
-    // 4) 时间控制（0=半夜 0.25=日出 0.5=正午 0.75=日落）
-    this.panel.appendChild(this._mkLabel('— 时间控制 (0=半夜 0.25=日出 0.5=正午 0.75=日落) —'));
+    // ⑤ 时间控制（右下；0=半夜 0.25=日出 0.5=正午 0.75=日落）
+    const timeCard = this._mkCard('时间控制 (0=半夜 0.25=日出 0.5=正午 0.75=日落)');
+    colR.appendChild(timeCard);
     const timeRow = document.createElement('div');
-    timeRow.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap;';
+    timeRow.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap;';
     const TIME_PRESETS = [
       { label: '日出', value: 0.25, bg: '#8a6a3a', border: '#5a4a2a' },
       { label: '正午', value: 0.50, bg: '#8a8a3a', border: '#5a5a2a' },
@@ -189,10 +214,10 @@ export class CommandPanel {
       b.addEventListener('click', () => this._setTime(tp.value));
       timeRow.appendChild(b);
     }
-    this.panel.appendChild(timeRow);
+    timeCard.appendChild(timeRow);
 
     const timeCustomRow = document.createElement('div');
-    timeCustomRow.style.cssText = 'display:flex; gap:8px; align-items:center; margin-top:4px;';
+    timeCustomRow.style.cssText = 'display:flex; gap:6px; align-items:center;';
     timeCustomRow.appendChild(this._mkLabel('Time:'));
     this.timeInput = this._mkInput('cmd-time', 0.5);
     this.timeInput.step = '0.05';
@@ -206,13 +231,19 @@ export class CommandPanel {
     curTimeLabel.style.cssText = 'font-size:12px; color:#9ab; min-width:140px;';
     timeCustomRow.appendChild(curTimeLabel);
     this.curTimeLabel = curTimeLabel;
-    this.panel.appendChild(timeCustomRow);
+    timeCard.appendChild(timeCustomRow);
 
-    // 关闭
-    this.panel.appendChild(this._mkLabel(''));
-    const closeBtn = this._mkBtn('关闭 (C / ESC)', '#555', '#333');
-    closeBtn.addEventListener('click', () => this.hide());
-    this.panel.appendChild(closeBtn);
+    // ⑥ 生成实体（整宽卡片：全部注册怪物动态枚举，网格排布）
+    const mobCard = this._mkCard('生成实体（玩家前方 3 格）');
+    this.panel.appendChild(mobCard);
+    const mobRow = document.createElement('div');
+    mobRow.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fill, minmax(88px, 1fr)); gap:6px;';
+    for (const mt of mobEntries()) {
+      const b = this._mkBtn(mt.label, '#6a3a6a', '#4a2a4a');
+      b.addEventListener('click', () => this._spawnMob(mt.name));
+      mobRow.appendChild(b);
+    }
+    mobCard.appendChild(mobRow);
   }
 
   _setTime(t) {
