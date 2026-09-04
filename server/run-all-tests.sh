@@ -43,6 +43,15 @@ else
     exit 1
 fi
 
+# 传送门逻辑回归（纯 node：框校验/填充/拆门清波/自动返程门/账本搜门）
+echo "=== portals-unit ==="
+if node tests/portals-unit.mjs; then
+    echo "portals-unit: OK"
+else
+    echo "portals-unit: FAILED"
+    exit 1
+fi
+
 # 测试非幂等：先确认 3001 空闲，再清空运行时数据保证干净状态
 if (exec 3<>/dev/tcp/127.0.0.1/3001) 2>/dev/null; then
     exec 3>&- 3<&- 2>/dev/null

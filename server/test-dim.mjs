@@ -121,6 +121,22 @@ await sleep(250);
 assert('非法维度 moon 被拒（无 dimension_world）', A.queue.filter(m => m.t === 'dimension_world').length === aDimCount);
 assert('非法维度收到系统提示', !!A.queue.find(m => m.t === 'chat' && m.fromId === 0 && m.text.includes('moon')));
 
+// ── 传送门落点回传（迭代 M2）：switch_dimension.pos 原样回传 dimension_world.pos ──
+{
+  const cnt0 = A.queue.filter(m => m.t === 'dimension_world').length;
+  A.ws.send(JSON.stringify({ t: 'switch_dimension', dim: 'nether', pos: { x: 123, z: -45, portal: 'nether' } }));
+  await sleep(300);
+  const pw = A.queue.filter(m => m.t === 'dimension_world' && m.dim === 'nether').pop();
+  assert('带 pos 换维：dimension_world.pos 原样回传（仅本人）',
+    A.queue.filter(m => m.t === 'dimension_world').length === cnt0 + 1 &&
+    !!pw && pw.pos && pw.pos.x === 123 && pw.pos.z === -45 && pw.pos.portal === 'nether');
+  // 非法 pos 清洗为 null（不落账、不广播他人）
+  A.ws.send(JSON.stringify({ t: 'switch_dimension', dim: 'aether', pos: { x: 'bad', z: null } }));
+  await sleep(300);
+  const pw2 = A.queue.filter(m => m.t === 'dimension_world' && m.dim === 'aether').pop();
+  assert('非法 pos 清洗为 null', !!pw2 && pw2.pos === null);
+}
+
 // ── 快照落盘：分维度账本进 store ───────────────────────────────────────
 await sleep(200);
 const snapPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'world', ROOM + '.json');

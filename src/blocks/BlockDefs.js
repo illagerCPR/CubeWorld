@@ -730,6 +730,7 @@ const BlockCN = {
   cobblestone: '圆石', stone_bricks: '石砖', mossy_stone_bricks: '苔石砖', cracked_stone_bricks: '裂石砖',
   mossy_cobblestone: '苔石', brick_block: '红砖块', nether_bricks: '下界砖块',
   bookshelf: '书架', end_portal_frame: '末地传送门框架',
+  nether_portal: '下界传送门', aether_portal: '天域传送门',
   sandstone: '砂岩', red_sandstone: '红砂岩', quartz_block: '石英块',
   crafting_table: '工作台', furnace: '熔炉', tnt: 'TNT',
   glass: '玻璃', glowstone: '荧石', sea_lantern: '海晶灯', torch: '火把',
@@ -955,6 +956,46 @@ reg('furnace', { textures: { top: 'stone', side: 'furnace_side', bottom: 'stone'
 reg('glass', { transparent: true, hardness: 0.3 }, { glass: glassTex() });
 reg('glowstone', { displayName: '荧石', light: 15, hardness: 0.3 }, { glowstone: glowstoneTex(95) });
 reg('sea_lantern', { displayName: '海晶灯', light: 15, hardness: 0.3 }, { sea_lantern: seaLanternTex(96) });
+
+// --- 传送门（迭代：原版式维度传送门）---
+// cross 渲染双面薄片 + 自发光（light:13 走光源 LUT/亮块重绘管线）；solid:false 可穿行。
+// 框校验/点火/穿越逻辑在 src/core/Portals.js + Game.js。
+
+// 下界传送门：紫色涡流能量幕
+function netherPortalTex(seed) {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      // 涡流：绕中心的极角域正弦 + 距离衰减（确定性 hash 抖动）
+      const dx = x - 7.5, dy = y - 7.5;
+      const ang = Math.atan2(dy, dx), r = Math.hypot(dx, dy);
+      const swirl = Math.sin(ang * 3 + r * 1.5 + seed * 0.13) * 0.5 + 0.5;
+      const t = hash2(x, y, seed);
+      const base = swirl > 0.62 ? [186, 92, 224] : swirl > 0.32 ? [124, 44, 178] : [74, 18, 118];
+      px[y * 16 + x] = rgb(base, 0.88 + t * 0.28);
+    }
+  }
+  return pixelSvg(px);
+}
+
+// 天域传送门：淡金/天白气流幕（萤石框配色呼应）
+function aetherPortalTex(seed) {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const dx = x - 7.5, dy = y - 7.5;
+      const ang = Math.atan2(dy, dx), r = Math.hypot(dx, dy);
+      const swirl = Math.sin(ang * 2.4 - r * 1.1 + seed * 0.17) * 0.5 + 0.5;
+      const t = hash2(x, y, seed);
+      const base = swirl > 0.6 ? [252, 246, 208] : swirl > 0.3 ? [216, 232, 250] : [150, 190, 236];
+      px[y * 16 + x] = rgb(base, 0.9 + t * 0.22);
+    }
+  }
+  return pixelSvg(px);
+}
+
+reg('nether_portal', { displayName: '下界传送门', solid: false, transparent: true, renderType: 'cross', light: 13, hardness: 0.1 }, { nether_portal: netherPortalTex(97) });
+reg('aether_portal', { displayName: '天域传送门', solid: false, transparent: true, renderType: 'cross', light: 13, hardness: 0.1 }, { aether_portal: aetherPortalTex(98) });
 reg('torch', { displayName: '火把', transparent: true, light: 14, hardness: 0, renderType: 'cross', solid: false },
   { torch: (function () { const px = makeTex();
     // 火把：上半黄色火，下半棕色棍

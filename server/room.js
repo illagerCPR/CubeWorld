@@ -591,7 +591,15 @@ export class Room {
       const [x, y, z] = key.split(',').map(Number);
       containers.push({ x, y, z, items });
     }
-    this.sendTo(player, MSG.DIMENSION_WORLD, { dim, blocks, containers });
+    // 传送门落点（迭代 M2）：原样回传给换维者本人（仅整数 x/z + portal 名，服务器不校验语义）
+    let pos = null;
+    if (msg.pos && Number.isFinite(msg.pos.x) && Number.isFinite(msg.pos.z)) {
+      pos = {
+        x: msg.pos.x | 0, z: msg.pos.z | 0,
+        portal: typeof msg.pos.portal === 'string' ? msg.pos.portal.slice(0, 16) : null,
+      };
+    }
+    this.sendTo(player, MSG.DIMENSION_WORLD, { dim, blocks, containers, pos });
     // 回放目标维度的现存掉落物（M4：与 joinRoom 同口径，含归属锁剩余毫秒）
     for (const [id, d] of this.drops) {
       if ((d.dim || DEFAULT_DIMENSION) !== dim) continue;

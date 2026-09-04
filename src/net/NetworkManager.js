@@ -457,7 +457,8 @@ export class NetworkManager {
   sendWorldReset() { this._send(MSG.WORLD_RESET, {}); }
 
   // M4：维度切换请求（服务器回 player_dimension 广播 + dimension_world 账本，客户端据此重建本地世界）
-  sendSwitchDimension(dim) { this._send(MSG.SWITCH_DIMENSION, { dim }); }
+  // 迭代 M2：pos 为传送门落点 {x,z,portal}（服务器原样回传给本人，applyDimensionWorld 用它吸附/建返程门）
+  sendSwitchDimension(dim, pos = null) { this._send(MSG.SWITCH_DIMENSION, { dim, pos: pos || null }); }
 
   close() {
     this._explicitClose = true; // 主动关闭：不触发自动重连

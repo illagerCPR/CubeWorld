@@ -22,7 +22,12 @@ import { PauseMenu } from '../ui/PauseMenu.js';
 import { DeathScreen } from '../ui/DeathScreen.js';
 import { CommandPanel } from '../ui/CommandPanel.js';
 import { ChatBox } from '../ui/ChatBox.js';
-import { CHUNK_SIZE } from '../core/Chunk.js';
+import { CHUNK_SIZE, Chunk, CHUNK_HEIGHT } from '../core/Chunk.js';
+import {
+  PORTAL_KINDS, DIM_PORTAL_KINDS, ARRIVAL_PLATFORM,
+  portalBlockId, portalTargetPos, detectPortalInterior, fillPortal,
+  findPortalNear, buildReturnPortal, removeConnectedPortals,
+} from '../core/Portals.js';
 import { matchRecipe } from '../core/Crafting.js';
 import { MobManager } from '../entity/MobManager.js';
 import { VoxelLightUniforms } from '../render/VoxelLight.js';
@@ -78,6 +83,10 @@ export class Game {
     this.frame = 0;
     this.autoSaveTimer = 0;
     this.autoSaveInterval = 30; // 每30秒自动保存
+    // 传送门穿越状态：站门累积计时 / 武装标记（离开门体才重新触发）/ 到达冷却
+    this._portalTimer = 0;
+    this._portalArmed = true;
+    this._portalCooldown = 0;
     this.networkMode = false;   // 局域网联机模式
     this.net = null;            // NetworkManager 实例（由 main.js 注入）
     this.remotePlayers = new Map(); // id -> RemotePlayer 远端玩家
@@ -313,6 +322,10 @@ export class Game {
       this.player.position.set(spawn.x, spawn.y, spawn.z);
     }
     this.player.setMode(mode);
+    // 传送门穿越状态复位（传送门到达的吸附/建门在 start 完成后由 _afterPortalArrival 处理）
+    this._portalTimer = 0;
+    this._portalCooldown = 0;
+    this._portalArmed = true;
     
     // 物品栏：先清空，避免上一个存档的物品残留
     this.inventory.slots = new Array(this.inventory.size).fill(null);
@@ -723,7 +736,10 @@ export class Game {
     if (this.player.survival) {
       this.updateSurvival(dt);
     }
-    
+
+    // 传送门穿越检测（所有模式；观战/死亡在函数内早退）
+    this.updatePortals(dt);
+
     // 自动保存（联机模式不自动保存，避免覆盖本地槽位）
     if (!this.networkMode) {
       this.autoSaveTimer += dt;
@@ -929,6 +945,7 @@ export class Game {
         if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
         if (def.name === 'chest') this._breakChest(hit.block, false);
         this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
+        removeConnectedPortals(this.world, hit.block.x, hit.block.y, hit.block.z);
         if (this.redstone) this.redstone.onBlockChange(hit.block.x, hit.block.y, hit.block.z);
         this.controls.mouseLeft = false;
       } else if (this.player.survival) {
@@ -949,6 +966,7 @@ export class Game {
           if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
           if (def.name === 'chest') this._breakChest(hit.block, true);
           this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
+          removeConnectedPortals(this.world, hit.block.x, hit.block.y, hit.block.z);
           if (this.redstone) this.redstone.onBlockChange(hit.block.x, hit.block.y, hit.block.z);
           this.breakingProgress = 0;
           this.breakMesh.visible = false;
@@ -1024,6 +1042,13 @@ export class Game {
             return;
           }
         }
+        // 传送门点火：打火石右键黑曜石框→下界门 / 萤石框→天域门（迭代 M2）
+        if (sel && sel.name === 'flint_and_steel' && targetDef) {
+          if (this._tryLightPortal(hit, targetDef)) {
+            this.controls.mouseRight = false;
+            return;
+          }
+        }
       }
       
       if (sel) {
@@ -1052,6 +1077,112 @@ export class Game {
       }
       this.controls.mouseRight = false;
     }
+  }
+
+  // 打火石点火传送门：点击框体 → 内部候选格 = 点击面外邻格 → 框校验 → 填充门方块。
+  // 返回 true 表示本次右键已被处理（无论点火成败——打火石无"生火"语义可回退）。
+  _tryLightPortal(hit, targetDef) {
+    const kind = { obsidian: 'nether', glowstone: 'aether' }[targetDef.name];
+    if (!kind) return false;
+    const cx = hit.block.x + hit.normal.x;
+    const cy = hit.block.y + hit.normal.y;
+    const cz = hit.block.z + hit.normal.z;
+    if (this.world.getBlock(cx, cy, cz) !== 0) return false;
+    const det = detectPortalInterior(this.world, cx, cy, cz, targetDef.id);
+    if (!det) {
+      if (this.chatBox) this.chatBox.add('传送门框架不完整（内部至少 2×3，框边须封闭）', '#fa8');
+      return true;
+    }
+    this.hand.swing();
+    fillPortal(this.world, det, portalBlockId(kind));
+    if (this.chatBox) this.chatBox.add(kind === 'nether' ? '下界传送门被点亮了…' : '天域传送门被点亮了…', '#a7f');
+    return true;
+  }
+
+  // 传送门穿越检测：站入门方块累积 2s 触发；到达后须离开门体才重新武装（防立即回传）
+  updatePortals(dt) {
+    if (!this.world || this.spectating || !this.player || this.player.dead) return;
+    if (this._portalCooldown > 0) {
+      this._portalCooldown -= dt;
+      return;
+    }
+    const kinds = DIM_PORTAL_KINDS[this.world.dimension] || [];
+    if (!kinds.length) { this._portalTimer = 0; return; }
+    const p = this.player.position;
+    const bx = Math.floor(p.x), bz = Math.floor(p.z);
+    const cellId = (dy) => this.world.getBlock(bx, Math.floor(p.y + dy), bz);
+    let kindIn = null;
+    for (const kind of kinds) {
+      const pid = portalBlockId(kind);
+      if (cellId(0.1) === pid || cellId(1.0) === pid) { kindIn = kind; break; }
+    }
+    if (!kindIn) {
+      this._portalTimer = 0;
+      this._portalArmed = true;
+      return;
+    }
+    if (!this._portalArmed) return;
+    this._portalTimer += dt;
+    if (this._portalTimer >= 2.0) {
+      this._portalTimer = 0;
+      this._portalArmed = false;
+      this._usePortal(kindIn);
+    }
+  }
+
+  // 传送门触发：目标维度 = 门种类配对的另一端（下界 overworld↔nether 1:8 / 天域 overworld↔aether 1:1）
+  _usePortal(kind) {
+    const dim = this.world.dimension;
+    const pair = kind === 'nether'
+      ? { nether: 'overworld', overworld: 'nether' }
+      : { aether: 'overworld', overworld: 'aether' };
+    const target = pair[dim];
+    if (!target) return;
+    const pos = portalTargetPos(kind, dim, this.player.position.x, this.player.position.z);
+    const def = getDimension(target);
+    if (this.chatBox) this.chatBox.add(`传送门轰鸣着将你送往「${def.name}」…`, '#a7f');
+    this.switchDimension(target, { x: pos.x, z: pos.z, portal: kind });
+  }
+
+  // 传送门到达落地：半径 24 搜既有同类门 → 吸附站入；无门则在落点自动建造返程门（原版语义）
+  _afterPortalArrival(arrival) {
+    if (!this.world || !this.running) return;
+    const kind = arrival.portal && PORTAL_KINDS[arrival.portal] ? arrival.portal : null;
+    const portalId = kind ? portalBlockId(kind) : 0;
+    let pos = portalId ? findPortalNear(this.world, arrival.x, arrival.z, portalId, 24) : null;
+    if (pos) {
+      this.player.position.set(pos.x, pos.y, pos.z);
+    } else if (kind) {
+      pos = buildReturnPortal(this.world, kind, arrival.x, arrival.z, {
+        top: this.world.dimDef.spawnScanTop || CHUNK_HEIGHT - 2,
+        platform: ARRIVAL_PLATFORM[this.world.dimension] || null,
+      });
+      this.player.position.set(pos.x, pos.y, pos.z);
+      if (this.chatBox) this.chatBox.add('你在落点建造了一座返程传送门', '#a7f');
+    }
+    if (pos) this.player.velocity.set(0, 0, 0);
+    this._portalCooldown = 4;
+    this._portalArmed = false;
+  }
+
+  // 传送门落点立足面预解析：临时生成器 + 临时区块探测（纯函数，不碰当前世界）；
+  // 无立足面返回 -1（到达后由 buildReturnPortal 按维度档案垫平台）
+  _resolveArrivalY(dim, x, z) {
+    const def = getDimension(dim);
+    if (!def) return -1;
+    const gen = def.createGenerator(this.world.seed);
+    const cx = Math.floor(x / CHUNK_SIZE), cz = Math.floor(z / CHUNK_SIZE);
+    const c = new Chunk(cx, cz);
+    gen.generateChunk(c);
+    const lx = x - cx * CHUNK_SIZE, lz = z - cz * CHUNK_SIZE;
+    const top = Math.min(def.spawnScanTop || 140, CHUNK_HEIGHT - 2);
+    for (let y = top; y >= 1; y--) {
+      if (c.get(lx, y, lz) === 0 && c.get(lx, y + 1, lz) === 0) {
+        const d = BlockRegistry.getById(c.get(lx, y - 1, lz));
+        if (d && d.solid) return y;
+      }
+    }
+    return -1;
   }
 
   updateSurvival(dt) {
@@ -1136,24 +1267,26 @@ export class Game {
   }
 
   // 维度切换（M1 单机 / M4 联机）：把当前完整状态合成 loadData 重走 start()——
-  // 保留背包/血量/xp/时间与全部维度账本，落到目标维度出生点
-  async switchDimension(dim) {
+  // 保留背包/血量/xp/时间与全部维度账本，落到目标维度出生点；
+  // 传送门穿越（迭代 M2）传 arrival {x,z,portal}：落到换算坐标并在到达后搜门/建返程门
+  async switchDimension(dim, arrival = null) {
     if (!this.running || !this.world) return false;
     const def = getDimension(dim);
     if (!def || !def.implemented) return false;
     if (this.networkMode) {
-      // M4 联机：服务器权威——发请求，收 DIMENSION_WORLD 回执后由 applyDimensionWorld 落地
+      // M4 联机：服务器权威——发请求（携带落点），收 DIMENSION_WORLD 回执后由 applyDimensionWorld 落地
       if (!this.net || dim === this.world.dimension) return false;
       if (this.chatBox) this.chatBox.add(`正在切换到「${def.name}」…`, '#8f8');
-      this.net.sendSwitchDimension(dim);
+      this.net.sendSwitchDimension(dim, arrival);
       return true;
     }
     if (dim === this.world.dimension) return false;
     return this._enqueueDimensionSwitch(async () => {
       // 检查在出队时再做（排队期间维度可能已被更早的任务改变）
       if (!this.running || !this.world || dim === this.world.dimension) return false;
-      const loadData = this._composeSwitchLoadData(dim, null, null);
+      const loadData = this._composeSwitchLoadData(dim, null, null, arrival);
       await this.start(loadData.gamemode, loadData.seed, loadData, this.currentSlot, loadData.cheatsEnabled, this.networkMode);
+      if (arrival) this._afterPortalArrival(arrival);
       return true;
     });
   }
@@ -1167,7 +1300,8 @@ export class Game {
   }
 
   // 合成换维用 loadData（单机用本地全维账本；联机传入服务器权威的目标维账本覆盖）
-  _composeSwitchLoadData(dim, dimBlocksOverride, dimContainersOverride) {
+  // arrival：传送门落点 {x,z,portal}——预解析立足面高度并写进 player 坐标（dimensionSpawn=false）
+  _composeSwitchLoadData(dim, dimBlocksOverride, dimContainersOverride, arrival = null) {
     const p = this.player;
     const dimBuckets = {};
     for (const [d, m] of this.world.dimensionBlocks) dimBuckets[d] = Object.fromEntries(m);
@@ -1175,17 +1309,25 @@ export class Game {
     const contBuckets = {};
     for (const [d, m] of this.world.dimensionContainers) contBuckets[d] = Object.fromEntries(m);
     if (dimContainersOverride) contBuckets[dim] = dimContainersOverride;
+    const playerData = {
+      yaw: p.yaw, pitch: p.pitch, health: p.health, food: p.food,
+      saturation: p.saturation, exhaustion: p.exhaustion,
+      xp: p.xp, xpLevel: p.xpLevel, onFire: 0, airTicks: 300
+    };
+    if (arrival) {
+      const ay = this._resolveArrivalY(dim, arrival.x, arrival.z);
+      const plat = ARRIVAL_PLATFORM[dim];
+      playerData.x = arrival.x + 0.5;
+      playerData.z = arrival.z + 0.5;
+      playerData.y = ay > 0 ? ay : (plat ? plat.y : 64);
+    }
     return {
       seed: this.world.seed,
       gamemode: p.gamemode,
       cheatsEnabled: this.cheatsEnabled,
       dimension: dim,
-      dimensionSpawn: true, // 忽略合成存档中的坐标，落到目标维度出生点
-      player: {
-        yaw: p.yaw, pitch: p.pitch, health: p.health, food: p.food,
-        saturation: p.saturation, exhaustion: p.exhaustion,
-        xp: p.xp, xpLevel: p.xpLevel, onFire: 0, airTicks: 300
-      },
+      dimensionSpawn: !arrival, // 传送门落点带坐标；否则忽略坐标落到目标维度出生点
+      player: playerData,
       inventory: this.inventory.serialize(),
       dimensionBlocks: dimBuckets,
       dimensionContainers: contBuckets,
@@ -1196,7 +1338,8 @@ export class Game {
 
   // M4 联机换维落地：服务器 dimension_world 回执（目标维度权威账本）→ 重建本地世界
   //（走维度重建串行链——连续换维不并发 start()）
-  applyDimensionWorld(dim, blockList, containerList) {
+  // pos：传送门落点 {x,z,portal}（服务器原样回传给换维者本人）→ 到达后搜门/建返程门
+  applyDimensionWorld(dim, blockList, containerList, pos = null) {
     if (!this.running || !this.world) return Promise.resolve(false);
     const def = getDimension(dim);
     if (!def || !def.implemented) return Promise.resolve(false);
@@ -1220,8 +1363,12 @@ export class Game {
         this.world.markAllDirty();
         return true;
       }
-      const loadData = this._composeSwitchLoadData(dim, dimBlocks, dimContainers);
+      const arrival = (pos && Number.isFinite(pos.x) && Number.isFinite(pos.z))
+        ? { x: key3(pos.x), z: key3(pos.z), portal: typeof pos.portal === 'string' ? pos.portal : null }
+        : null;
+      const loadData = this._composeSwitchLoadData(dim, dimBlocks, dimContainers, arrival);
       await this.start(loadData.gamemode, loadData.seed, loadData, this.currentSlot, loadData.cheatsEnabled, this.networkMode);
+      if (arrival) this._afterPortalArrival(arrival);
       if (this.chatBox) this.chatBox.add(`已切换到「${def.name}」`, '#8f8');
       return true;
     });
