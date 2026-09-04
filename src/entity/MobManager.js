@@ -59,6 +59,7 @@ export class MobManager {
     this.getSelfId = null;    // 阶段10：返回本地玩家联机 id（归属锁判定），由 Game 注入；null=单机
     this.mobNet = null;       // 联机怪物事件接口（sendMobSpawn/sendMobAttack/sendMobDied），由 Game 注入
     this.onBlockDestroyed = null; // 爆炸销毁方块回调 (x,y,z,def)，由 Game 注入（碎屑粒子）
+    this.spawnedVillages = new Set(); // 已生成村民的村庄锚点 key "ax,az"（本会话去重，死亡不重生）
   }
 
   // 异步初始化：mob 用私有 skin atlas，不再注入全局 atlas
@@ -138,7 +139,10 @@ export class MobManager {
   // 尝试生成怪物
   trySpawn(playerPos, isNight) {
     if (!this.spawnEnabled) return;
-    if (this.mobs.length >= MAX_MOBS) return;
+    // 敌对上限不含村民（村民数量由村庄记录决定，不挤占敌对生成名额）
+    let hostileCount = 0;
+    for (const m of this.mobs) if (m.typeName !== 'villager') hostileCount++;
+    if (hostileCount >= MAX_MOBS) return;
 
     // 在玩家周围 16~48 格内尝试
     const angle = Math.random() * Math.PI * 2;
@@ -196,6 +200,106 @@ export class MobManager {
   findMobByNetId(netId) {
     for (const m of this.mobs) if (m.netId === netId) return m;
     return null;
+  }
+
+  // 最近怪物查询（同类型）：敌对索敌村民 / 村民逃敌共用
+  findNearestMob(pos, range, typeName) {
+    let best = null;
+    let bestDist = range;
+    for (const m of this.mobs) {
+      if (m.dead || m.typeName !== typeName) continue;
+      const d = m.position.distanceTo(pos);
+      if (d < bestDist) { best = m; bestDist = d; }
+    }
+    return best;
+  }
+
+  // 怪物攻击怪物（僵尸/骷髅咬村民）：伤害+受击反馈+击退；死亡走 update 通用链
+  //（mob.dead → diedHandled → sendMobDied 广播 / dropLoot——村民 drops 为空不掉落）
+  mobAttackMob(attacker, victim) {
+    if (victim.dead) return;
+    victim.health -= attacker.attackDamage;
+    victim.hitFlash = HIT_FLASH_DURATION;
+    if (victim.healthBarSprite) {
+      victim.healthBarFadeTimer = HEALTH_BAR_FADE;
+      victim.healthBarSprite.visible = true;
+      if (victim.healthBarSprite.material) victim.healthBarSprite.material.opacity = 1;
+      this._updateHealthBar(victim);
+    }
+    const dx = victim.position.x - attacker.position.x;
+    const dz = victim.position.z - attacker.position.z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d > 0.001) {
+      victim.knockback.x += (dx / d) * 6;
+      victim.knockback.z += (dz / d) * 6;
+      victim.knockback.y += 3;
+    }
+    if (victim.health <= 0) victim.dead = true;
+  }
+
+  // 村庄村民生成：就近村庄记录 → 确定性点位（meta.villagerSpawns）生成村民。
+  // 单机直接 spawnMob；联机走 mobNet（host 权威广播，实体由回执创建，与 trySpawn 同惯例）。
+  // 注意用 recordsAround（按需重求解）而非 recordsNear——后者只读缓存，记录可能被 LRU 挤出。
+  updateVillageSpawns(player) {
+    if (!this.world || !player) return;
+    const sm = this.world.generator && this.world.generator.structureManager;
+    if (!sm) return;
+
+    if (this.spawnEnabled) {
+      // 生成仅 host/单机：客户端 spawnEnabled=false 跳过（防与 host 广播双生成），
+      // 其村民经 mob_spawn 回执创建，home 由下方补挂逻辑本地确定性还原
+      const records = sm.recordsAround('village', player.position.x, player.position.z)
+        .filter(rec => {
+          const dx = Math.max(rec.minX - player.position.x, 0, player.position.x - rec.maxX);
+          const dz = Math.max(rec.minZ - player.position.z, 0, player.position.z - rec.maxZ);
+          return dx * dx + dz * dz <= 80 * 80;
+        });
+      for (const rec of records) {
+        const key = rec.ax + ',' + rec.az;
+        if (this.spawnedVillages.has(key)) continue;
+        this.spawnedVillages.add(key);
+
+        const spawns = rec.meta.villagerSpawns || [];
+        const houseCount = (rec.meta.houses && rec.meta.houses.length) || 2;
+        const count = Math.min(spawns.length, Math.max(2, houseCount));
+        for (let i = 0; i < count; i++) {
+          const [x, y, z] = spawns[i];
+          if (this.mobNet) {
+            this.mobNet.sendMobSpawn('villager', x, y + 0.1, z);
+          } else {
+            const mob = new Mob('villager', this.world);
+            mob.position.set(x, y + 0.1, z);
+            mob.home = { x: rec.ax, z: rec.az, radius: 24 };
+            this.spawnMob(mob);
+          }
+        }
+      }
+    }
+
+    // 随村清扫：村庄卸载（玩家离开 ~120 格）→ 其村民一并移除并解除生成标记，
+    // 回村时随区块重载重新生成（村庄生命周期 = 区块生命周期）
+    for (let i = this.mobs.length - 1; i >= 0; i--) {
+      const m = this.mobs[i];
+      if (m.typeName !== 'villager' || !m.home) continue;
+      const hd = Math.hypot(m.home.x - player.position.x, m.home.z - player.position.z);
+      if (hd > 120) {
+        this._removeMobResources(m);
+        this.mobs.splice(i, 1);
+        this.spawnedVillages.delete(m.home.x + ',' + m.home.z);
+      }
+    }
+
+    // 远端创建的村民补挂 home（mob_spawn 回执创建时村庄记录可能尚未缓存；记录确定性一致，
+    // 各端最终收敛到同一锚点）
+    if (this.mobs.length > 0) {
+      const nearRecs = sm.recordsAround('village', player.position.x, player.position.z);
+      for (const m of this.mobs) {
+        if (m.typeName !== 'villager' || m.home || m.dead) continue;
+        const rec = nearRecs.find(r =>
+          Math.hypot(r.ax - m.position.x, r.az - m.position.z) < 96);
+        if (rec) m.home = { x: rec.ax, z: rec.az, radius: 24 };
+      }
+    }
   }
 
   // 其它端攻击：本端同步扣血 + 受击反馈 + 位置校正（减少各端 AI 漂移）
@@ -307,6 +411,9 @@ export class MobManager {
     this.spawnTimer -= dt;
     const isNight = sky ? sky.isNight() : false;
 
+    // 村庄村民生成（host/单机权威；去重由 spawnedVillages 保证，村民死亡本会话不重生）
+    this.updateVillageSpawns(player);
+
     if (this.spawnTimer <= 0) {
       this.spawnTimer = SPAWN_INTERVAL;
       this.trySpawn(player.position, isNight);
@@ -342,7 +449,7 @@ export class MobManager {
       }
 
       // 普通帧
-      mob.update(dt, player, sky, this.physics);
+      mob.update(dt, player, sky, this.physics, this);
 
       // 体素光染色：按怪物所在格光照（max(天光×昼夜, 方块光)）调制 material 颜色，
       // 洞穴里变暗、火把旁带暖色；受击/死亡的 emissive 反馈走独立通道不冲突
@@ -425,8 +532,9 @@ export class MobManager {
         }
         mob.dyingAnim = { progress: 0, total: DEATH_ANIM_DURATION };
         if (mob.healthBarSprite) mob.healthBarSprite.visible = false;
-      } else if (dist > DESPAWN_DISTANCE) {
-        // 被卸载而非死亡：直接清理
+      } else if (dist > DESPAWN_DISTANCE && mob.typeName !== 'villager') {
+        // 被卸载而非死亡：直接清理（村民不在此清理——村庄绑定生物由 updateVillageSpawns
+        // 的随村清扫管理，否则逃敌被拖远会掏空村庄）
         this._removeMobResources(mob);
         this.mobs.splice(i, 1);
       }

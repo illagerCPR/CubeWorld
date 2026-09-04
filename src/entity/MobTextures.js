@@ -127,6 +127,10 @@ const C = {
   // 蜘蛛：近黑 + 红眼
   sDark: [40, 34, 42], sDk: [26, 22, 28], sMid: [58, 50, 62], sAbo: [48, 42, 54],
   sRed: [222, 44, 40], sRedD: [150, 24, 24],
+  // 村民：棕袍 + 大鼻 + 绿眼（原版平民配色）
+  vRobe: [126, 94, 62], vRobeD: [96, 70, 46], vRobeHi: [146, 112, 76],
+  vSkin: [188, 142, 100], vSkinD: [160, 116, 80], vSkinDD: [128, 90, 60],
+  vPants: [74, 60, 48], vEye: [74, 112, 60],
 };
 
 // === 各怪皮肤 SVG 生成（原版风） ===
@@ -320,6 +324,55 @@ function spiderSkinSVG() {
   return buildSkinSVG(cells);
 }
 
+function villagerSkinSVG() {
+  const headBase = noisy(C.vSkin, 8, 241);
+  const bodyBase = noisy(C.vRobe, 8, 242);
+  const armBase = noisy(C.vRobe, 8, 243);
+  const legBase = noisy(C.vPants, 6, 244);
+
+  // 脸：一字眉 + 绿眼 + 大鼻子（中央竖条）+ 嘴线（原版村民五官位）
+  const headFront = (x, y) => {
+    if (y === 7 && x >= 4 && x <= 11) return C.vSkinDD;               // 一字眉
+    if (y >= 9 && y <= 10 && ((x >= 4 && x <= 5) || (x >= 10 && x <= 11))) return C.vEye; // 绿眼
+    if (y >= 10 && y <= 13 && x >= 7 && x <= 8) return C.vSkinD;      // 大鼻
+    if (y === 14 && x >= 6 && x <= 9) return C.vSkinDD;               // 嘴
+    return null;
+  };
+  const headBack = (x, y) => (y <= 6 ? C.vSkinD : null);              // 颅后剃发阴影
+  const headSide = (x, y) => (y >= 13 ? C.vSkinD : null);
+  const headTop = () => C.vSkinD;                                     // 秃顶
+  const headBot = () => C.vSkinDD;
+
+  // 长袍：中缝暗线 + 下摆加深（原版平民袍）
+  const bodyFront = (x, y) => {
+    if (x === 7 || x === 8) return C.vRobeD;                          // 中缝
+    if (y <= 2) return C.vRobeD;                                      // 下摆
+    return null;
+  };
+  const bodyBack = (x, y) => (y <= 2 ? C.vRobeD : null);
+  const bodySide = (x, y) => (y <= 2 ? C.vRobeD : null);
+  const bodyTop = () => C.vRobeHi;
+  const bodyBot = () => C.vRobeD;
+
+  // 臂（垂放）：袍袖 + 下端手
+  const armAll = (x, y) => (y <= 3 ? C.vSkin : null);
+  const armTop = () => C.vRobeHi;
+  const armBot = () => C.vSkinD;
+
+  // 腿：深色裤 + 脚
+  const legAll = (x, y) => (y >= 13 ? C.vRobeD : null);
+  const legTop = () => C.vPants;
+  const legBot = () => C.vRobeD;
+
+  const cells = [
+    ...partCells(0, headBase, { front: headFront, back: headBack, left: headSide, right: headSide, top: headTop, bot: headBot }),
+    ...partCells(1, bodyBase, { front: bodyFront, back: bodyBack, left: bodySide, right: bodySide, top: bodyTop, bot: bodyBot }),
+    ...partCells(2, armBase, { front: armAll, back: armAll, left: armAll, right: armAll, top: armTop, bot: armBot }),
+    ...partCells(3, legBase, { front: legAll, back: legAll, left: legAll, right: legAll, top: legTop, bot: legBot }),
+  ];
+  return buildSkinSVG(cells);
+}
+
 // === 部件定义 ===
 // box = [minX, minY, minZ, maxX, maxY, maxZ]，局部坐标，原点在脚 y=0，+Z 朝脸的方向
 // （Mob.js yaw=atan2(nx,nz) 使 +Z 指向移动方向：脸朝玩家、蜘蛛头在前）
@@ -369,6 +422,16 @@ const SPIDER_PARTS = [
   { name: 'legBR',  row: 3, box: [-0.56, 0.06, -0.36, -0.24, 0.30, -0.18] },
 ];
 
+// 村民：人形，手臂垂放体侧（非僵尸前伸式），长袍身更宽更垂
+const VILLAGER_PARTS = [
+  { name: 'head',  row: 0, box: [-0.25, 1.50, -0.25,  0.25, 2.00, 0.25] },
+  { name: 'body',  row: 1, box: [-0.30, 0.72, -0.18,  0.30, 1.50, 0.18] },
+  { name: 'armR',  row: 2, box: [-0.48, 0.90, -0.10, -0.32, 1.42, 0.06] },
+  { name: 'armL',  row: 2, box: [ 0.32, 0.90, -0.10,  0.48, 1.42, 0.06] },
+  { name: 'legR',  row: 3, box: [-0.20, 0,    -0.11,  0.00, 0.75, 0.11] },
+  { name: 'legL',  row: 3, box: [ 0.00, 0,    -0.11,  0.20, 0.75, 0.11] },
+];
+
 // === 入口：返回各 type 的 skin SVG + parts ===
 export function generateMobSkinSVGs() {
   return {
@@ -376,6 +439,7 @@ export function generateMobSkinSVGs() {
     skeleton:  skeletonSkinSVG(),
     creeper:   creeperSkinSVG(),
     spider:    spiderSkinSVG(),
+    villager:  villagerSkinSVG(),
   };
 }
 
@@ -455,5 +519,20 @@ export const MobTypes = {
       { name: 'string', min: 0, max: 2 },
       { name: 'spider_eye', min: 0, max: 1, chance: 0.5 },
     ],
+  },
+  villager: {
+    name: 'villager',
+    displayName: '村民',
+    width: 0.6,
+    height: 1.95,
+    health: 20,
+    damage: 0,           // 被动：无攻击
+    speed: 2.4,
+    attackRange: 0,
+    detectionRange: 0,   // 永不主动索敌玩家
+    burningInDay: false,
+    passive: true,       // Mob.js 走 passive AI 分支（游荡/注视/逃离）
+    model: { parts: VILLAGER_PARTS, kind: 'cuboid' },
+    drops: [],
   },
 };

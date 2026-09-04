@@ -67,8 +67,9 @@ export class NetworkManager {
       this._send(MSG.HELLO, { name: this.name, version: '0.1' });
       if (isReconnect) {
         // 重连：世界已在运行，不重启，直接重新加入房间（服务器回放方块/掉落物账本）
+        // 必须携带 room 名——曾发空 payload 落到 default 房（房间静默漂移，村民/方块全对不上）
         this._pendingPlayers = [];
-        this._send(MSG.JOIN_ROOM, {});
+        this._send(MSG.JOIN_ROOM, { room: this.room });
         if (this.onStatusChange) this.onStatusChange('connected', '已重新连接服务器');
       } else {
         for (const q of this._pendingOpen) this._send(q.type, q.data);

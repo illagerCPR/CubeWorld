@@ -61,6 +61,16 @@ export function solveVillage(rng, ax, groundY, az, gen) {
     blocks.push([x, groundY, z, M.path]);
   };
 
+  // 村民出生点：清柱（顺带清树）+ 按实际地形垫站台。实际地表 = getBaseHeight，
+  // 坡地若用 groundY+1 会卡进实心方块导致卡死/掉虚空；记录柱心坐标供直接放置。
+  const spawnAt = (x, z) => {
+    clearBox(blocks, x, groundY + 1, z, x, groundY + CLEAR_TOP, z);
+    const t = Math.max(groundY, baseAt(x, z));
+    for (let y = baseAt(x, z); y < t; y++) blocks.push([x, y, z, M.base]);
+    blocks.push([x, t, z, M.path]);
+    meta.villagerSpawns.push([x + 0.5, t + 1.05, z + 0.5]);
+  };
+
   // ── 中央水井：3×3 水坑 + 圆石沿口 + 四柱小顶 ──────────────────────────
   fillBox(blocks, ax - 1, groundY - 3, az - 1, ax + 1, groundY - 3, az + 1, ID.cobble);
   fillBox(blocks, ax - 1, groundY - 2, az - 1, ax + 1, groundY - 1, az + 1, ID.water);
@@ -70,7 +80,8 @@ export function solveVillage(rng, ax, groundY, az, gen) {
     for (let y = 1; y <= 3; y++) blocks.push([ax + px, groundY + y, az + pz, M.post]);
   }
   fillBox(blocks, ax - 1, groundY + 4, az - 1, ax + 1, groundY + 4, az + 1, M.roof);
-  meta.villagerSpawns.push([ax + 3, groundY + 1, az + 3], [ax - 3, groundY + 1, az - 3]);
+  spawnAt(ax + 3, az + 3);
+  spawnAt(ax - 3, az - 3);
 
   // ── 四向道路（3 宽）+ 灯柱 ────────────────────────────────────────────
   for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -111,7 +122,7 @@ export function solveVillage(rng, ax, groundY, az, gen) {
     if (face === 'z-' || face === 'z+') {
       const fz = face === 'z-' ? z0 : z1;
       setAt(midX, groundY + 1, fz, ID.door);
-      spawn = [midX + 0.5, groundY + 1, fz + (face === 'z-' ? -0.5 : 0.5)];
+      spawn = [midX, fz + (face === 'z-' ? -1 : 1)];   // 门外一格（spawnAt 记录）
       setAt(x0 + 1, groundY + 2, fz, ID.glass);
       setAt(x1 - 1, groundY + 2, fz, ID.glass);
       const bz = face === 'z-' ? z1 : z0;
@@ -122,7 +133,7 @@ export function solveVillage(rng, ax, groundY, az, gen) {
     } else {
       const fx = face === 'x-' ? x0 : x1;
       setAt(fx, groundY + 1, midZ, ID.door);
-      spawn = [fx + (face === 'x-' ? -0.5 : 0.5), groundY + 1, midZ + 0.5];
+      spawn = [fx + (face === 'x-' ? -1 : 1), midZ];   // 门外一格（spawnAt 记录）
       setAt(fx, groundY + 2, z0 + 1, ID.glass);
       setAt(fx, groundY + 2, z1 - 1, ID.glass);
       const bx = face === 'x-' ? x1 : x0;
@@ -149,7 +160,7 @@ export function solveVillage(rng, ax, groundY, az, gen) {
     if (kind === 'big') setAt(x1 - 2, groundY + 1, z0 + 1, ID.wool);
 
     meta.houses.push({ door: doorPos, groundY });
-    meta.villagerSpawns.push(spawn);
+    spawnAt(spawn[0], spawn[1]);
   }
 
   // ── 农田：原木边框 + 水渠 + 泥垄 + 南瓜/西瓜 ──────────────────────────
@@ -171,7 +182,7 @@ export function solveVillage(rng, ax, groundY, az, gen) {
       blocks.push([midX - 1, groundY + 1, z, rng() < 0.5 ? ID.pumpkin : ID.melon]);
       blocks.push([midX + 1, groundY + 1, z, rng() < 0.5 ? ID.pumpkin : ID.melon]);
     }
-    meta.villagerSpawns.push([x0 - 0.5 + 1, groundY + 1, cz + 0.5]);
+    spawnAt(x0 - 1, cz);
   }
 
   // ── 干草料堆：干草垛 + 南瓜点 + 火把柱 ────────────────────────────────

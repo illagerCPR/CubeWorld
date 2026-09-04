@@ -246,6 +246,16 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **Hud 准星**：构造期默认 display:none（原 updateVisibility('creative') 初始化会让准星在主菜单可见）；进游戏后 update()/updateVisibility() 按模式接管。
 - **无头截图伪影**：本环境 agent-browser screenshot 对持续渲染的 WebGL 画布可能在数秒后冻结在旧帧（合成器表面不更新），**验证全景/粒子等画面以 `gl.readPixels` 帧缓冲导出为准**（eval 内 render→readPixels→小画布→toDataURL），DOM 截图不受影响。
 
+### 自然建筑生成批次备忘（防回退）—— 结构基础设施/村庄/村民/要塞（T0-T4 进行中）
+
+- **结构生成架构不变量**：布局只由 (seed, 结构类型, 锚点 cell) 决定；`StructureManager` 布局求解与逐区块裁剪严格分离，任意端/任意区块顺序结果逐字节一致（联机根基）。回归 = `node tests/structure-determinism.mjs`（同 seed 双次字节一致 / 生成顺序无关 / 跨区块连续 / 耗时预算），已接入 `server/run-all-tests.sh` 首位（纯 node 不占 3001）。新结构类型（要塞等）必须：`registerStructureType` 进 `structures/catalog.js` + solve 保持纯函数 + 追加顺序=绘制优先级。
+- **StructureManager 高陷阱**：① `recordsNear` 只读缓存——LRU（maxCache=128）长距离探索后会把村庄记录挤出，**周期性运行时逻辑（村民生成）必须用 `recordsAround`（3×3 cell ensureRecord 按需重求解）**；② 选址门控别照搬 MC 直觉：本作河流/地形碎片化，海拔窗 65-92 + 坡度 ≤8 + `attempts: 6` + `probeR: [10,18]`（大探针环会系统性排除沙漠小斑块）才达到合理密度，改动前先跑 node 漏斗统计；③ 村民出生点必须 `spawnAt`（清柱+按 `baseAt` 实际地形垫台）——直接用 groundY+1 在坡地会卡实心方块掉虚空。
+- **`EntityPhysics.moveAxis` z 轴碰撞回退曾误用 `bx`（存量高危 bug，已修）**：沿 z 撞墙的实体被瞬移到 z≈bx 的远点（一帧 ~180 格）——怪物游荡高频触发，表现为"怪物凭空消失/出现在远处地下后坠世界"。回退坐标必须取当前轴的方块坐标（`bc = axis==='z' ? bz : bx`），勿回退。`Mob` 攻击分流用 **`target.isMob` 鸭子标记**而非 instanceof（HMR 双模块实例下 instanceof 失效）。
+- **村民系统**：`MobTypes.villager`（passive: true，damage 0/detectionRange 0，drops 空）；AI 三态 = 村庄绳拴游荡（home 半径 24，flee 时家向偏置防被拖远）/ 玩家 4 格注视 / 8 格敌对逃离（速度 ×1.6）；**僵尸/骷髅索敌含村民**（`findNearestMob` 取玩家与村民较近者；苦力怕/蜘蛛仅玩家——防自爆拆村），怪物咬村民走 `mobAttackMob`（伤害+hitFlash+击退），死亡走 update 通用链（sendMobDied 广播/drops 空）。村民不进存档，随村庄重载重生。
+- **村民生成生命周期**：`MobManager.updateVillageSpawns` 每帧驱动——生成部分仅 host/单机（`spawnEnabled` 门控，联机经 mobNet 广播 mob_spawn，实体由回执创建）；**补挂 home 与随村清扫（村庄卸载 >120 格 → 村民移除+dedup 解除）全端执行**（客户端 spawnEnabled=false，早退会让客户端村民永无 home）。村民死亡本会话不重生；敌对 MAX_MOBS 上限不含村民。
+- **重连丢房间名（存量 bug，已修）**：`NetworkManager` 重连重入房曾发空 payload `JOIN_ROOM {}` → 服务端落到 default 房（房间静默漂移，方块账本/村民全对不上）。重连必须 `JOIN_ROOM { room: this.room }`；排查"联机数据对不上"先查两端 `net.room` 是否一致。
+
+
 ### 阶段 10 关键实现备忘（防回退）—— 手持物 3D 化 + 快捷栏同步 + 掉落归属锁 + 多账号 + RTT
 
 - **手持物 3D 化**：`src/render/HeldItemMesh.js`（模板缓存进程级，clone 复用；方块=六面贴图立方体、`renderType==='cross'` 方块=交叉双面薄片、物品=双面薄片；材质 `MeshLambertMaterial` + `emissiveMap` 同贴图 0.35 自发光，夜晚可见；**勿改回 sprite billboard**）。`src/render/FirstPersonHand.js` 第一人称：**camera 必须加入 scene（`scene.add(camera)`）其子节点才渲染**（`Game.constructor` 一次性挂载，属共享型子系统——`start()` 里重置 `currentName=undefined` 强制重建）；按住左键自动连续挥动（0.3s 冷却），放置/食用/命中命中时 `hand.swing()`。`RemotePlayer._setHeld` 挂 `armR.pivot`（dispose 只 remove 不 dispose，几何/材质为共享缓存）。

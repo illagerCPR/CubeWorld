@@ -60,10 +60,13 @@ export class EntityPhysics {
             if (max[0] > bx && min[0] < bx + 1 &&
                 max[1] > by && min[1] < by + 1 &&
                 max[2] > bz && min[2] < bz + 1) {
+              // 回退坐标取当前轴对应的方块坐标：z 轴必须用 bz（曾误用 bx，
+              // 沿 z 撞墙的实体会被瞬移到 z≈x 的远点，村民游荡高频触发）
+              const bc = (axis === 'z') ? bz : bx;
               if (amount > 0) {
-                entity.position[axis] = (axis === 'y') ? by - height - 0.001 : bx - half - 0.001;
+                entity.position[axis] = (axis === 'y') ? by - height - 0.001 : bc - half - 0.001;
               } else {
-                entity.position[axis] = (axis === 'y') ? by + 1 + 0.001 : bx + 1 + half + 0.001;
+                entity.position[axis] = (axis === 'y') ? by + 1 + 0.001 : bc + 1 + half + 0.001;
               }
               if (axis === 'y') {
                 if (amount < 0) entity.onGround = true;

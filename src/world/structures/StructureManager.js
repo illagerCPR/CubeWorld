@@ -46,7 +46,7 @@ export class StructureManager {
     this.seed = seed;
     // 布局缓存：key = "type|ccx|ccz" -> record | null（null=选址未通过，同样缓存避免重复评估）
     this.cache = new Map();
-    this.maxCache = 64;
+    this.maxCache = 128; // 长距离探索会积累 null 记录，调小会挤掉村庄记录（村民生成路径已抗驱逐，此为兜底）
   }
 
   // 由 cell 推导锚点记录（带缓存）。record: { name, ax, az, groundY, blocks, meta, minX..maxZ }
@@ -175,6 +175,24 @@ export class StructureManager {
     const def = structureTypes.get(typeName);
     if (!def) return null;
     return this._cellRecord(typeName, def, ccx, ccz);
+  }
+
+  // 运行时：位置附近 (2r+1)² cell 的记录（ensureRecord 按需重求解，抗 LRU 驱逐）。
+  // 村民生成等周期性逻辑用这个而不是 recordsNear——后者只读缓存，长距离探索后记录会被挤出。
+  recordsAround(typeName, x, z, r = 1) {
+    const def = structureTypes.get(typeName);
+    if (!def) return [];
+    const cellBlocks = def.cell * CHUNK_SIZE;
+    const ccx = Math.floor(x / cellBlocks);
+    const ccz = Math.floor(z / cellBlocks);
+    const out = [];
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dz = -r; dz <= r; dz++) {
+        const rec = this._cellRecord(typeName, def, ccx + dx, ccz + dz);
+        if (rec) out.push(rec);
+      }
+    }
+    return out;
   }
 
   // 调试用：当前缓存中的全部记录（确定性测试断言用）
