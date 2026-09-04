@@ -1,4 +1,4 @@
-// terrain.js -- 地形生成
+// terrain.js -- 地形生成（含确定性 3D 噪声洞穴雕刻）
 import { SimplexNoise } from './noise.js';
 import { Biomes, BiomeConfig } from './biomes.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
@@ -16,6 +16,21 @@ const WATER = () => BlockRegistry.getId('water');
 const BEDROCK = () => BlockRegistry.getId('bedrock');
 const CLAY = () => BlockRegistry.getId('clay');
 const GRAVEL = () => BlockRegistry.getId('gravel');
+const LAVA = () => BlockRegistry.getId('lava');
+
+// ── 洞穴参数（W3）────────────────────────────────────────────────────────
+// 意面通道：两个独立 3D 噪声 a/b 同时接近 0（a²+b²<t）→ 管道腔；y 频率 ×2 压扁通道
+const CAVE_NOODLE_FREQ = 0.014;
+const CAVE_NOODLE_T = 0.006;
+// 奶酪空腔：单噪声高值 → 稀疏大腔
+const CAVE_CHEESE_FREQ = 0.02;
+const CAVE_CHEESE_T = 0.66;
+// 采样网格步长（世界对齐，跨区块连续的根基）
+const CAVE_CELL = 4;
+// 保护规则
+const CAVE_MIN_Y = 4;            // 基岩+保护层，不挖
+const CAVE_WATER_SHELL = 6;      // 水面列（height < SEA_LEVEL+2）水下保留壳厚，防倒灌
+const CAVE_LAVA_LEVEL = 10;      // 挖空处 y ≤ 此值填岩浆（MC 风格深层岩浆湖）
 
 export class TerrainGenerator {
   constructor(seed) {
@@ -26,6 +41,9 @@ export class TerrainGenerator {
     this.riverNoise = new SimplexNoise(seed + 3);
     this.detailNoise = new SimplexNoise(seed + 4);
     this.oreNoise = new SimplexNoise(seed + 5);
+    this.caveNoiseA = new SimplexNoise(seed + 6); // 洞穴双通道（意面）+ 奶酪
+    this.caveNoiseB = new SimplexNoise(seed + 7);
+    this.caveNoiseC = new SimplexNoise(seed + 8);
     this.structureManager = new StructureManager(this, seed);
   }
 
@@ -66,14 +84,29 @@ export class TerrainGenerator {
   // 生成区块
   generateChunk(chunk) {
     const { cx, cz } = chunk;
+    // 先逐列取地表高度（洞穴场与主循环共用，避免重复噪声求值）
+    const heightMap = new Int16Array(CHUNK_SIZE * CHUNK_SIZE);
+    let maxHeight = 0;
     for (let x = 0; x < CHUNK_SIZE; x++) {
       for (let z = 0; z < CHUNK_SIZE; z++) {
         const wx = cx * CHUNK_SIZE + x;
         const wz = cz * CHUNK_SIZE + z;
+        const h = this.getBaseHeight(wx, wz);
+        heightMap[x + z * CHUNK_SIZE] = h;
+        if (h > maxHeight) maxHeight = h;
+      }
+    }
+    // 洞穴密度场（世界对齐采样网格 + 三线性插值；无洞穴高度时跳过）
+    const field = this._buildCaveField(cx, cz, maxHeight);
+
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+      for (let z = 0; z < CHUNK_SIZE; z++) {
+        const wx = cx * CHUNK_SIZE + x;
+        const wz = cz * CHUNK_SIZE + z;
+        const height = heightMap[x + z * CHUNK_SIZE];
         const biome = this.getBiome(wx, wz);
         const cfg = BiomeConfig[biome];
-        const height = this.getBaseHeight(wx, wz);
-        
+
         for (let y = 0; y < CHUNK_HEIGHT; y++) {
           let blockId = 0;
           if (y === 0) {
@@ -94,12 +127,19 @@ export class TerrainGenerator {
           } else if (y <= SEA_LEVEL && y >= height) {
             blockId = WATER();
           }
-          
+
+          // 洞穴雕刻（在实心方块判定后：挖空石头/土层，深层填岩浆）
+          if (blockId !== 0 && blockId !== BEDROCK() && blockId !== WATER() &&
+              field && y >= CAVE_MIN_Y && y < height &&
+              this._isCave(field, wx, y, wz, height)) {
+            blockId = y <= CAVE_LAVA_LEVEL ? LAVA() : 0;
+          }
+
           if (blockId !== 0) {
             chunk.set(x, y, z, blockId);
           }
         }
-        
+
         // 雪层
         if (cfg.snowLayer && height < CHUNK_HEIGHT && height > SEA_LEVEL) {
           const above = chunk.get(x, height, z);
@@ -109,13 +149,65 @@ export class TerrainGenerator {
         }
       }
     }
-    
+
     // 结构生成（树等）
     this.generateStructures(chunk);
     // 自然建筑（村庄/要塞等，锚点网格 + 确定性布局 + 逐区块裁剪）
     this.structureManager.decorateChunk(chunk);
     chunk.generated = true;
     chunk.dirty = true;
+  }
+
+  // ── 洞穴密度场（W3）：世界对齐采样网格，插值判定跨区块天然连续 ──────────
+  // 三个通道各存一张网格（a/b=意面双通道，c=奶酪），返回 null 表示本区块无需雕刻。
+  _buildCaveField(cx, cz, maxHeight) {
+    const yTop = Math.min(CHUNK_HEIGHT, maxHeight + 2);
+    if (yTop <= CAVE_MIN_Y + CAVE_CELL) return null;
+    const nx = CHUNK_SIZE / CAVE_CELL + 1; // 5：含 x=0..16（16 为邻区块边界点）
+    const nz = nx;
+    const ny = Math.ceil(yTop / CAVE_CELL) + 1;
+    const aG = new Float32Array(nx * nz * ny);
+    const bG = new Float32Array(nx * nz * ny);
+    const cG = new Float32Array(nx * nz * ny);
+    const x0 = cx * CHUNK_SIZE, z0 = cz * CHUNK_SIZE;
+    const fy = 2; // y 频率倍增：通道竖向压扁（MC 意面洞穴观感）
+    for (let ix = 0; ix < nx; ix++) {
+      for (let iz = 0; iz < nz; iz++) {
+        const wx = x0 + ix * CAVE_CELL;
+        const wz = z0 + iz * CAVE_CELL;
+        for (let iy = 0; iy < ny; iy++) {
+          const wy = iy * CAVE_CELL;
+          const i = (ix * nz + iz) * ny + iy;
+          aG[i] = this.caveNoiseA.noise3D(wx * CAVE_NOODLE_FREQ, wy * CAVE_NOODLE_FREQ * fy, wz * CAVE_NOODLE_FREQ);
+          bG[i] = this.caveNoiseB.noise3D(wx * CAVE_NOODLE_FREQ, wy * CAVE_NOODLE_FREQ * fy, wz * CAVE_NOODLE_FREQ);
+          cG[i] = this.caveNoiseC.noise3D(wx * CAVE_CHEESE_FREQ, wy * CAVE_CHEESE_FREQ * fy, wz * CAVE_CHEESE_FREQ);
+        }
+      }
+    }
+    return { aG, bG, cG, nx, nz, ny, x0, z0 };
+  }
+
+  // 采样插值判定：三通道三线性插值 → 意面 a²+b²<t 或 奶酪 c>t；含水面列保护壳。
+  _isCave(f, wx, y, wz, height) {
+    // 水面列（河/海）保留水下壳，防止湖海倒灌进洞
+    if (height < SEA_LEVEL + 2 && y > height - CAVE_WATER_SHELL) return false;
+    const gx = (wx - f.x0) / CAVE_CELL, gy = y / CAVE_CELL, gz = (wz - f.z0) / CAVE_CELL;
+    const ix = Math.min(Math.floor(gx), f.nx - 2), iy = Math.min(Math.floor(gy), f.ny - 2), iz = Math.min(Math.floor(gz), f.nz - 2);
+    const fx = gx - ix, fyv = gy - iy, fz = gz - iz;
+    const idx = (X, Y, Z) => ((ix + X) * f.nz + (iz + Z)) * f.ny + (iy + Y);
+    // 每通道三线性（8 角 → 7 次 lerp）
+    const tri = (G) => {
+      const c00 = G[idx(0, 0, 0)] * (1 - fx) + G[idx(1, 0, 0)] * fx;
+      const c10 = G[idx(0, 0, 1)] * (1 - fx) + G[idx(1, 0, 1)] * fx;
+      const c01 = G[idx(0, 1, 0)] * (1 - fx) + G[idx(1, 1, 0)] * fx;
+      const c11 = G[idx(0, 1, 1)] * (1 - fx) + G[idx(1, 1, 1)] * fx;
+      const c0 = c00 * (1 - fz) + c10 * fz;
+      const c1 = c01 * (1 - fz) + c11 * fz;
+      return c0 * (1 - fyv) + c1 * fyv;
+    };
+    const a = tri(f.aG), b = tri(f.bG), c = tri(f.cG);
+    if (a * a + b * b < CAVE_NOODLE_T) return true;
+    return c > CAVE_CHEESE_T;
   }
 
   // 矿石分布
