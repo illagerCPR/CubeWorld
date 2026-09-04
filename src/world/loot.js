@@ -72,6 +72,12 @@ export function chestLoot(seed, tableName, x, y, z) {
 // ── 村民交易 ─────────────────────────────────────────────────────────────
 // 每个村民固定 3 收购（玩家给物品换绿宝石）+ 3 出售（绿宝石换物品）。
 // tradeSeed 由 (村庄锚点, 生成序号) 派生，随 mob_spawn 广播（客户端无需反查村庄）。
+
+// 交易种子派生：单机与 host 广播共用同一函数（联机一致性关键——勿在调用处各自造哈希）
+export function villagerTradeSeed(ax, az, index) {
+  return hash32(ax | 0, az | 0, index | 0, 555) >>> 0;
+}
+
 const BUY_POOL = [   // [给村民的物品, min, max]
   ['wheat', 16, 24], ['coal', 12, 20], ['carrot', 14, 22],
   ['potato', 14, 22], ['beef', 6, 10], ['white_wool', 10, 16],

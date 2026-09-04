@@ -161,7 +161,7 @@ export class NetworkManager {
 
   _spawnMob(msg) {
     if (!this.game.mobManager) return;
-    this.game.mobManager.createMobFromNet(msg.id, msg.type, msg.x, msg.y, msg.z);
+    this.game.mobManager.createMobFromNet(msg.id, msg.type, msg.x, msg.y, msg.z, msg.tradeSeed);
   }
 
   _handle(msg) {
@@ -337,8 +337,12 @@ export class NetworkManager {
   // 本地拾取掉落物，通知服务器移除并广播
   sendDropTaken(id) { this._send(MSG.DROP_TAKEN, { id }); }
 
-  // 联机怪物事件（host 生成 / 玩家攻击 / 怪物死亡）
-  sendMobSpawn(type, x, y, z) { this._send(MSG.MOB_SPAWN, { type, x, y, z }); }
+  // 联机怪物事件（host 生成 / 玩家攻击 / 怪物死亡）；tradeSeed：T5 村民交易表种子（服务器原样透传）
+  sendMobSpawn(type, x, y, z, tradeSeed) {
+    const data = { type, x, y, z };
+    if (typeof tradeSeed === 'number') data.tradeSeed = tradeSeed >>> 0;
+    this._send(MSG.MOB_SPAWN, data);
+  }
   sendMobAttack(id, damage, x, y, z) { this._send(MSG.MOB_ATTACK, { id, damage, x, y, z }); }
   sendMobDied(id) { this._send(MSG.MOB_DIED, { id }); }
 

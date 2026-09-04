@@ -7,6 +7,7 @@ import { EntityPhysics } from './EntityPhysics.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
 import { CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from '../core/Chunk.js';
+import { villagerTradeSeed } from '../world/loot.js';
 
 const MAX_MOBS = 20;
 const SPAWN_INTERVAL = 2.5;
@@ -188,12 +189,14 @@ export class MobManager {
   }
 
   // 由服务器 mob_spawn 广播创建怪物实体（host 权威生成，各端据此创建；去重防重连重复）
-  createMobFromNet(netId, typeName, x, y, z) {
+  // tradeSeed：T5 村民交易表种子（广播透传；缺省时 spawnMob 内按出生点哈希兜底）
+  createMobFromNet(netId, typeName, x, y, z, tradeSeed) {
     if (this.mobs.some(m => m.netId === netId)) return;
     if (!MobTypes[typeName]) return;
     const mob = new Mob(typeName, this.world);
     mob.netId = netId;
     mob.position.set(x, y, z);
+    if (typeof tradeSeed === 'number') mob.tradeSeed = tradeSeed >>> 0;
     this.spawnMob(mob);
   }
 
@@ -265,11 +268,12 @@ export class MobManager {
         for (let i = 0; i < count; i++) {
           const [x, y, z] = spawns[i];
           if (this.mobNet) {
-            this.mobNet.sendMobSpawn('villager', x, y + 0.1, z);
+            this.mobNet.sendMobSpawn('villager', x, y + 0.1, z, villagerTradeSeed(rec.ax, rec.az, i));
           } else {
             const mob = new Mob('villager', this.world);
             mob.position.set(x, y + 0.1, z);
             mob.home = { x: rec.ax, z: rec.az, radius: 24 };
+            mob.tradeSeed = villagerTradeSeed(rec.ax, rec.az, i); // T5：与广播一致，两端同表
             this.spawnMob(mob);
           }
         }
@@ -338,6 +342,11 @@ export class MobManager {
     const geo = this.mobGeometries.get(mob.typeName);
     const mat = this.mobMaterials.get(mob.typeName);
     if (!geo || !mat) return;
+
+    // T5：村民交易种子兜底（正常路径已在生成处赋值；此为旧广播/命令面板生成村民的兜底）
+    if (mob.typeName === 'villager' && mob.tradeSeed == null) {
+      mob.tradeSeed = villagerTradeSeed(Math.floor(mob.position.x), Math.floor(mob.position.z), 0);
+    }
 
     // 每只怪独享一份 material（emissive 是 per-mob 状态，clone 即可）
     const matInst = mat.clone();

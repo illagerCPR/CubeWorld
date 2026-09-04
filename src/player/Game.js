@@ -17,6 +17,7 @@ import { Hud } from '../ui/Hud.js';
 import { InfoBar } from '../ui/InfoBar.js';
 import { InventoryScreen } from '../ui/InventoryScreen.js';
 import { ChestScreen } from '../ui/ChestScreen.js';
+import { TradeScreen } from '../ui/TradeScreen.js';
 import { PauseMenu } from '../ui/PauseMenu.js';
 import { DeathScreen } from '../ui/DeathScreen.js';
 import { CommandPanel } from '../ui/CommandPanel.js';
@@ -58,6 +59,7 @@ export class Game {
     this.hotbar = null;
     this.inventoryScreen = null;
     this.chestScreen = null;
+    this.tradeScreen = null;
     this.pauseMenu = null;
     this.deathScreen = null;
     this.commandPanel = null;
@@ -115,6 +117,7 @@ export class Game {
       if (this.chatBox && this.chatBox.input) return; // 聊天输入中不弹暂停
       if (this.inventoryScreen && this.inventoryScreen.visible) return;
       if (this.chestScreen && this.chestScreen.visible) return;
+      if (this.tradeScreen && this.tradeScreen.visible) return;
       if (this.commandPanel && this.commandPanel.visible) return;
       if (this.pauseMenu && this.pauseMenu.visible) return;
       if (this.deathScreen && this.deathScreen.visible) return;
@@ -154,6 +157,7 @@ export class Game {
       this.inventoryScreen = null;
     }
     if (this.chestScreen) { this.chestScreen.dispose(); this.chestScreen = null; }
+    if (this.tradeScreen) { this.tradeScreen.dispose(); this.tradeScreen = null; }
     if (this.pauseMenu) { this.pauseMenu.el.remove(); this.pauseMenu = null; }
     if (this.deathScreen) { this.deathScreen.el.remove(); this.deathScreen = null; }
     if (this.commandPanel) { this.commandPanel.el.remove(); this.commandPanel = null; }
@@ -327,6 +331,7 @@ export class Game {
     await this.hotbar.update();
     this.inventoryScreen = new InventoryScreen(this.inventory, this.player, this);
     this.chestScreen = new ChestScreen(this);
+    this.tradeScreen = new TradeScreen(this);
     this.pauseMenu = new PauseMenu(this);
     this.deathScreen = new DeathScreen(this);
     this.commandPanel = new CommandPanel(this);
@@ -392,6 +397,7 @@ export class Game {
       if (e.code === 'KeyE') {
         if (this.paused || this.spectating || (this.deathScreen && this.deathScreen.visible)) return;
         if (this.chestScreen && this.chestScreen.visible) { this.chestScreen.hide(); return; }
+        if (this.tradeScreen && this.tradeScreen.visible) { this.tradeScreen.hide(); return; }
         if (this.inventoryScreen) {
           this.inventoryScreen.toggle(2);
         }
@@ -435,6 +441,10 @@ export class Game {
         if (this.inventoryScreen && this.inventoryScreen.visible) return;
         if (this.chestScreen && this.chestScreen.visible) {
           this.chestScreen.hide();
+          return;
+        }
+        if (this.tradeScreen && this.tradeScreen.visible) {
+          this.tradeScreen.hide();
           return;
         }
         if (this.pauseMenu && this.pauseMenu.visible) {
@@ -841,6 +851,7 @@ export class Game {
   handleMouseInput(dt) {
     if (this.inventoryScreen && this.inventoryScreen.visible) return;
     if (this.chestScreen && this.chestScreen.visible) return;
+    if (this.tradeScreen && this.tradeScreen.visible) return;
     if (!this.selectedBlock && !(this.controls.mouseLeft && this.mobManager)) return;
     
     if (this.controls.mouseLeft) {
@@ -924,6 +935,20 @@ export class Game {
     }
     
     if (this.controls.mouseRight) {
+      // T5：右键村民优先交互（开交易屏；旁观不可）
+      if (this.mobManager && this.tradeScreen && !this.player.spectator) {
+        const o = this.player.position.clone();
+        o.y += 1.62;
+        const d = new THREE.Vector3();
+        this.renderer.camera.getWorldDirection(d);
+        const mh = this.mobManager.findMobByRay(o, d, 4);
+        if (mh && mh.mob.typeName === 'villager' && !mh.mob.dead) {
+          this.tradeScreen.show(mh.mob);
+          this.controls.mouseRight = false;
+          return;
+        }
+      }
+
       const hit = this.selectedBlock;
       const sel = this.inventory.getSelected();
 
