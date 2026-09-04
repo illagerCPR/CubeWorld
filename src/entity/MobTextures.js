@@ -131,6 +131,16 @@ const C = {
   vRobe: [126, 94, 62], vRobeD: [96, 70, 46], vRobeHi: [146, 112, 76],
   vSkin: [188, 142, 100], vSkinD: [160, 116, 80], vSkinDD: [128, 90, 60],
   vPants: [74, 60, 48], vEye: [74, 112, 60],
+  // 僵尸猪灵：粉色猪灵皮 + 僵尸化绿腐斑 + 深棕裙裤
+  pSkin: [222, 146, 126], pSkinD: [192, 118, 100], pSkinDD: [156, 92, 78],
+  pRot: [96, 122, 70], pRotD: [70, 94, 52],
+  pCloth: [92, 58, 44], pClothD: [70, 42, 32], pNostril: [60, 30, 26],
+  // 凋零骷髅：焦黑骨 + 暗灰关节（原版炭黑骨架）
+  wBone: [46, 46, 52], wBoneD: [32, 32, 36], wBoneHi: [66, 66, 72],
+  // 烈焰人：金黄头 + 烟黑芯 + 亮黄岩浆杆
+  bGold: [222, 172, 50], bGoldD: [180, 130, 34], bGoldHi: [244, 200, 90],
+  bCore: [52, 44, 34], bCoreD: [36, 30, 24],
+  bRod: [236, 156, 42], bRodD: [196, 116, 30],
 };
 
 // === 各怪皮肤 SVG 生成（原版风） ===
@@ -373,6 +383,139 @@ function villagerSkinSVG() {
   return buildSkinSVG(cells);
 }
 
+function zombifiedPiglinSkinSVG() {
+  const headBase = mottle(C.pSkin, C.pRot, 9, 251);
+  const bodyBase = mottle(C.pSkin, C.pRot, 9, 252);
+  const armBase = mottle(C.pSkin, C.pRot, 9, 253);
+  const legBase = noisy(C.pCloth, 8, 254);
+
+  // 脸：猪灵重眉 + 黑眼 + 中央大猪鼻（鼻孔两点）+ 绿腐斑（僵尸化特征）
+  const headFront = (x, y) => {
+    if (y === 5 && x >= 3 && x <= 12) return C.pSkinDD;                                  // 重眉
+    if (y >= 6 && y <= 8 && ((x >= 4 && x <= 5) || (x >= 10 && x <= 11))) return C.black; // 黑眼
+    if (y >= 9 && y <= 12 && x >= 5 && x <= 10) return C.pSkinD;                          // 大鼻
+    if (y >= 10 && y <= 11 && ((x === 6) || (x === 9))) return C.pNostril;                // 鼻孔
+    if (y === 14 && x >= 5 && x <= 10) return C.pSkinDD;                                  // 嘴
+    return null;
+  };
+  const headTop = (x, y) => {
+    if (hash01(x, y, 255) < 0.25) return C.pRot;                                          // 头顶腐斑
+    if ((y <= 3) && ((x >= 2 && x <= 4) || (x >= 11 && x <= 13))) return C.pSkinD;        // 耳根
+    return null;
+  };
+  const headBot = () => C.pSkinDD;
+
+  // 躯干：裸胸 + 腰布（下摆 3 行深棕布）
+  const bodyFront = (x, y) => {
+    if (y >= 13) return C.pCloth;
+    if (y >= 12) return C.pClothD;
+    if (x >= 6 && x <= 9 && hash01(x, y, 256) < 0.3) return C.pRotD;                      // 腐斑条
+    return null;
+  };
+  const bodyBack = (x, y) => (y >= 12 ? C.pCloth : null);
+  const bodySide = (x, y) => (y >= 12 ? C.pCloth : (y >= 12 ? C.pCloth : null));
+  const bodyTop = () => C.pSkinD;
+  const bodyBot = () => C.pClothD;
+
+  // 臂（前伸）：皮肤 + 手端腐化
+  const armFront = (x, y) => (y >= 12 ? C.pRotD : null);
+  const armSide = (x, y) => (y >= 12 ? C.pRotD : (y <= 3 ? C.pSkinD : null));
+  const armBot = () => C.pRotD;
+
+  // 腿：深棕裙裤 + 暗色脚
+  const legAll = (x, y) => (y >= 13 ? C.pClothD : null);
+  const legTop = () => C.pCloth;
+  const legBot = () => C.pClothD;
+
+  const cells = [
+    ...partCells(0, headBase, { front: headFront, top: headTop, bot: headBot }),
+    ...partCells(1, bodyBase, { front: bodyFront, back: bodyBack, left: bodySide, right: bodySide, top: bodyTop, bot: bodyBot }),
+    ...partCells(2, armBase, { front: armFront, left: armSide, right: armSide, bot: armBot }),
+    ...partCells(3, legBase, { front: legAll, back: legAll, left: legAll, right: legAll, top: legTop, bot: legBot }),
+  ];
+  return buildSkinSVG(cells);
+}
+
+function witherSkeletonSkinSVG() {
+  const boneBase = noisy(C.wBone, 6, 261);
+
+  // 脸：焦黑颅骨 + 深眼窝 + 颧骨暗灰高光
+  const headFront = (x, y) => {
+    if (y >= 6 && y <= 8 && ((x >= 4 && x <= 6) || (x >= 9 && x <= 11))) return C.black;
+    if (y >= 9 && y <= 10 && x >= 7 && x <= 8) return C.wBoneHi;
+    if (y >= 12 && y <= 14 && x >= 4 && x <= 11) return (x % 2 === 0) ? C.wBoneHi : C.wBoneD; // 牙列
+    if (y === 15) return C.wBoneD;
+    return null;
+  };
+  const headBack = (x, y) => (y >= 6 && y <= 12 && hash01(x, y, 262) < 0.25 ? C.wBoneD : null);
+  const headSide = (x, y) => (y >= 7 && y <= 10 && x >= 6 && x <= 9 ? C.wBoneD : null);
+  const headTop = (x, y) => (x === 7 || x === 8 ? C.wBoneHi : null);
+  const headBot = () => C.wBoneD;
+
+  // 躯干：暗肋条（炭黑骨架肋排）
+  const bodyFront = (x, y) => {
+    if (y >= 1 && y <= 12 && y % 2 === 0 && x >= 2 && x <= 13) return C.wBoneHi;
+    if (y >= 13) return C.wBoneD;
+    return null;
+  };
+  const bodyBack = (x, y) => (x >= 6 && x <= 9 && y >= 1 && y <= 13 ? C.wBoneD : null);
+  const bodySide = (x, y) => (y >= 1 && y <= 12 && y % 2 === 0 ? C.wBoneD : null);
+  const bodyTop = () => C.wBoneHi;
+  const bodyBot = () => C.wBoneD;
+
+  // 长肢：关节暗环（高个比例，骨色同头）
+  const limbAll = (x, y) => {
+    if (y >= 7 && y <= 8) return C.wBoneD;
+    if (y >= 14) return C.wBoneD;
+    return null;
+  };
+  const limbTop = () => C.wBoneHi;
+  const limbBot = () => C.wBoneD;
+
+  const cells = [
+    ...partCells(0, boneBase, { front: headFront, back: headBack, left: headSide, right: headSide, top: headTop, bot: headBot }),
+    ...partCells(1, boneBase, { front: bodyFront, back: bodyBack, left: bodySide, right: bodySide, top: bodyTop, bot: bodyBot }),
+    ...partCells(2, boneBase, { front: limbAll, back: limbAll, left: limbAll, right: limbAll, top: limbTop, bot: limbBot }),
+    ...partCells(3, boneBase, { front: limbAll, back: limbAll, left: limbAll, right: limbAll, top: limbTop, bot: limbBot }),
+  ];
+  return buildSkinSVG(cells);
+}
+
+function blazeSkinSVG() {
+  const headBase = noisy(C.bGold, 10, 271);
+  const coreBase = mottle(C.bCore, C.bCoreD, 6, 272);
+  const rodOuter = noisy(C.bRod, 12, 273);
+  const rodInner = noisy(C.bRodD, 10, 274);
+
+  // 脸：竖直黑眼 + 紧闭嘴缝（原版烈焰人面部）
+  const headFront = (x, y) => {
+    if (y >= 6 && y <= 9 && ((x >= 4 && x <= 5) || (x >= 10 && x <= 11))) return C.black;
+    if (y === 12 && x >= 6 && x <= 9) return C.bGoldD;
+    return null;
+  };
+  const headTop = (x, y) => (hash01(x, y, 275) < 0.3 ? C.bGoldHi : null);
+  const headBot = () => C.bGoldD;
+
+  // 烟芯：暗色烟雾质感
+  const coreFront = (x, y) => (hash01(x, y, 276) < 0.25 ? C.bCoreD : null);
+  const coreTop = () => C.bCoreD;
+  const coreBot = () => C.bCoreD;
+
+  // 岩浆杆：竖向亮条纹（外杆亮黄纹，内杆暗橙）
+  const rodOuterFront = (x) => (x % 4 < 2 ? C.bGoldHi : null);
+  const rodInnerFront = (x) => (x % 4 < 2 ? C.bRod : null);
+  const rodTop = () => C.bGoldHi;
+  const rodBot = () => C.bGoldD;
+
+  const cells = [
+    ...partCells(0, headBase, { front: headFront, top: headTop, bot: headBot }),
+    ...partCells(1, coreBase, { front: coreFront, top: coreTop, bot: coreBot }),
+    ...partCells(2, rodOuter, { front: rodOuterFront, top: rodTop, bot: rodBot }),
+    ...partCells(3, rodInner, { front: rodInnerFront, top: rodTop, bot: rodBot }),
+  ];
+  return buildSkinSVG(cells);
+}
+
 // === 部件定义 ===
 // box = [minX, minY, minZ, maxX, maxY, maxZ]，局部坐标，原点在脚 y=0，+Z 朝脸的方向
 // （Mob.js yaw=atan2(nx,nz) 使 +Z 指向移动方向：脸朝玩家、蜘蛛头在前）
@@ -432,14 +575,37 @@ const VILLAGER_PARTS = [
   { name: 'legL',  row: 3, box: [ 0.00, 0,    -0.11,  0.20, 0.75, 0.11] },
 ];
 
+// 凋零骷髅：骷髅布局的高个变体（2.4 高，腿/身拉长，臂前伸持石剑姿势）
+const WITHER_PARTS = [
+  { name: 'head',  row: 0, box: [-0.25, 1.90, -0.25,  0.25, 2.40, 0.25] },
+  { name: 'body',  row: 1, box: [-0.30, 1.15, -0.18,  0.30, 1.90, 0.18] },
+  { name: 'armR',  row: 2, box: [-0.48, 1.62,  0.16, -0.34, 1.84, 1.06] },
+  { name: 'armL',  row: 2, box: [ 0.34, 1.62,  0.16,  0.48, 1.84, 1.06] },
+  { name: 'legR',  row: 3, box: [-0.22, 0,    -0.09, -0.02, 1.15, 0.09] },
+  { name: 'legL',  row: 3, box: [ 0.02, 0,    -0.09,  0.22, 1.15, 0.09] },
+];
+
+// 烈焰人：悬浮的金黄头颅 + 烟黑核心 + 4 根岩浆杆（外 2 高杆 row2 / 内 2 短杆 row3）
+const BLAZE_PARTS = [
+  { name: 'head',   row: 0, box: [-0.25, 1.20, -0.25,  0.25, 1.70, 0.25] },
+  { name: 'core',   row: 1, box: [-0.20, 0.50, -0.20,  0.20, 1.20, 0.20] },
+  { name: 'rodFR',  row: 2, box: [ 0.22, 0,     0.08,  0.34, 0.90, 0.20] },
+  { name: 'rodFL',  row: 2, box: [-0.34, 0,     0.08, -0.22, 0.90, 0.20] },
+  { name: 'rodBR',  row: 3, box: [ 0.22, 0,    -0.20,  0.34, 0.72, -0.08] },
+  { name: 'rodBL',  row: 3, box: [-0.34, 0,    -0.20, -0.22, 0.72, -0.08] },
+];
+
 // === 入口：返回各 type 的 skin SVG + parts ===
 export function generateMobSkinSVGs() {
   return {
-    zombie:    zombieSkinSVG(),
-    skeleton:  skeletonSkinSVG(),
-    creeper:   creeperSkinSVG(),
-    spider:    spiderSkinSVG(),
-    villager:  villagerSkinSVG(),
+    zombie:            zombieSkinSVG(),
+    skeleton:          skeletonSkinSVG(),
+    creeper:           creeperSkinSVG(),
+    spider:            spiderSkinSVG(),
+    villager:          villagerSkinSVG(),
+    zombified_piglin:  zombifiedPiglinSkinSVG(),
+    wither_skeleton:   witherSkeletonSkinSVG(),
+    blaze:             blazeSkinSVG(),
   };
 }
 
@@ -534,5 +700,59 @@ export const MobTypes = {
     passive: true,       // Mob.js 走 passive AI 分支（游荡/注视/逃离）
     model: { parts: VILLAGER_PARTS, kind: 'cuboid' },
     drops: [],
+  },
+  zombified_piglin: {
+    name: 'zombified_piglin',
+    displayName: '僵尸猪灵',
+    width: 0.6,
+    height: 1.95,
+    health: 20,
+    damage: 4,
+    speed: 2.6,
+    attackRange: 1.5,
+    detectionRange: 16,
+    burningInDay: false, // 下界无日光
+    neutral: true,       // 中立：受击才激怒（MobManager.attackMob 传播同族仇恨）
+    model: { parts: HUMANOID_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'rotten_flesh', min: 0, max: 1 },
+      { name: 'gold_nugget', min: 0, max: 2 },
+    ],
+    rareDrop: { name: 'gold_ingot', chance: 0.05 },
+  },
+  wither_skeleton: {
+    name: 'wither_skeleton',
+    displayName: '凋零骷髅',
+    width: 0.6,
+    height: 2.4,         // 高个（模型头部顶点 2.4）
+    health: 20,
+    damage: 4,
+    speed: 2.4,
+    attackRange: 1.7,
+    detectionRange: 16,
+    burningInDay: false,
+    model: { parts: WITHER_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'coal', min: 0, max: 1 },
+      { name: 'bone', min: 0, max: 2 },
+    ],
+  },
+  blaze: {
+    name: 'blaze',
+    displayName: '烈焰人',
+    width: 0.6,
+    height: 1.7,
+    health: 20,
+    damage: 4,
+    speed: 2.2,
+    attackRange: 2.2,
+    detectionRange: 16,
+    burningInDay: false,
+    flying: true,        // 悬浮（EntityPhysics 跳过重力，Mob.update 竖直悬停控制）
+    igniteOnHit: true,   // 命中点燃玩家（复用 onFire 通道）
+    model: { parts: BLAZE_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'blaze_rod', min: 0, max: 1, chance: 0.6 },
+    ],
   },
 };

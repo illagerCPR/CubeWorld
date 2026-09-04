@@ -1,10 +1,13 @@
 // CommandPanel.js -- 命令面板（启用作弊的存档专享，按 C 呼出）
 import { Mob } from '../entity/Mob.js';
+import { MobTypes } from '../entity/MobTextures.js';
 import { ringPoints } from '../world/structures/stronghold.js';
 import { DIMENSIONS } from '../core/dimensions.js';
 
 // 探索列表：玩家周围村庄扫描 cell 半径（cell=20 区块 → ±960 格）；要塞环带 3 点全局 O(1)
 const EXPLORE_VILLAGE_CELL_R = 3;
+// 探索列表：下界要塞扫描 cell 半径（fortress cell=20 区块）
+const EXPLORE_FORTRESS_CELL_R = 2;
 
 const MODES = [
   { name: 'creative', label: '创造', bg: '#4a8a4a', border: '#2a5a2a' },
@@ -12,12 +15,16 @@ const MODES = [
   { name: 'spectator', label: '旁观', bg: '#4a4a8a', border: '#2a2a5a' }
 ];
 
-const MOB_TYPES = [
-  { name: 'zombie', label: '僵尸' },
-  { name: 'skeleton', label: '骷髅' },
-  { name: 'creeper', label: '苦力怕' },
-  { name: 'spider', label: '蜘蛛' }
-];
+// 生成实体列表 = 全部注册怪物（MobTypes 枚举，新增生物自动纳入面板）
+const MOB_ORDER = ['zombie', 'skeleton', 'zombified_piglin', 'wither_skeleton', 'creeper', 'spider', 'blaze', 'villager'];
+function mobEntries() {
+  const names = Object.keys(MobTypes);
+  names.sort((a, b) => {
+    const ia = MOB_ORDER.indexOf(a), ib = MOB_ORDER.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+  return names.map(n => ({ name: n, label: MobTypes[n].displayName || n }));
+}
 
 export class CommandPanel {
   constructor(game) {
@@ -156,11 +163,11 @@ export class CommandPanel {
     }
     this.panel.appendChild(dimRow);
 
-    // 3) 生成实体（在玩家前方 3 格）
+    // 3) 生成实体（在玩家前方 3 格；全部注册怪物，含村民）
     this.panel.appendChild(this._mkLabel('— 生成实体（玩家前方 3 格）—'));
     const mobRow = document.createElement('div');
     mobRow.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap;';
-    for (const mt of MOB_TYPES) {
+    for (const mt of mobEntries()) {
       const b = this._mkBtn(mt.label, '#6a3a6a', '#4a2a4a');
       b.addEventListener('click', () => this._spawnMob(mt.name));
       mobRow.appendChild(b);
@@ -228,7 +235,7 @@ export class CommandPanel {
     const p = this.game.player.position;
     const items = [];
     if (world.dimension === 'nether') {
-      for (const rec of sm.recordsAround('fortress', p.x, p.z, 2)) {
+      for (const rec of sm.recordsAround('fortress', p.x, p.z, EXPLORE_FORTRESS_CELL_R)) {
         items.push({ name: '下界要塞', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
       }
     } else {
@@ -320,11 +327,31 @@ export class CommandPanel {
     const fz = -Math.cos(yaw);
     const sx = p.position.x + fx * 3;
     const sz = p.position.z + fz * 3;
-    // 落点地表：主世界用高度图（含河流/海面下地形）；其他维度向下扫描实心面
+    // 落点地表：主世界用高度图（含河流/海面下地形）；其他维度（下界等有基岩天花）
+    // 从 spawnScanTop 下探——穿过悬挂实心体，落入空气后下行到首个实心格即立足面
+    //（直接 findGroundY 会命中天花实体返回 201 把怪嵌进岩层）
     const world = this.game.world;
-    const sy = world.dimension === 'overworld'
-      ? world.getHeightAt(Math.floor(sx), Math.floor(sz)) + 1
-      : world.findGroundY(sx, sz, world.dimDef.spawnScanTop || 200);
+    let sy;
+    if (world.dimension === 'overworld') {
+      sy = world.getHeightAt(Math.floor(sx), Math.floor(sz)) + 1;
+    } else {
+      const bx = Math.floor(sx), bz = Math.floor(sz);
+      const solidAt = (yy) => {
+        const id = world.getBlock(bx, yy, bz);
+        if (id === 0) return false;
+        const d = window.BlockRegistry.getById(id);
+        return !!(d && d.solid);
+      };
+      const top = (world.dimDef && world.dimDef.spawnScanTop) || 200;
+      let y = top;
+      sy = -1;
+      while (y > 2) {
+        if (solidAt(y)) { y--; continue; }
+        while (y > 2 && !solidAt(y)) y--;
+        if (solidAt(y)) sy = y + 1;
+        break;
+      }
+    }
     if (sy < 0) return;
     const mob = new Mob(typeName, world);
     mob.position.set(sx, sy, sz);

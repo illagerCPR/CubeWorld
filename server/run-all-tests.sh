@@ -61,6 +61,15 @@ else
     exit 1
 fi
 
+# 下界怪物回归（纯 node：类型注册/模型一致/生成表分布/中立悬浮标记）
+echo "=== nether-mobs ==="
+if node tests/nether-mobs.mjs; then
+    echo "nether-mobs: OK"
+else
+    echo "nether-mobs: FAILED"
+    exit 1
+fi
+
 # 测试非幂等：先确认 3001 空闲，再清空运行时数据保证干净状态
 if (exec 3<>/dev/tcp/127.0.0.1/3001) 2>/dev/null; then
     exec 3>&- 3<&- 2>/dev/null

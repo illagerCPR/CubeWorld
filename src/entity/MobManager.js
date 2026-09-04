@@ -18,6 +18,21 @@ const HEALTH_BAR_FADE = 3.0;       // 怪物头顶血条淡出时长（秒）
 const DEATH_ANIM_DURATION = 0.4;   // 死亡缩放动画时长（秒）
 const HEALTH_BAR_WIDTH = 1.0;      // 血条世界坐标宽
 
+// 下界自然生成表（纯函数便于单测）：要塞平台层烈焰人主导（仅此处生成）；
+// 灵魂沙峡谷凋零骷髅加成；其余下界以僵尸猪灵为主。主世界表见 trySpawn。
+export function pickNetherSpawn(biome, inFortress, rand) {
+  if (inFortress) {
+    const r = rand();
+    if (r < 0.70) return 'blaze';
+    if (r < 0.90) return 'zombified_piglin';
+    return 'wither_skeleton';
+  }
+  if (biome === 'soul_sand_valley') {
+    return rand() < 0.45 ? 'wither_skeleton' : 'zombified_piglin';
+  }
+  return rand() < 0.15 ? 'wither_skeleton' : 'zombified_piglin';
+}
+
 // 皮肤 atlas 各 face 的 col 索引映射（96×64 atlas：col 4=top，col 5=bottom 独立 cell，
 // 不再复用 front/back——此前 top 复用 front cell 导致"脸贴在头顶"）
 const FACE_COL = { front: 0, back: 1, left: 2, right: 3, top: 4, bot: 5 };
@@ -151,17 +166,35 @@ export class MobManager {
     const x = Math.floor(playerPos.x + Math.cos(angle) * dist);
     const z = Math.floor(playerPos.z + Math.sin(angle) * dist);
 
-    // 找地表高度（下界等有基岩天花的维度从 spawnScanTop 之下扫描，避免落在天花上）
+    // 找地表高度（下界等有基岩天花的维度从 spawnScanTop 之下扫描，避免落在天花上）。
+    // 天花维度必须"下探穿悬挂体"：直接首个实心即停会命中天花顶面（y≈201 头部空间
+    // 被实心拒绝）→ 实测 ~93% 列被拒、下界自然生成近乎不可能发生
     const scanTop = (this.world.dimDef && this.world.dimDef.spawnScanTop) || CHUNK_HEIGHT - 1;
     let y = -1;
-    for (let yy = scanTop; yy >= 1; yy--) {
-      const id = this.world.getBlock(x, yy, z);
-      if (id !== 0) {
-        const def = BlockRegistry.getById(id);
-        if (def && def.solid) {
-          y = yy + 1;
-          break;
+    if (this.world.dimension === 'overworld') {
+      for (let yy = scanTop; yy >= 1; yy--) {
+        const id = this.world.getBlock(x, yy, z);
+        if (id !== 0) {
+          const def = BlockRegistry.getById(id);
+          if (def && def.solid) {
+            y = yy + 1;
+            break;
+          }
         }
+      }
+    } else {
+      let yy = scanTop;
+      const solidAt = (v) => {
+        const id = this.world.getBlock(x, v, z);
+        if (id === 0) return false;
+        const def = BlockRegistry.getById(id);
+        return !!(def && def.solid);
+      };
+      while (yy >= 1) {
+        if (solidAt(yy)) { yy--; continue; }        // 实心体内：继续下探
+        while (yy >= 1 && !solidAt(yy)) yy--;       // 空气段：下行到首个实心
+        if (yy >= 1) y = yy + 1;                    // 立足面（上方是刚走过的空气）
+        break;
       }
     }
     if (y < 1 || y >= CHUNK_HEIGHT) return;
@@ -173,11 +206,20 @@ export class MobManager {
     // 亮度检查（简化：夜晚生成）
     if (!isNight && y > SEA_LEVEL + 5) return;
 
-    // 选择怪物类型
-    const choices = isNight
-      ? ['zombie', 'zombie', 'skeleton', 'creeper', 'spider']
-      : ['spider', 'zombie'];
-    const typeName = choices[Math.floor(Math.random() * choices.length)];
+    // 选择怪物类型：下界走下界表（烈焰人仅要塞平台层），主世界走昼夜表
+    let typeName;
+    if (this.world.dimension === 'nether') {
+      const gen = this.world.generator;
+      const biome = typeof gen.getBiome === 'function' ? gen.getBiome(x, z) : null;
+      const rec = this._fortressAt(x, z);
+      const atLevel = rec && y >= rec.groundY - 1 && y <= rec.groundY + 8;
+      typeName = pickNetherSpawn(biome, !!(rec && atLevel), Math.random);
+    } else {
+      const choices = isNight
+        ? ['zombie', 'zombie', 'skeleton', 'creeper', 'spider']
+        : ['spider', 'zombie'];
+      typeName = choices[Math.floor(Math.random() * choices.length)];
+    }
 
     const mob = new Mob(typeName, this.world);
     mob.position.set(x + 0.5, y, z + 0.5);
@@ -187,6 +229,18 @@ export class MobManager {
     } else {
       this.spawnMob(mob);
     }
+  }
+
+  // 位置所在下界要塞记录（bbox 判定；烈焰人生成门控/单测共用）。
+  // recordsAround 按需重求解抗 LRU 驱逐（与村民生成同惯例）。
+  _fortressAt(x, z) {
+    if (this.world.dimension !== 'nether') return null;
+    const sm = this.world.generator && this.world.generator.structureManager;
+    if (!sm) return null;
+    for (const rec of sm.recordsAround('fortress', x, z, 1)) {
+      if (x >= rec.minX && x <= rec.maxX && z >= rec.minZ && z <= rec.maxZ) return rec;
+    }
+    return null;
   }
 
   // 由服务器 mob_spawn 广播创建怪物实体（host 权威生成，各端据此创建；去重防重连重复）
@@ -720,6 +774,9 @@ export class MobManager {
       string: 0xeeeeee,
       spider_eye: 0x4a2a2a,
       iron_ingot: 0xdddddd,
+      gold_nugget: 0xeecc55,
+      blaze_rod: 0xddaa33,
+      coal: 0x3a3a3a,
       // 方块掉落（联机挖矿）
       stone: 0x8a8a8a,
       cobblestone: 0x777777,
@@ -827,6 +884,18 @@ export class MobManager {
       if (closest.health <= 0) {
         closest.health = 0;
         closest.dead = true;
+      }
+      // 中立生物被激怒：激怒 25s + 16 格内同族共同激怒（僵尸猪灵群怒，原版行为）
+      if (closest.type && closest.type.neutral) {
+        closest.aggro = true;
+        closest.aggroTimer = 25;
+        for (const m of this.mobs) {
+          if (m === closest || m.dead || m.typeName !== closest.typeName) continue;
+          if (m.position.distanceTo(closest.position) < 16) {
+            m.aggro = true;
+            m.aggroTimer = 25;
+          }
+        }
       }
       // 受击红光
       closest.hitFlash = HIT_FLASH_DURATION;

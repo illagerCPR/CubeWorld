@@ -24,6 +24,9 @@ export class Mob extends Entity {
     this.burningInDay = type.burningInDay || false;
     this.climbing = type.climbing || false;
     this.explosionRadius = type.explosionRadius || 0;
+    this.neutral = type.neutral || false;       // 中立：受击才激怒索敌
+    this.flying = type.flying || false;         // 悬浮：物理跳过重力，竖直悬停控制
+    this.igniteOnHit = type.igniteOnHit || false; // 攻击命中点燃玩家
 
     // AI 状态
     this.target = null;
@@ -41,6 +44,10 @@ export class Mob extends Entity {
     this.dyingAnim = null;      // 死亡动画状态 {progress, total}
     this.home = null;           // 村民：{x, z, radius} 村庄绳拴锚点（生成方注入）
     this.fleeTimer = 0;         // 村民：逃离最短持续时间
+    this.aggro = false;         // 中立生物激怒态（MobManager.attackMob 设置）
+    this.aggroTimer = 0;        // 激怒剩余时长（归零息怒）
+    this.hoverPhase = Math.random() * Math.PI * 2; // 悬浮相位
+    this.hoverBaseY = null;     // 悬浮基准高度（首帧取生成高度）
   }
 
   // AI 更新（mobManager 由 MobManager.update 注入，供村民逃敌/敌对索敌村民查询）
@@ -69,6 +76,11 @@ export class Mob extends Entity {
     if (this.type.passive) {
       // 村民等被动生物：游荡/注视/逃离，永不索敌
       this.updatePassiveAI(dt, player, physics, mobManager);
+    } else if (this.neutral && !this.aggro) {
+      // 中立生物（僵尸猪灵）：未被激怒只游荡，不索敌
+      this.target = null;
+      this.aiState = 'idle';
+      this.wander(dt, physics);
     } else {
       const distToPlayer = this.position.distanceTo(player.position);
 
@@ -76,6 +88,11 @@ export class Mob extends Entity {
       let target = null;
       let targetDist = Infinity;
       if (distToPlayer < this.detectionRange && this.hasLineOfSight(player)) {
+        target = player;
+        targetDist = distToPlayer;
+      }
+      // 被激怒的中立生物：无视视线死追玩家（激怒期内）
+      if (this.aggro && distToPlayer < this.detectionRange * 2.5) {
         target = player;
         targetDist = distToPlayer;
       }
@@ -115,6 +132,30 @@ export class Mob extends Entity {
           this.fuseTimer = Math.max(0, this.fuseTimer - dt * 2);
         }
       }
+    }
+
+    // 中立生物息怒计时
+    if (this.aggro) {
+      this.aggroTimer -= dt;
+      if (this.aggroTimer <= 0) {
+        this.aggro = false;
+        this.target = null;
+        this.aiState = 'idle';
+      }
+    }
+
+    // 悬浮竖直控制（烈焰人）：上下漂浮 + 追击时对齐目标高度；physics.collide 对 flying 不加重力
+    if (this.flying) {
+      if (this.hoverBaseY == null) this.hoverBaseY = this.position.y;
+      this.hoverPhase += dt * 2.2;
+      let vy = Math.sin(this.hoverPhase) * 0.7;
+      if (this.aiState === 'chase' && this.target) {
+        const ty = this.target.position.y + 1;
+        vy += Math.max(-2.5, Math.min(2.5, (ty - this.position.y) * 1.1));
+      } else {
+        vy += Math.max(-1.2, Math.min(1.2, (this.hoverBaseY - this.position.y) * 0.5));
+      }
+      this.velocity.y = vy;
     }
 
     // 重力 + 物理
@@ -241,8 +282,8 @@ export class Mob extends Entity {
       this.velocity.y = 3;
     }
 
-    // 跳跃跨越障碍
-    if ((nx !== 0 || nz !== 0) && this.isBlocked(nx, nz) && this.onGround) {
+    // 跳跃跨越障碍（悬浮生物不跳——竖直由悬停控制）
+    if (!this.flying && (nx !== 0 || nz !== 0) && this.isBlocked(nx, nz) && this.onGround) {
       this.velocity.y = 8;
     }
 
@@ -312,7 +353,10 @@ export class Mob extends Entity {
       }
     } else {
       const hit = player.hurt(this.attackDamage, 'mob', true);
-      if (hit) this.knockbackPlayer(player);
+      if (hit) {
+        this.knockbackPlayer(player);
+        if (this.igniteOnHit) player.onFire = Math.max(player.onFire || 0, 3); // 烈焰人命中点燃
+      }
     }
   }
 
