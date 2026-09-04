@@ -4,6 +4,7 @@
 import { TerrainGenerator } from '../world/terrain.js';
 import { NetherGenerator, SPAWN_SCAN_TOP } from '../world/dimensions/nether.js';
 import { EndGenerator } from '../world/dimensions/end.js';
+import { AetherGenerator } from '../world/dimensions/aether.js';
 
 export const DEFAULT_DIMENSION = 'overworld';
 
@@ -47,12 +48,12 @@ export const DIMENSIONS = {
   aether: {
     id: 'aether',
     name: '天域',
-    implemented: false, // M3 交付
-    createGenerator: null,
-    noDayCycle: false,
+    implemented: true,
+    createGenerator: (seed) => new AetherGenerator(seed),
+    noDayCycle: false, // 主世界风格：正常昼夜/日月/云
     sky: { fixedColor: null, celestials: true, clouds: true, cloudsY: 190, fog: { color: null, nearK: 0.5, farK: 0.95 } },
-    light: { hasSkylight: true },
-    hasVoid: true,
+    light: { hasSkylight: true }, // 正常天光（与主世界同款光照路径）
+    hasVoid: true, // 掉下浮岛坠虚空
   },
 };
 

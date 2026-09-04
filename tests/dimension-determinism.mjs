@@ -18,6 +18,7 @@ const REGION = 3; // 区块范围 [-3,3]，7×7
 const EXPECT_BLOCKS = {
   nether: ['netherrack', 'lava', 'bedrock', 'glowstone'],
   end: ['end_stone', 'obsidian', 'glowstone'],
+  aether: ['grass_block', 'dirt', 'stone'],
 };
 
 function fail(msg) { console.error('FAIL: ' + msg); process.exit(1); }
