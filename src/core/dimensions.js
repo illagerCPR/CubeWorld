@@ -3,6 +3,7 @@
 // implemented:false 的维度不可达（CommandPanel 不展示、switchDimension 拒绝）。
 import { TerrainGenerator } from '../world/terrain.js';
 import { NetherGenerator, SPAWN_SCAN_TOP } from '../world/dimensions/nether.js';
+import { EndGenerator } from '../world/dimensions/end.js';
 
 export const DEFAULT_DIMENSION = 'overworld';
 
@@ -36,8 +37,8 @@ export const DIMENSIONS = {
   end: {
     id: 'end',
     name: '末地',
-    implemented: false, // M2 交付
-    createGenerator: null,
+    implemented: true,
+    createGenerator: (seed) => new EndGenerator(seed),
     noDayCycle: true,
     sky: { fixedColor: [0.05, 0.03, 0.09], celestials: false, clouds: false, cloudsY: 140, fog: { color: null, nearK: 0.40, farK: 0.90 } },
     light: { hasSkylight: false, ambientSky: 6, skyLightLevel: 1.0, sunTint: [0.85, 0.80, 1.0] },

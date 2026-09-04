@@ -54,8 +54,8 @@ export class Physics {
     this.moveAxis(entity, 'x', entity.velocity.x * dt, half, height);
     this.moveAxis(entity, 'z', entity.velocity.z * dt, half, height);
     
-    // 防止掉出世界
-    if (entity.position.y < -10) {
+    // 防止掉出世界（主世界安全网）；虚空维度（末地/天域）不救援——交给虚空伤害/死亡重生
+    if (entity.position.y < -10 && !(this.world && this.world.dimDef && this.world.dimDef.hasVoid)) {
       entity.position.y = 100;
       entity.velocity.y = 0;
     }
