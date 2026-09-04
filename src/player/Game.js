@@ -28,6 +28,7 @@ import { MobManager } from '../entity/MobManager.js';
 import { VoxelLightUniforms } from '../render/VoxelLight.js';
 import { RedstoneSystem } from '../core/RedstoneSystem.js';
 import { SaveSystem } from '../core/SaveSystem.js';
+import { getDimension } from '../core/dimensions.js';
 import { FirstPersonHand } from '../render/FirstPersonHand.js';
 import { ParticleSystem } from '../render/ParticleSystem.js';
 import { loadSettings, applySettings, applyFogRange } from '../core/Settings.js';
@@ -199,8 +200,11 @@ export class Game {
     } else {
       this.cheatsEnabled = !!cheatsEnabled;
     }
-    
-    this.world = new World(seed);
+
+    // 维度：存档携带（V2）或新建默认主世界；世界与天空档案按维度装配
+    const dimension = (loadData && loadData.dimension) || 'overworld';
+    this.world = new World(seed, dimension);
+    if (this.sky) this.sky.applyDimensionProfile(this.world.dimDef);
     this.physics.world = this.world;
     // 重置跨存档共享的玩家运行时状态（避免上一存档的 invulnerable 残留）
     this.player.invulnerable = 0;
@@ -222,16 +226,20 @@ export class Game {
       }
     };
     
-    // 如果有存档，恢复修改的方块
-    if (loadData && loadData.modifiedBlocks) {
-      for (const [key, id] of Object.entries(loadData.modifiedBlocks)) {
-        this.world.modifiedBlocks.set(key, id);
+    // 恢复修改的方块/容器：V2 按维度分桶装入；V1 旧档字段直接进当前维度桶（迁移）
+    if (loadData && (loadData.dimensionBlocks || loadData.dimensionContainers)) {
+      this.world.loadDimensionBuckets(loadData.dimensionBlocks, loadData.dimensionContainers);
+    } else {
+      if (loadData && loadData.modifiedBlocks) {
+        for (const [key, id] of Object.entries(loadData.modifiedBlocks)) {
+          this.world.modifiedBlocks.set(key, id);
+        }
       }
-    }
-    // T5：恢复打开过/改过的容器（箱子）
-    if (loadData && loadData.containers) {
-      for (const [key, items] of Object.entries(loadData.containers)) {
-        if (Array.isArray(items) && items.length === 27) this.world.containers.set(key, items);
+      // T5：恢复打开过/改过的容器（箱子）
+      if (loadData && loadData.containers) {
+        for (const [key, items] of Object.entries(loadData.containers)) {
+          if (Array.isArray(items) && items.length === 27) this.world.containers.set(key, items);
+        }
       }
     }
     
@@ -263,12 +271,16 @@ export class Game {
     this.mobManager.atlasTexture = atlasTexture;
     await this.mobManager.buildMaterials();
     
-    // 生成初始区块
+    // 出生点：存档坐标 > 维度出生点（新建存档 / 换维，dimensionSpawn 标记忽略存档坐标）
+    const spawn = this.world.getSpawnPoint();
+    // 生成初始区块（以落点为中心，保证周围有地形；主世界 (0.5, 地表+2, 0.5) 行为不变）
+    const center = (loadData && loadData.player && !loadData.dimensionSpawn) ? loadData.player : spawn;
+    const pcx = Math.floor(center.x / CHUNK_SIZE), pcz = Math.floor(center.z / CHUNK_SIZE);
     const loadFill = document.getElementById('load-fill');
     const chunks = [];
     for (let dx = -2; dx <= 2; dx++) {
       for (let dz = -2; dz <= 2; dz++) {
-        chunks.push([dx, dz]);
+        chunks.push([pcx + dx, pcz + dz]);
       }
     }
     let i = 0;
@@ -278,9 +290,9 @@ export class Game {
       i++;
       await new Promise(r => setTimeout(r, 0));
     }
-    
-    // 玩家出生点
-    if (loadData && loadData.player) {
+
+    // 玩家位置
+    if (loadData && loadData.player && !loadData.dimensionSpawn) {
       const p = loadData.player;
       this.player.position.set(p.x, p.y, p.z);
       this.player.yaw = p.yaw || 0;
@@ -294,8 +306,7 @@ export class Game {
       this.player.onFire = p.onFire ?? 0;
       this.player.airTicks = p.airTicks ?? 300;
     } else {
-      const h = this.world.getHeightAt(0, 0);
-      this.player.position.set(0.5, h + 2, 0.5);
+      this.player.position.set(spawn.x, spawn.y, spawn.z);
     }
     this.player.setMode(mode);
     
@@ -602,10 +613,16 @@ export class Game {
     }
     
     // 体素光昼夜系数与天光染色：所有区块材质共享 uniform，逐帧更新无需重建网格
+    //（Sky.getLightLevel 已按维度档案覆盖——下界/末地恒定；sunTint 可被维度档案固定）
+    const lp = this.world.dimDef.light;
     VoxelLightUniforms.uDayLight.value = 0.10 + 0.90 * this.sky.getLightLevel();
-    if (this.sky.sunTint) VoxelLightUniforms.uSunTint.value.copy(this.sky.sunTint);
+    if (lp.sunTint) {
+      VoxelLightUniforms.uSunTint.value.setRGB(lp.sunTint[0], lp.sunTint[1], lp.sunTint[2]);
+    } else if (this.sky.sunTint) {
+      VoxelLightUniforms.uSunTint.value.copy(this.sky.sunTint);
+    }
 
-    // 水下视野雾效（出水恢复的雾距与 applySettings 同源，随渲染距离收口）
+    // 水下视野雾效（出水恢复的雾距与 applySettings 同源，随渲染距离收口 + 维度雾系数）
     const fog = this.renderer.scene.fog;
     if (fog) {
       if (this.player.inWater) {
@@ -613,7 +630,7 @@ export class Game {
         fog.near = 0;
         fog.far = 24;
       } else {
-        applyFogRange(fog, this.settings.renderDistance);
+        applyFogRange(fog, this.settings.renderDistance, this.world.dimDef.sky ? this.world.dimDef.sky.fog : null);
       }
     }
     // 水下屏幕滤镜（HUD 蓝色薄纱）
@@ -662,7 +679,8 @@ export class Game {
     this.hud.update(this.player);
     if (this.infoBar && this.world && this.world.generator) {
       this.infoBar.update(this.player, this.world.generator, this.sky, this.crosshairInfo,
-        this.networkMode && this.net ? this.net.rttMs : null); // 阶段10：联机时显示 RTT
+        this.networkMode && this.net ? this.net.rttMs : null, // 阶段10：联机时显示 RTT
+        this.world.dimension !== 'overworld' ? this.world.dimDef.name : null); // 非主世界显示维度
     }
 
     // 阶段10：第一人称手持物（物品变化检测 + bob/挥动；观战与旁观隐藏）
@@ -1059,7 +1077,12 @@ export class Game {
         this.player.hurt(dmg, 'fall', true);
       }
     }
-    
+
+    // 虚空伤害（末地/天域等无底维度）：y<-16 持续扣血（持续伤害口径，不走红屏）
+    if (this.world.dimDef.hasVoid && this.player.position.y < -16) {
+      this.player.health -= dt * 6;
+    }
+
     if (this.player.health <= 0) {
       this.player.health = 0;
       if (this.deathScreen && !this.deathScreen.visible) {
@@ -1082,7 +1105,9 @@ export class Game {
     this.player.exhaustion = 0;
     this.player.onFire = 0;
     this.player.invulnerable = 0;
-    this.player.position.set(0.5, this.world.getHeightAt(0, 0) + 2, 0.5);
+    // 重生到当前维度出生点（跨维度回主世界重生需重建世界，此处不切换维度）
+    const sp = this.world.getSpawnPoint();
+    this.player.position.set(sp.x, sp.y, sp.z);
     this.player.velocity.set(0, 0, 0);
     // 观战结束：重置观战状态并恢复正常模式
     if (this.spectating) {
@@ -1104,6 +1129,43 @@ export class Game {
       if (this.hotbar) this.hotbar.update();
       this.net.sendRespawn(this.player.position.x, this.player.position.y, this.player.position.z);
     }
+  }
+
+  // 维度切换（M1 单机）：把当前完整状态合成 loadData 重走 start()——保留背包/血量/xp/
+  // 时间与全部维度账本，落到目标维度出生点；联机维度同步在 M4 接入
+  async switchDimension(dim) {
+    if (!this.running || !this.world) return false;
+    if (dim === this.world.dimension) return false;
+    const def = getDimension(dim);
+    if (!def || !def.implemented) return false;
+    if (this.networkMode) {
+      if (this.chatBox) this.chatBox.add('联机维度同步尚未开放（里程碑 M4）。', '#fa8');
+      return false;
+    }
+    const p = this.player;
+    const dimBuckets = {};
+    for (const [d, m] of this.world.dimensionBlocks) dimBuckets[d] = Object.fromEntries(m);
+    const contBuckets = {};
+    for (const [d, m] of this.world.dimensionContainers) contBuckets[d] = Object.fromEntries(m);
+    const loadData = {
+      seed: this.world.seed,
+      gamemode: p.gamemode,
+      cheatsEnabled: this.cheatsEnabled,
+      dimension: dim,
+      dimensionSpawn: true, // 忽略合成存档中的坐标，落到目标维度出生点
+      player: {
+        yaw: p.yaw, pitch: p.pitch, health: p.health, food: p.food,
+        saturation: p.saturation, exhaustion: p.exhaustion,
+        xp: p.xp, xpLevel: p.xpLevel, onFire: 0, airTicks: 300
+      },
+      inventory: this.inventory.serialize(),
+      dimensionBlocks: dimBuckets,
+      dimensionContainers: contBuckets,
+      redstone: this.redstone ? this.redstone.serialize() : null,
+      sky: { time: this.sky ? this.sky.time : 0.35 }
+    };
+    await this.start(loadData.gamemode, loadData.seed, loadData, this.currentSlot, loadData.cheatsEnabled, this.networkMode);
+    return true;
   }
 
   // 进入观战模式（死亡后）：旁观模式自由飞行，相机可第一人称跟随存活玩家

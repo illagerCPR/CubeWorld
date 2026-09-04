@@ -1,8 +1,17 @@
 // SaveSystem.js -- localStorage 多槽位存档系统
+// V2：维度化——dimension（当前所处维度）+ dimensionBlocks/dimensionContainers
+//（全维度方块/容器账本分桶）；V1 旧档读取时自动迁移进主世界桶
 const SAVE_PREFIX = 'project-mc-save-';
 const LEGACY_KEY = 'project-mc-save';
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 export const MAX_SAVE_SLOTS = 6;
+
+// Map<dim, Map> -> { dim: { "x,y,z": value } }
+function serializeDimBuckets(store) {
+  const o = {};
+  for (const [dim, m] of store) o[dim] = Object.fromEntries(m);
+  return o;
+}
 
 export class SaveSystem {
   static save(game, slot) {
@@ -13,6 +22,7 @@ export class SaveSystem {
         slot,
         timestamp: Date.now(),
         seed: game.world.seed,
+        dimension: game.world.dimension,
         gamemode: game.player.gamemode,
         cheatsEnabled: game.cheatsEnabled || false,
         player: {
@@ -31,8 +41,8 @@ export class SaveSystem {
           airTicks: game.player.airTicks
         },
         inventory: game.inventory.serialize(),
-        modifiedBlocks: Object.fromEntries(game.world.modifiedBlocks),
-        containers: Object.fromEntries(game.world.containers),
+        dimensionBlocks: serializeDimBuckets(game.world.dimensionBlocks),
+        dimensionContainers: serializeDimBuckets(game.world.dimensionContainers),
         redstone: game.redstone ? game.redstone.serialize() : null,
         sky: { time: game.sky.time || 0 }
       };
@@ -49,7 +59,13 @@ export class SaveSystem {
       const raw = localStorage.getItem(SAVE_PREFIX + slot);
       if (!raw) return null;
       const data = JSON.parse(raw);
-      if (data.version !== SAVE_VERSION) {
+      if (data.version === 1) {
+        // V1 → V2 迁移：旧平铺字段归入主世界桶（内存中升级，不回写）
+        data.version = SAVE_VERSION;
+        data.dimension = 'overworld';
+        data.dimensionBlocks = { overworld: data.modifiedBlocks || {} };
+        data.dimensionContainers = { overworld: data.containers || {} };
+      } else if (data.version !== SAVE_VERSION) {
         console.warn(`存档槽 ${slot} 版本不匹配`);
         return null;
       }
@@ -81,7 +97,8 @@ export class SaveSystem {
           gamemode: data.gamemode || 'creative',
           cheatsEnabled: !!data.cheatsEnabled,
           timestamp: data.timestamp || 0,
-          seed: data.seed || 0
+          seed: data.seed || 0,
+          dimension: data.dimension || 'overworld'
         });
       } catch {
         list.push({ slot, empty: true });

@@ -1,6 +1,7 @@
 // CommandPanel.js -- 命令面板（启用作弊的存档专享，按 C 呼出）
 import { Mob } from '../entity/Mob.js';
 import { ringPoints } from '../world/structures/stronghold.js';
+import { DIMENSIONS } from '../core/dimensions.js';
 
 // 探索列表：玩家周围村庄扫描 cell 半径（cell=20 区块 → ±960 格）；要塞环带 3 点全局 O(1)
 const EXPLORE_VILLAGE_CELL_R = 3;
@@ -95,8 +96,10 @@ export class CommandPanel {
     tpBtns.appendChild(tpBtn);
     const spawnBtn = this._mkBtn('返回出生点', '#4a6a8a', '#2a4a6a');
     spawnBtn.addEventListener('click', () => {
-      const h = this.game.world.getHeightAt(0, 0);
-      this.tpX.value = 0.5; this.tpY.value = (h + 2).toFixed(1); this.tpZ.value = 0.5;
+      const sp = this.game.world.getSpawnPoint();
+      this.tpX.value = sp.x.toFixed(1);
+      this.tpY.value = sp.y.toFixed(1);
+      this.tpZ.value = sp.z.toFixed(1);
       this._teleport();
     });
     tpBtns.appendChild(spawnBtn);
@@ -135,6 +138,23 @@ export class CommandPanel {
       this.modeBtns.push({ name: m.name, el: b });
     }
     this.panel.appendChild(modeRow);
+
+    // 2.5) 维度传送（仅列已实现维度；联机维度同步 M4 开放）
+    this.panel.appendChild(this._mkLabel('— 维度传送 —'));
+    const dimRow = document.createElement('div');
+    dimRow.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap;';
+    this.dimBtns = [];
+    for (const def of Object.values(DIMENSIONS)) {
+      if (!def.implemented) continue;
+      const b = this._mkBtn(def.name, '#3a6a5a', '#2a4a3a');
+      b.addEventListener('click', () => {
+        this.hide();
+        this.game.switchDimension(def.id);
+      });
+      dimRow.appendChild(b);
+      this.dimBtns.push({ id: def.id, el: b });
+    }
+    this.panel.appendChild(dimRow);
 
     // 3) 生成实体（在玩家前方 3 格）
     this.panel.appendChild(this._mkLabel('— 生成实体（玩家前方 3 格）—'));
@@ -270,6 +290,13 @@ export class CommandPanel {
     }
   }
 
+  _refreshDimensionHighlight() {
+    const cur = this.game.world ? this.game.world.dimension : 'overworld';
+    for (const db of this.dimBtns || []) {
+      db.el.style.outline = (db.id === cur) ? '2px solid #fff' : 'none';
+    }
+  }
+
   _teleport() {
     const x = parseFloat(this.tpX.value) || 0;
     const y = parseFloat(this.tpY.value) || 0;
@@ -286,8 +313,13 @@ export class CommandPanel {
     const fz = -Math.cos(yaw);
     const sx = p.position.x + fx * 3;
     const sz = p.position.z + fz * 3;
-    const sy = this.game.world.getHeightAt(Math.floor(sx), Math.floor(sz)) + 1;
-    const mob = new Mob(typeName, this.game.world);
+    // 落点地表：主世界用高度图（含河流/海面下地形）；其他维度向下扫描实心面
+    const world = this.game.world;
+    const sy = world.dimension === 'overworld'
+      ? world.getHeightAt(Math.floor(sx), Math.floor(sz)) + 1
+      : world.findGroundY(sx, sz, world.dimDef.spawnScanTop || 200);
+    if (sy < 0) return;
+    const mob = new Mob(typeName, world);
     mob.position.set(sx, sy, sz);
     this.game.mobManager.spawnMob(mob);
   }
@@ -301,6 +333,7 @@ export class CommandPanel {
     this.tpZ.value = p.z.toFixed(1);
     this.timeInput.value = this.game.sky.time.toFixed(2);
     this._refreshModeHighlight();
+    this._refreshDimensionHighlight();
     this._refreshTimeLabel();
     this._refreshExplore();
     this.el.style.display = 'flex';

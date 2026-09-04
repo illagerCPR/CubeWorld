@@ -156,6 +156,28 @@ export class Sky {
 
     // 雾
     scene.fog = new THREE.Fog(0x9fc8e8, 60, 160);
+
+    // 维度档案（Game.start 按 world.dimDef 套用；null 档案 = 主世界默认行为）
+    this.dimDef = null;
+    this._fixedColor = null;
+    this._tmpColor = new THREE.Color();
+    this._showClouds = true;
+    this._cloudsY = 140;
+    this.cloudsEnabled = true; // settings.clouds 写入（applySettings），与维度显隐相与
+  }
+
+  // 套用维度档案：固定天空色 / 天体显隐 / 云层高度与显隐（不改变太阳角度计算）
+  applyDimensionProfile(def) {
+    this.dimDef = def || null;
+    const sky = (def && def.sky) || {};
+    this._fixedColor = sky.fixedColor || null;
+    const celestials = sky.celestials !== false;
+    this.sun.visible = celestials;
+    this.moon.visible = celestials;
+    this.sunGlow.visible = celestials;
+    this.stars.visible = celestials;
+    this._showClouds = sky.clouds !== false;
+    this._cloudsY = sky.cloudsY || 140;
   }
 
   _makeStars() {
@@ -231,13 +253,17 @@ export class Sky {
     this.stars.material.opacity = nightFade * 0.9;
     this.stars.visible = nightFade > 0.02;
 
-    // 云层：跟随玩家，纹理按世界坐标锚定（offset 抵消平面移动）+ 缓慢漂移
+    // 云层：跟随玩家，纹理按世界坐标锚定（offset 抵消平面移动）+ 缓慢漂移；
+    // 可见性 = 视频设置 ∧ 维度档案（下界/末地隐藏）
     this._wind += dt * 2.0;
-    this.clouds.position.set(playerPos.x, 140, playerPos.z);
+    this.clouds.position.set(playerPos.x, this._cloudsY, playerPos.z);
+    this.clouds.visible = this._showClouds && this.cloudsEnabled;
     this.cloudTex.offset.set((playerPos.x + this._wind) / 1536, playerPos.z / 1536);
 
-    // 天空颜色插值
-    const c = this.interpolateSkyColor(this.time);
+    // 天空颜色插值（无天光维度用档案固定色，雾色同步）
+    const c = this._fixedColor
+      ? this._tmpColor.setRGB(this._fixedColor[0], this._fixedColor[1], this._fixedColor[2])
+      : this.interpolateSkyColor(this.time);
     this.skyMesh.material.color.copy(c);
     if (this.scene.fog) this.scene.fog.color.copy(c);
   }
@@ -255,7 +281,21 @@ export class Sky {
     return prev.color.clone().lerp(next.color, localT);
   }
 
-  isDay() { return this.time > 0.25 && this.time < 0.75; }
-  isNight() { return !this.isDay(); }
-  getLightLevel() { return Math.max(0, Math.sin(this.time * Math.PI * 2 - Math.PI / 2)); }
+  isDay() {
+    if (this.dimDef && this.dimDef.noDayCycle) return false; // 无昼夜维度：不燃烧怪物
+    return this.time > 0.25 && this.time < 0.75;
+  }
+
+  isNight() {
+    if (this.dimDef && this.dimDef.noDayCycle) return true;  // 无昼夜维度：生成无视昼夜
+    return !this.isDay();
+  }
+
+  getLightLevel() {
+    // 维度档案覆盖（下界/末地无昼夜，恒定环境亮度系数）
+    if (this.dimDef && this.dimDef.light && this.dimDef.light.skyLightLevel != null) {
+      return this.dimDef.light.skyLightLevel;
+    }
+    return Math.max(0, Math.sin(this.time * Math.PI * 2 - Math.PI / 2));
+  }
 }

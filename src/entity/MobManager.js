@@ -151,9 +151,10 @@ export class MobManager {
     const x = Math.floor(playerPos.x + Math.cos(angle) * dist);
     const z = Math.floor(playerPos.z + Math.sin(angle) * dist);
 
-    // 找地表高度
+    // 找地表高度（下界等有基岩天花的维度从 spawnScanTop 之下扫描，避免落在天花上）
+    const scanTop = (this.world.dimDef && this.world.dimDef.spawnScanTop) || CHUNK_HEIGHT - 1;
     let y = -1;
-    for (let yy = CHUNK_HEIGHT - 1; yy >= 1; yy--) {
+    for (let yy = scanTop; yy >= 1; yy--) {
       const id = this.world.getBlock(x, yy, z);
       if (id !== 0) {
         const def = BlockRegistry.getById(id);

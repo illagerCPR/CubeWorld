@@ -1,21 +1,54 @@
 // World.js -- 世界管理：区块加载/卸载、方块访问、体素光照、容器（箱子）数据
+// 维度化：构造时带 dimension，方块/容器账本按维度分桶（同坐标跨维度互不干扰）
 import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from './Chunk.js';
 import { TerrainGenerator } from '../world/terrain.js';
 import { BlockRegistry } from './BlockRegistry.js';
 import { LightEngine } from './LightEngine.js';
 import { chestLoot } from '../world/loot.js';
+import { getDimension, DEFAULT_DIMENSION } from './dimensions.js';
 
 export class World {
-  constructor(seed = 0) {
+  constructor(seed = 0, dimension = DEFAULT_DIMENSION) {
     this.seed = seed;
+    this.dimension = dimension;
+    this.dimDef = getDimension(dimension) || getDimension(DEFAULT_DIMENSION);
     this.chunks = new Map();
-    this.generator = new TerrainGenerator(seed);
-    this.modifiedBlocks = new Map(); // 存档：全局坐标 -> 方块 id
-    // T5 容器："x,y,z" -> 27 槽数组。打开时惰性生成（结构箱子按 (seed,表名,坐标) 确定性 loot），
+    this.generator = this.dimDef.createGenerator(seed);
+    // 维度分桶账本：modifiedBlocks/containers 是"当前维度"桶的指针
+    //（切换维度 = 整体重建 World，指针永不跨维度换绑）
+    this.dimensionBlocks = new Map();     // dimId -> Map("x,y,z" -> 方块 id)
+    this.dimensionContainers = new Map(); // dimId -> Map("x,y,z" -> 27 槽数组)
+    this.modifiedBlocks = this.dimBucket(this.dimensionBlocks);
+    this.containers = this.dimBucket(this.dimensionContainers);
+    // T5 容器：打开时惰性生成（结构箱子按 (seed,表名,坐标) 确定性 loot），
     // 玩家改动即落 Map（存档持久化；联机经 container_set 广播收敛）
-    this.containers = new Map();
     this.onLocalBlockChange = null;  // 本地发起方块修改回调 (x,y,z,id)，由 NetworkManager 注册（联机上报）
     this.lightEngine = new LightEngine(this); // 体素光照（纯客户端视觉，不进存档/协议）
+  }
+
+  // 取（或建）当前维度的账本桶
+  dimBucket(store) {
+    let m = store.get(this.dimension);
+    if (!m) { m = new Map(); store.set(this.dimension, m); }
+    return m;
+  }
+
+  // 从存档/换维数据装入全部维度桶，并把当前维度指针指向对应桶
+  loadDimensionBuckets(blocksObj, containersObj) {
+    for (const [dim, entries] of Object.entries(blocksObj || {})) {
+      const m = new Map();
+      for (const [k, v] of Object.entries(entries || {})) m.set(k, v | 0);
+      this.dimensionBlocks.set(dim, m);
+    }
+    for (const [dim, entries] of Object.entries(containersObj || {})) {
+      const m = new Map();
+      for (const [k, v] of Object.entries(entries || {})) {
+        if (Array.isArray(v) && v.length === 27) m.set(k, v);
+      }
+      this.dimensionContainers.set(dim, m);
+    }
+    this.modifiedBlocks = this.dimBucket(this.dimensionBlocks);
+    this.containers = this.dimBucket(this.dimensionContainers);
   }
 
   key(cx, cz) { return `${cx},${cz}`; }
@@ -91,14 +124,15 @@ export class World {
     this.lightEngine.onBlockChanged(gx, gy, gz, oldId, id);
   }
 
-  // 体素光查询（网格构建采样用；未加载区块按露天/无方块光兜底）
+  // 体素光查询（网格构建采样用；未加载区块按维度兜底：主世界露天 15，无天光维度恒定环境光）
   getSkyLight(gx, gy, gz) {
-    if (gy >= CHUNK_HEIGHT) return 15;
+    const amb = this.dimDef.light.hasSkylight ? 15 : (this.dimDef.light.ambientSky || 0);
+    if (gy >= CHUNK_HEIGHT) return amb;
     if (gy < 0) return 0;
     const cx = Math.floor(gx / CHUNK_SIZE);
     const cz = Math.floor(gz / CHUNK_SIZE);
     const c = this.getChunk(cx, cz);
-    if (!c || !c.hasLight) return 15;
+    if (!c || !c.hasLight) return amb;
     return c.getSky(gx - cx * CHUNK_SIZE, gy, gz - cz * CHUNK_SIZE);
   }
 
@@ -144,12 +178,30 @@ export class World {
     this.containers.delete(World.containerKey(x, y, z));
   }
 
-  // 获取高度图（用于玩家生成位置）
+  // 获取高度图（用于玩家生成位置；仅主世界生成器有此语义）
   getHeightAt(wx, wz) {
     return this.generator.getBaseHeight(wx, wz);
   }
 
   getBiomeAt(wx, wz) {
     return this.generator.getBiome(wx, wz);
+  }
+
+  // 维度出生点：主世界 (0.5, 地表+2, 0.5)；其他维度由生成器 findSpawn 纯函数求解
+  getSpawnPoint() {
+    const g = this.generator;
+    if (g && typeof g.findSpawn === 'function') return g.findSpawn();
+    return { x: 0.5, y: this.getHeightAt(0, 0) + 2, z: 0.5 };
+  }
+
+  // 从 top 向下扫描第一个可站立面（实心方块上方的空气格 y；无则 -1）。
+  // 维度无关——下界等有天花维度请传 top 限制扫描起点（如 dimDef.spawnScanTop）。
+  findGroundY(x, z, top = CHUNK_HEIGHT - 2) {
+    const bx = Math.floor(x), bz = Math.floor(z);
+    for (let y = Math.min(top, CHUNK_HEIGHT - 2); y >= 1; y--) {
+      const def = BlockRegistry.getById(this.getBlock(bx, y, bz));
+      if (def && def.solid) return y + 1;
+    }
+    return -1;
   }
 }

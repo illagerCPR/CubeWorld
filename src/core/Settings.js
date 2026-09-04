@@ -64,10 +64,11 @@ export function applySettings(game) {
   // 雾距必须跟随渲染距离（W1 补修）：旧值 near60/far160 时雾 far(160) > 加载边界
   // (renderDistance×16=96)，方形区块边界在雾起效前硬截断——海景下呈"固定距离直线分界"
   if (game.renderer && game.renderer.scene && game.renderer.scene.fog) {
-    applyFogRange(game.renderer.scene.fog, s.renderDistance);
+    const fogProf = game.world && game.world.dimDef && game.world.dimDef.sky ? game.world.dimDef.sky.fog : null;
+    applyFogRange(game.renderer.scene.fog, s.renderDistance, fogProf);
   }
-  // 云（游戏天空与主菜单全景天空都套）
-  if (game.sky && game.sky.clouds) game.sky.clouds.visible = s.clouds;
+  // 云（游戏天空按维度档案联动；主菜单全景天空始终套设置）
+  if (game.sky) game.sky.cloudsEnabled = s.clouds;
   if (typeof window !== 'undefined' && window.panorama && window.panorama.sky) {
     window.panorama.sky.clouds.visible = s.clouds;
     if (window.panorama.camera) {
@@ -88,9 +89,12 @@ export function applySettings(game) {
 }
 
 // 雾距按渲染距离收口：far 取加载圈半径的 95%（雾 92%+ 才到边界，方形加载边界不可见），
-// near 取 50%（给远景留层次）。Game.update 出水恢复与此处必须同源。
-export function applyFogRange(fog, renderDistance) {
+// near 取 50%（给远景留层次）。factor 为维度档案的 { nearK, farK }（下界浓雾）。
+// Game.update 出水恢复与此处必须同源（同传维度 factor）。
+export function applyFogRange(fog, renderDistance, factor = null) {
+  const nearK = (factor && factor.nearK) || 0.5;
+  const farK = (factor && factor.farK) || 0.95;
   const dist = Math.max(2, Math.min(12, renderDistance || 6)) * 16;
-  fog.near = dist * 0.5;
-  fog.far = dist * 0.95;
+  fog.near = dist * nearK;
+  fog.far = dist * farK;
 }

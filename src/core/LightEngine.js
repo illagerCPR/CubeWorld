@@ -16,10 +16,12 @@ export class LightEngine {
 
   _refreshLUT() {
     const op = this._op;
-    op[0] = 0;
+    const lt = this._lt || (this._lt = new Uint8Array(256)); // 光源 LUT：def.light>=13 的发光值
+    lt[0] = 0;
     for (let id = 1; id < 256; id++) {
       const def = BlockRegistry.getById(id);
       op[id] = def && !def.transparent && !def.fluid ? 15 : def ? 1 : 0;
+      lt[id] = def && def.light >= 13 ? def.light : 0;
     }
   }
 
@@ -27,12 +29,18 @@ export class LightEngine {
     return this.world.getChunk(Math.floor(gx / CHUNK_SIZE), Math.floor(gz / CHUNK_SIZE));
   }
 
-  // 未加载区块按露天处理（天光 15 / 方块光 0），与网格构建的边界兜底一致
+  // 未加载区块的天光兜底：主世界按露天 15；无天光维度（下界/末地）按恒定环境天光，
+  // 与网格构建的边界兜底一致（World.getSkyLight 同源）
+  _skyFallback() {
+    const lp = this.world.dimDef && this.world.dimDef.light;
+    return lp && !lp.hasSkylight ? (lp.ambientSky || 0) : 15;
+  }
+
   _getSky(gx, gy, gz) {
-    if (gy >= CHUNK_HEIGHT) return 15;
+    if (gy >= CHUNK_HEIGHT) return this._skyFallback();
     if (gy < 0) return 0;
     const c = this._chunkAt(gx, gz);
-    if (!c || !c.hasLight) return 15;
+    if (!c || !c.hasLight) return this._skyFallback();
     return c.getSky(gx - c.cx * CHUNK_SIZE, gy, gz - c.cz * CHUNK_SIZE);
   }
 
@@ -140,6 +148,29 @@ export class LightEngine {
     const bx = [], by = [], bz = [];
     const blocks = chunk.blocks;
     const light = chunk.light;
+    // 无天光维度（下界/末地）：整块填充恒定环境天光，跳过列播种/邻居导入/天光 BFS；
+    // 方块光通道照常（glowstone/岩浆等光源仍然传播）
+    const skyEnabled = !(this.world.dimDef && this.world.dimDef.light && !this.world.dimDef.light.hasSkylight);
+    if (!skyEnabled) {
+      const amb = (this.world.dimDef.light.ambientSky || 0) << 4;
+      const lt = this._lt;
+      if (amb > 0) {
+        for (let i = 0; i < light.length; i++) light[i] = (light[i] & 15) | amb;
+      }
+      // 方块光源照常播种（无天光 ≠ 无方块光）：荧光石/岩浆等仍是照明主源
+      for (let z = 0; z < CHUNK_SIZE; z++) {
+        for (let x = 0; x < CHUNK_SIZE; x++) {
+          for (let y = 0; y < CHUNK_HEIGHT; y++) {
+            const lv = lt[blocks[(y * CHUNK_SIZE + z) * CHUNK_SIZE + x]];
+            if (lv > 0) {
+              const i = (y * CHUNK_SIZE + z) * CHUNK_SIZE + x;
+              light[i] = (light[i] & 0xf0) | lv;
+              bx.push(ox + x); by.push(y); bz.push(oz + z);
+            }
+          }
+        }
+      }
+    } else {
     // 天光列播种（自上而下）+ 与已处理邻列的价差入队
     for (let z = 0; z < CHUNK_SIZE; z++) {
       for (let x = 0; x < CHUNK_SIZE; x++) {
@@ -180,6 +211,7 @@ export class LightEngine {
         }
       }
     }
+    }
     chunk.hasLight = true;
     // 邻居边界光导入（价差过滤）：只入价差 ≥2 的格、入较高一侧——露天大平面的边界
     // 全 15 无价差不再入队（旧版每边 8k+ 格全量入队，泛洪推不动白跑）
@@ -193,11 +225,13 @@ export class LightEngine {
           const nlz = dz === -1 ? CHUNK_SIZE - 1 : (dz === 1 ? 0 : i);
           const mx = dx === -1 ? 0 : (dx === 1 ? CHUNK_SIZE - 1 : i);
           const mz = dz === -1 ? 0 : (dz === 1 ? CHUNK_SIZE - 1 : i);
-          const ns = n.getSky(nlx, y, nlz), ms = chunk.getSky(mx, y, mz);
-          if (ns - ms >= 2 && ns > 1) {
-            sx.push(n.cx * CHUNK_SIZE + nlx); sy.push(y); sz.push(n.cz * CHUNK_SIZE + nlz);
-          } else if (ms - ns >= 2 && ms > 1) {
-            sx.push(ox + mx); sy.push(y); sz.push(oz + mz);
+          if (skyEnabled) {
+            const ns = n.getSky(nlx, y, nlz), ms = chunk.getSky(mx, y, mz);
+            if (ns - ms >= 2 && ns > 1) {
+              sx.push(n.cx * CHUNK_SIZE + nlx); sy.push(y); sz.push(n.cz * CHUNK_SIZE + nlz);
+            } else if (ms - ns >= 2 && ms > 1) {
+              sx.push(ox + mx); sy.push(y); sz.push(oz + mz);
+            }
           }
           const nb = n.getBlockLight(nlx, y, nlz), mb = chunk.getBlockLight(mx, y, mz);
           if (nb - mb >= 2 && nb > 1) {
@@ -208,7 +242,7 @@ export class LightEngine {
         }
       }
     }
-    this._flood(0, sx, sy, sz);
+    if (skyEnabled) this._flood(0, sx, sy, sz);
     this._flood(1, bx, by, bz);
   }
 
@@ -245,7 +279,8 @@ export class LightEngine {
       this._flood(1, bx, by, bz);
     }
 
-    // ---- 天光通道 ----
+    // ---- 天光通道（无天光维度整块恒定环境光，增量更新只走方块光通道）----
+    if (this.world.dimDef && this.world.dimDef.light && !this.world.dimDef.light.hasSkylight) return;
     const oldSL = chunk.getSky(lx, gy, lz);
     if (newOp > oldOp) {
       if (oldSL > 0) this._remove(0, gx, gy, gz, oldSL); // 放置：含向下 15 光柱消除

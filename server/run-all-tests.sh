@@ -34,6 +34,15 @@ else
     exit 1
 fi
 
+# 维度地形生成回归（纯 node：下界等已实现维度的确定性/顺序无关/出生点安全）
+echo "=== dimension-determinism ==="
+if node tests/dimension-determinism.mjs; then
+    echo "dimension-determinism: OK"
+else
+    echo "dimension-determinism: FAILED"
+    exit 1
+fi
+
 # 测试非幂等：先确认 3001 空闲，再清空运行时数据保证干净状态
 if (exec 3<>/dev/tcp/127.0.0.1/3001) 2>/dev/null; then
     exec 3>&- 3<&- 2>/dev/null
