@@ -49,6 +49,9 @@ export class StructureManager {
     // 布局缓存：key = "type|ccx|ccz" -> record | null（null=选址未通过，同样缓存避免重复评估）
     this.cache = new Map();
     this.maxCache = 128; // 长距离探索会积累 null 记录，调小会挤掉村庄记录（村民生成路径已抗驱逐，此为兜底）
+    // T5 箱子注册表："x,y,z" -> loot 表名。记录求解时从 meta.chests 注册（确定性、可重复注册），
+    // 打开箱子时 World.getOrOpenContainer 用它查表生成内容；查不到 = 玩家自放箱子 = 空容器。
+    this.chests = new Map();
   }
 
   // 由 cell 推导锚点记录（带缓存）。record: { name, ax, az, groundY, blocks, meta, minX..maxZ }
@@ -95,6 +98,12 @@ export class StructureManager {
         blocks: layout.blocks, meta: layout.meta || {},
         minX, maxX, minZ, maxZ,
       };
+      // 注册该结构的全部箱子（meta.chests: [[x,y,z,表名],...]）——重复求解重复注册，幂等
+      if (rec.meta.chests) {
+        for (const c of rec.meta.chests) {
+          this.chests.set(c[0] + ',' + c[1] + ',' + c[2], c[3]);
+        }
+      }
     }
 
     this.cache.set(key, rec);
@@ -208,6 +217,11 @@ export class StructureManager {
   // 调试用：当前缓存中的全部记录（确定性测试断言用）
   debugRecords() {
     return [...this.cache.values()].filter(Boolean);
+  }
+
+  // T5：坐标 → loot 表名（无注册 = 玩家自放箱子）
+  chestTableAt(x, y, z) {
+    return this.chests.get(x + ',' + y + ',' + z) || null;
   }
 }
 

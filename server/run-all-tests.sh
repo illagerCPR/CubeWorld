@@ -16,6 +16,15 @@ else
     exit 1
 fi
 
+# T5 战利品/交易表确定性回归（纯 node）
+echo "=== loot-determinism ==="
+if node tests/loot-determinism.mjs; then
+    echo "loot-determinism: OK"
+else
+    echo "loot-determinism: FAILED"
+    exit 1
+fi
+
 # 测试非幂等：先确认 3001 空闲，再清空运行时数据保证干净状态
 if (exec 3<>/dev/tcp/127.0.0.1/3001) 2>/dev/null; then
     exec 3>&- 3<&- 2>/dev/null
@@ -44,7 +53,7 @@ if [ "$port_ready" -ne 1 ]; then
 fi
 
 failed=0
-for t in test-mp test-store test-admin test-stage5 test-stage6 test-stage10; do
+for t in test-mp test-store test-admin test-stage5 test-stage6 test-stage10 test-t5; do
     echo "=== $t ==="
     if node "server/$t.mjs"; then
         echo "$t: OK"

@@ -742,6 +742,7 @@ const BlockCN = {
   piston: '活塞', piston_head: '活塞头', sticky_piston: '粘性活塞',
   oak_door: '橡木门', iron_door: '铁门', oak_trapdoor: '橡木活板门', note_block: '音符盒',
   white_concrete: '白色混凝土', white_wool: '白色羊毛', white_terracotta: '白色陶瓦', white_bed: '白色床',
+  chest: '箱子',
 };
 
 function reg(name, def, svgs) {
@@ -1073,6 +1074,35 @@ reg('white_bed', { transparent: true, hardness: 0.2 }, { white_bed: (function ()
   fillRect(px, 0, 11, 15, 12, rgb([226, 226, 230]));
   return pixelSvg(px); })()
 });
+
+// --- 容器方块（T5：箱子，内容经 loot.js 惰性生成） ---
+function chestTex(seed, latch) {
+  const px = makeTex();
+  const base = [168, 128, 74];
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb(base, 0.92 + hash2(x, y, seed) * 0.16);
+  }
+  // 外框与盖缝
+  fillRect(px, 0, 0, 15, 0, rgb([94, 62, 32]));
+  fillRect(px, 0, 15, 15, 15, rgb([82, 52, 24]));
+  fillRect(px, 0, 0, 0, 15, rgb([94, 62, 32]));
+  fillRect(px, 15, 0, 15, 15, rgb([82, 52, 24]));
+  fillRect(px, 1, 5, 14, 5, rgb([94, 62, 32]));
+  // 盖板/底板受光线
+  fillRect(px, 1, 1, 14, 1, rgb(base, 1.14));
+  fillRect(px, 1, 6, 14, 6, rgb(base, 1.1));
+  if (latch) {
+    fillRect(px, 7, 4, 8, 7, 'rgb(158,158,158)');
+    fillRect(px, 7, 7, 8, 7, 'rgb(96,96,96)');
+  }
+  return pixelSvg(px);
+}
+reg('chest', { textures: { top: 'chest_top', side: 'chest_side', bottom: 'chest_bottom' }, hardness: 2.5 },
+  {
+    chest_top: chestTex(961, false),
+    chest_side: chestTex(962, true),
+    chest_bottom: chestTex(963, false),
+  });
 
 export const BlockSVGDefinitions = svgMap;
 

@@ -42,7 +42,7 @@ export function solveVillage(rng, ax, groundY, az, gen) {
     hay: blockId('hay_block'), water: blockId('water'), cobble: blockId('cobblestone'),
     log: blockId('oak_log'), dirt: blockId('dirt'), pumpkin: blockId('pumpkin'),
     melon: blockId('melon'), bed: blockId('white_bed'), craft: blockId('crafting_table'),
-    furnace: blockId('furnace'), wool: blockId('white_wool'),
+    furnace: blockId('furnace'), wool: blockId('white_wool'), chest: blockId('chest'),
   };
 
   const blocks = [];
@@ -51,6 +51,7 @@ export function solveVillage(rng, ax, groundY, az, gen) {
     center: [ax, groundY, az],
     houses: [],
     villagerSpawns: [],
+    chests: [], // T5：[[x,y,z,loot表名],...]，StructureManager 注册后由打开时惰性生成内容
   };
 
   // 单列处理：清空上方 → 地基回填 → 铺路
@@ -158,6 +159,12 @@ export function solveVillage(rng, ax, groundY, az, gen) {
       setAt(x0 + 2, groundY + 1, z0 + 1, ID.furnace);
     }
     if (kind === 'big') setAt(x1 - 2, groundY + 1, z0 + 1, ID.wool);
+
+    // T5：箱子（大厅必放，民居 40%；右前角空位，与门窗/陈设不冲突）
+    if (kind === 'big' || rng() < 0.4) {
+      setAt(x1 - 1, groundY + 1, z0 + 1, ID.chest);
+      meta.chests.push([x1 - 1, groundY + 1, z0 + 1, kind === 'big' ? 'village_big' : 'village_house']);
+    }
 
     meta.houses.push({ door: doorPos, groundY });
     spawnAt(spawn[0], spawn[1]);

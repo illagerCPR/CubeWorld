@@ -46,9 +46,10 @@ export function solveStronghold(rng, ax, surfaceY, az, gen) {
     brick: blockId('stone_bricks'), mossy: blockId('mossy_stone_bricks'),
     cracked: blockId('cracked_stone_bricks'), torch: blockId('torch'),
     shelf: blockId('bookshelf'), frame: blockId('end_portal_frame'),
+    chest: blockId('chest'),
   };
   const blocks = [];
-  const meta = { kind: 'stronghold' };
+  const meta = { kind: 'stronghold', chests: [] };
 
   // 结构范围内的最低地表（±40 步长 5 采样）：枢纽深度须低于最低地形，否则坡地/崖边
   // 房间会戳出地表（曾实测东侧骤降 38 格导致房间穿出山体——步长 10 的粗网格抓不到局部洼地）
@@ -116,6 +117,8 @@ export function solveStronghold(rng, ax, surfaceY, az, gen) {
   }
   set(ax - 1, hubY, az, ID.torch); set(ax + 2, hubY, az + 1, ID.torch);
   set(ax, hubY, az - 1, ID.torch); set(ax + 1, hubY, az + 2, ID.torch);
+  set(ax - 2, hubY, az - 2, ID.chest); // T5：枢纽补给箱（西北角，与角柱/中央柱不重叠）
+  meta.chests.push([ax - 2, hubY, az - 2, 'stronghold_hub']);
 
   // ── 四向走廊 + 尽头房间（变体固定序：图书馆/传送门/石柱厅/储藏）────────
   const dirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];
@@ -164,6 +167,8 @@ export function solveStronghold(rng, ax, surfaceY, az, gen) {
       for (const [tx, tz] of [[mx - 3, mz - 3], [mx + 3, mz - 3], [mx - 3, mz + 3], [mx + 3, mz + 3]]) {
         set(tx, hubY, tz, ID.torch);
       }
+      set(mx, hubY, mz, ID.chest); // T5：图书馆中央战利品
+      meta.chests.push([mx, hubY, mz, 'stronghold_library']);
     } else if (variant === 'portal') {
       const hw = 5, hh = 6;
       room(mx - hw, mz - 4, mx + hw, mz + 4, hubY, hubY + hh);
@@ -203,6 +208,10 @@ export function solveStronghold(rng, ax, surfaceY, az, gen) {
         set(x, hubY + 1, mz - hw + 1, ID.shelf);
       }
       set(mx, hubY, mz, ID.torch);
+      set(mx - 1, hubY, mz + 1, ID.chest); // T5：储藏室战利品×2（避开局侧书架行）
+      set(mx + 1, hubY, mz - 1, ID.chest);
+      meta.chests.push([mx - 1, hubY, mz + 1, 'stronghold_storage']);
+      meta.chests.push([mx + 1, hubY, mz - 1, 'stronghold_storage']);
     }
 
     // 支廊 + 死端小室（走廊中点垂直方向，rng 决定左右）

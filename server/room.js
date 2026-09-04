@@ -23,6 +23,7 @@ export class Room {
     this.players = new Map();   // id -> player
     this.blocks = new Map();    // "x,y,z" -> id  (方块账本主副本)
     this.drops = new Map();     // dropId -> {x,y,z,name,count,spawnedAt,owner?,ownerUntil?}  (掉落物账本主副本；owner/ownerUntil=阶段10 死亡掉落归属锁)
+    this.containers = new Map(); // T5："x,y,z" -> 27 槽数组（玩家动过的箱子主副本；未动过的箱子两端确定性生成一致，不进账本）
     this.nextDropId = 1;
     this.nextMobId = 1;         // 怪物 id 分配（事件同步，服务器仅分配/中继不跑 AI）
     this.seed = null;
@@ -43,6 +44,12 @@ export class Room {
     this.blocks = new Map();
     for (const [k, id] of (snap.blocks || [])) {
       if (typeof k === 'string') this.blocks.set(k, safeInt(id, 0));
+    }
+    this.containers = new Map();
+    for (const [k, items] of (snap.containers || [])) {
+      if (typeof k === 'string' && Array.isArray(items) && items.length === 27) {
+        this.containers.set(k, items.map((s) => this.sanitizeStack(s)));
+      }
     }
     this.drops = new Map();
     const now = Date.now();
@@ -65,6 +72,14 @@ export class Room {
 
   // 世界状态变更后落盘（回调由 index.mjs 注入为 store.saveRoom）
   save() { if (this.onSave) this.onSave(this); }
+
+  // T5：容器物品栈校验（name 限长、count 1-64；非法/数量<1 → null 空槽）
+  sanitizeStack(s) {
+    if (!s || typeof s !== 'object' || !s.name) return null;
+    const count = safeInt(s.count, 1);
+    if (count < 1) return null;
+    return { name: String(s.name).slice(0, 32), count: Math.min(64, count) };
+  }
 
   // 房间是否已满（管理面板配置 maxPlayersPerRoom）
   isFull() {
@@ -200,6 +215,11 @@ export class Room {
       const [x, y, z] = key.split(',').map(Number);
       this.sendTo(player, MSG.BLOCK_CHANGE, { x, y, z, id, by: 0 });
     }
+    // 回放容器账本（T5）：玩家动过的箱子；未动过的箱子两端由确定性生成对齐，无需回放
+    for (const [key, items] of this.containers) {
+      const [x, y, z] = key.split(',').map(Number);
+      this.sendTo(player, MSG.CONTAINER_SET, { x, y, z, items, by: 0 });
+    }
     // 回放当前掉落物：新玩家加入即见现存掉落物（阶段10：携带归属锁剩余毫秒，非 owner 在锁定期内同样不可拾取）
     for (const [id, d] of this.drops) {
       const remainLock = d.ownerUntil > Date.now() && d.owner ? Math.ceil(d.ownerUntil - Date.now()) : 0;
@@ -222,6 +242,7 @@ export class Room {
     this.seed = Math.floor(Math.random() * 2147483647);
     this.blocks.clear();
     this.drops.clear();
+    this.containers.clear();
     this.time = 0.35;
     this.nextMobId = 1;
     this.nextDropId = 1;
@@ -237,6 +258,7 @@ export class Room {
   handle(player, msg) {
     switch (msg.t) {
       case MSG.BLOCK_SET: this.onBlockSet(player, msg); break;
+      case MSG.CONTAINER_SET: this.onContainerSet(player, msg); break;
       case MSG.DROP_SPAWN: this.onDropSpawn(player, msg); break;
       case MSG.DROP_TAKEN: this.onDropTaken(player, msg); break;
       case MSG.MOB_SPAWN: this.onMobSpawn(player, msg); break;
@@ -262,9 +284,23 @@ export class Room {
   onBlockSet(player, msg) {
     const x = safeInt(msg.x), y = safeInt(msg.y), z = safeInt(msg.z), id = safeInt(msg.id);
     if (id < 0 || id > 65535) return;
-    if (id === 0) this.blocks.delete(`${x},${y},${z}`);
-    else this.blocks.set(`${x},${y},${z}`, id);
+    if (id === 0) {
+      this.blocks.delete(`${x},${y},${z}`);
+      this.containers.delete(`${x},${y},${z}`); // T5：箱子被挖 → 容器账本一并清除（内容散落由挖掘方 drop_spawn 上报）
+    } else {
+      this.blocks.set(`${x},${y},${z}`, id);
+    }
     this.broadcast(MSG.BLOCK_CHANGE, { x, y, z, id, by: player.id });
+    this.save();
+  }
+
+  // T5：容器整箱同步（last-write-wins，与方块账本同仲裁策略）
+  onContainerSet(player, msg) {
+    const x = safeInt(msg.x), y = safeInt(msg.y), z = safeInt(msg.z);
+    if (!Array.isArray(msg.items) || msg.items.length !== 27) return;
+    const items = msg.items.map((s) => this.sanitizeStack(s));
+    this.containers.set(`${x},${y},${z}`, items);
+    this.broadcast(MSG.CONTAINER_SET, { x, y, z, items, by: player.id }, player.id);
     this.save();
   }
 
@@ -327,7 +363,10 @@ export class Room {
     const x = safeNum(msg.x), y = safeNum(msg.y), z = safeNum(msg.z);
     if (!type) return;
     const id = this.nextMobId++;
-    this.broadcast(MSG.MOB_SPAWN, { id, type, x, y, z });
+    // T5：tradeSeed 透传（村民交易表派生种子，服务器不解释；缺省 = 旧客户端不带）
+    const back = { id, type, x, y, z };
+    if (msg.tradeSeed !== undefined) back.tradeSeed = safeInt(msg.tradeSeed, 0);
+    this.broadcast(MSG.MOB_SPAWN, back);
     console.log(`[怪] ${player.name} 生成 ${type} @(${x},${y},${z}) id=${id}`);
   }
 

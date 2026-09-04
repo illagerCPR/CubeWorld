@@ -32,6 +32,7 @@ export class SaveSystem {
         },
         inventory: game.inventory.serialize(),
         modifiedBlocks: Object.fromEntries(game.world.modifiedBlocks),
+        containers: Object.fromEntries(game.world.containers),
         redstone: game.redstone ? game.redstone.serialize() : null,
         sky: { time: game.sky.time || 0 }
       };

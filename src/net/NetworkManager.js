@@ -2,6 +2,7 @@
 import { MSG } from '../../server/protocol.js';
 import { RemotePlayer } from '../entity/RemotePlayer.js';
 import { playerColorCss } from './playerColor.js';
+import { BlockRegistry } from '../core/BlockRegistry.js';
 
 const RECONNECT_MAX = 8; // 断线自动重连最大尝试次数
 
@@ -226,6 +227,17 @@ export class NetworkManager {
       case MSG.REDSTONE_STATE:
         if (this.game.redstone) this.game.redstone.applyRemoteState(msg.x, msg.y, msg.z, msg.on);
         break;
+      case MSG.CONTAINER_SET: {
+        // T5：他人修改箱子 → 覆盖本地容器缓存，开着的同箱界面刷新
+        if (!this.game.world || !Array.isArray(msg.items) || msg.items.length !== 27) break;
+        this.game.world.setContainer(msg.x, msg.y, msg.z, msg.items);
+        const cs = this.game.chestScreen;
+        if (cs && cs.visible && cs.pos && cs.pos.x === msg.x && cs.pos.y === msg.y && cs.pos.z === msg.z) {
+          cs._changed = false; // 已收敛到远端状态，hide 不回发
+          cs.refresh(msg.items);
+        }
+        break;
+      }
       case MSG.PLAYER_STATE: {
         if (msg.id === this.selfId) break;
         const rp = this.game.remotePlayers.get(msg.id);
@@ -292,10 +304,21 @@ export class NetworkManager {
   applyRemoteBlock(x, y, z, id) {
     const world = this.game.world;
     if (!world) return;
+    // T5：远端挖掉箱子 → 清本地容器缓存，开着的界面一并关闭（内容散落由挖掘方上报）
+    const oldDef = BlockRegistry.getById(world.getBlock(x, y, z));
+    const wasChest = oldDef && oldDef.name === 'chest';
     this._applyingRemote = true;
     world.setBlock(x, y, z, id, false); // 远端落地：不写入本地 modifiedBlocks
     if (this.game.redstone) this.game.redstone.onBlockChange(x, y, z);
     this._applyingRemote = false;
+    if (wasChest) {
+      world.removeContainer(x, y, z);
+      const cs = this.game.chestScreen;
+      if (cs && cs.visible && cs.pos && cs.pos.x === x && cs.pos.y === y && cs.pos.z === z) {
+        cs._changed = false;
+        cs.hide();
+      }
+    }
   }
 
   // 绑定世界：World.setBlock 钩子统一上报（挖掘/放置/爆炸/活塞都走这一入口，含防回环）
@@ -321,6 +344,12 @@ export class NetworkManager {
 
   // 红石源状态（lever/button），低频广播让各端 poweredBlocks 对齐
   sendRedstoneState(x, y, z, on) { this._send(MSG.REDSTONE_STATE, { x, y, z, on }); }
+
+  // T5：容器整箱上报（箱子内容改动；服务器记账本 + 广播其他端）
+  sendContainerSet(x, y, z, items) {
+    const packed = items.map((s) => (s ? { name: s.name, count: s.count } : null));
+    this._send(MSG.CONTAINER_SET, { x, y, z, items: packed });
+  }
 
   // 每帧调用：节流上报本地玩家状态 + RTT 直测
   update(dt) {

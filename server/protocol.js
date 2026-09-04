@@ -19,6 +19,9 @@ export const MSG = {
   BLOCK_SET: 'block_set',
   BLOCK_CHANGE: 'block_change',
 
+  // 容器（T5：箱子内容整箱同步；服务器账本持久化 + 新加入者回放）
+  CONTAINER_SET: 'container_set',
+
   // 掉落物（阶段 1）；阶段 10：DROP_DENY = 拾取被归属锁拒绝（死亡掉落物归属期内他人拾取）
   DROP_SPAWN: 'drop_spawn',
   DROP_TAKEN: 'drop_taken',

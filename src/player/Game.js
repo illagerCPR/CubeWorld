@@ -16,6 +16,7 @@ import { Hotbar, setSvgMaps } from '../ui/Hotbar.js';
 import { Hud } from '../ui/Hud.js';
 import { InfoBar } from '../ui/InfoBar.js';
 import { InventoryScreen } from '../ui/InventoryScreen.js';
+import { ChestScreen } from '../ui/ChestScreen.js';
 import { PauseMenu } from '../ui/PauseMenu.js';
 import { DeathScreen } from '../ui/DeathScreen.js';
 import { CommandPanel } from '../ui/CommandPanel.js';
@@ -56,6 +57,7 @@ export class Game {
     this.world = null;
     this.hotbar = null;
     this.inventoryScreen = null;
+    this.chestScreen = null;
     this.pauseMenu = null;
     this.deathScreen = null;
     this.commandPanel = null;
@@ -112,6 +114,7 @@ export class Game {
       if (!this.controls.enabled) return;
       if (this.chatBox && this.chatBox.input) return; // 聊天输入中不弹暂停
       if (this.inventoryScreen && this.inventoryScreen.visible) return;
+      if (this.chestScreen && this.chestScreen.visible) return;
       if (this.commandPanel && this.commandPanel.visible) return;
       if (this.pauseMenu && this.pauseMenu.visible) return;
       if (this.deathScreen && this.deathScreen.visible) return;
@@ -150,6 +153,7 @@ export class Game {
       this.inventoryScreen.el.remove();
       this.inventoryScreen = null;
     }
+    if (this.chestScreen) { this.chestScreen.dispose(); this.chestScreen = null; }
     if (this.pauseMenu) { this.pauseMenu.el.remove(); this.pauseMenu = null; }
     if (this.deathScreen) { this.deathScreen.el.remove(); this.deathScreen = null; }
     if (this.commandPanel) { this.commandPanel.el.remove(); this.commandPanel = null; }
@@ -218,6 +222,12 @@ export class Game {
     if (loadData && loadData.modifiedBlocks) {
       for (const [key, id] of Object.entries(loadData.modifiedBlocks)) {
         this.world.modifiedBlocks.set(key, id);
+      }
+    }
+    // T5：恢复打开过/改过的容器（箱子）
+    if (loadData && loadData.containers) {
+      for (const [key, items] of Object.entries(loadData.containers)) {
+        if (Array.isArray(items) && items.length === 27) this.world.containers.set(key, items);
       }
     }
     
@@ -316,6 +326,7 @@ export class Game {
     this.hotbar = new Hotbar(this.inventory);
     await this.hotbar.update();
     this.inventoryScreen = new InventoryScreen(this.inventory, this.player, this);
+    this.chestScreen = new ChestScreen(this);
     this.pauseMenu = new PauseMenu(this);
     this.deathScreen = new DeathScreen(this);
     this.commandPanel = new CommandPanel(this);
@@ -380,6 +391,7 @@ export class Game {
     document.addEventListener('keydown', (e) => {
       if (e.code === 'KeyE') {
         if (this.paused || this.spectating || (this.deathScreen && this.deathScreen.visible)) return;
+        if (this.chestScreen && this.chestScreen.visible) { this.chestScreen.hide(); return; }
         if (this.inventoryScreen) {
           this.inventoryScreen.toggle(2);
         }
@@ -421,6 +433,10 @@ export class Game {
           return;
         }
         if (this.inventoryScreen && this.inventoryScreen.visible) return;
+        if (this.chestScreen && this.chestScreen.visible) {
+          this.chestScreen.hide();
+          return;
+        }
         if (this.pauseMenu && this.pauseMenu.visible) {
           this.pauseMenu.hide();
         } else if (!this.controls.locked) {
@@ -754,6 +770,33 @@ export class Game {
     }
   }
 
+  // T5：箱子被本地破坏 → 容器内容散落 + 清容器数据；开着的箱子界面一并关闭
+  _breakChest(block, dropContents) {
+    const items = this.world.getContainer(block.x, block.y, block.z);
+    this.world.removeContainer(block.x, block.y, block.z);
+    if (this.chestScreen && this.chestScreen.visible && this.chestScreen.pos &&
+        this.chestScreen.pos.x === block.x && this.chestScreen.pos.y === block.y &&
+        this.chestScreen.pos.z === block.z) {
+      this.chestScreen._changed = false; // 容器已销毁，hide 不再上报
+      this.chestScreen.hide();
+    }
+    if (!items || !dropContents) return;
+    for (const s of items) {
+      if (!s) continue;
+      if (this.networkMode && this.net) {
+        this.net.sendDropSpawn(block.x + 0.5, block.y + 0.5, block.z + 0.5, s.name, s.count);
+      } else if (this.mobManager) {
+        this.mobManager.spawnDrop(
+          new THREE.Vector3(block.x + 0.5, block.y + 0.5, block.z + 0.5), s.name, s.count);
+      }
+    }
+  }
+
+  // T5：容器修改上报出口（ChestScreen 每次改动调用）；联机整箱广播，单机 noop
+  onContainerChanged(pos, items) {
+    if (this.networkMode && this.net) this.net.sendContainerSet(pos.x, pos.y, pos.z, items);
+  }
+
   updateRaycast() {
     const origin = this.player.position.clone();
     origin.y += 1.62;
@@ -797,6 +840,7 @@ export class Game {
 
   handleMouseInput(dt) {
     if (this.inventoryScreen && this.inventoryScreen.visible) return;
+    if (this.chestScreen && this.chestScreen.visible) return;
     if (!this.selectedBlock && !(this.controls.mouseLeft && this.mobManager)) return;
     
     if (this.controls.mouseLeft) {
@@ -836,6 +880,7 @@ export class Game {
       
       if (this.player.creative) {
         if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
+        if (def.name === 'chest') this._breakChest(hit.block, false);
         this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
         if (this.redstone) this.redstone.onBlockChange(hit.block.x, hit.block.y, hit.block.z);
         this.controls.mouseLeft = false;
@@ -855,6 +900,7 @@ export class Game {
         }
         if (this.breakingProgress >= 1) {
           if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
+          if (def.name === 'chest') this._breakChest(hit.block, true);
           this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
           if (this.redstone) this.redstone.onBlockChange(hit.block.x, hit.block.y, hit.block.z);
           this.breakingProgress = 0;
@@ -900,6 +946,12 @@ export class Game {
         const targetDef = BlockRegistry.getById(hit.id);
         if (targetDef && targetDef.name === 'crafting_table') {
           this.inventoryScreen.show(3);
+          this.controls.mouseRight = false;
+          return;
+        }
+        // T5：右键箱子打开容器界面（创造/生存都可；旁观不可）
+        if (targetDef && targetDef.name === 'chest' && this.chestScreen && !this.player.spectator) {
+          this.chestScreen.show(hit.block.x, hit.block.y, hit.block.z);
           this.controls.mouseRight = false;
           return;
         }

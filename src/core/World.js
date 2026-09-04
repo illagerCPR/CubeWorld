@@ -1,8 +1,9 @@
-// World.js -- 世界管理：区块加载/卸载、方块访问、体素光照
+// World.js -- 世界管理：区块加载/卸载、方块访问、体素光照、容器（箱子）数据
 import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from './Chunk.js';
 import { TerrainGenerator } from '../world/terrain.js';
 import { BlockRegistry } from './BlockRegistry.js';
 import { LightEngine } from './LightEngine.js';
+import { chestLoot } from '../world/loot.js';
 
 export class World {
   constructor(seed = 0) {
@@ -10,6 +11,9 @@ export class World {
     this.chunks = new Map();
     this.generator = new TerrainGenerator(seed);
     this.modifiedBlocks = new Map(); // 存档：全局坐标 -> 方块 id
+    // T5 容器："x,y,z" -> 27 槽数组。打开时惰性生成（结构箱子按 (seed,表名,坐标) 确定性 loot），
+    // 玩家改动即落 Map（存档持久化；联机经 container_set 广播收敛）
+    this.containers = new Map();
     this.onLocalBlockChange = null;  // 本地发起方块修改回调 (x,y,z,id)，由 NetworkManager 注册（联机上报）
     this.lightEngine = new LightEngine(this); // 体素光照（纯客户端视觉，不进存档/协议）
   }
@@ -110,6 +114,34 @@ export class World {
   // 全部区块标记脏（视频设置改平滑光照/AO 后重建网格用）
   markAllDirty() {
     for (const [, c] of this.chunks) c.dirty = true;
+  }
+
+  // ── 容器（箱子）──
+  static containerKey(x, y, z) { return `${x},${y},${z}`; }
+
+  // 打开箱子：优先取已实例化内容；否则确定性生成（结构箱子查 StructureManager 的 chests
+  // 注册表拿表名，玩家自放箱子无记录 = 空容器）。生成即写入（打开过的箱子进存档）。
+  getOrOpenContainer(x, y, z) {
+    const k = World.containerKey(x, y, z);
+    if (this.containers.has(k)) return this.containers.get(k);
+    const sm = this.generator && this.generator.structureManager;
+    const table = (sm && sm.chestTableAt) ? sm.chestTableAt(x, y, z) : null;
+    const items = table ? chestLoot(this.seed, table, x, y, z) : new Array(27).fill(null);
+    this.containers.set(k, items);
+    return items;
+  }
+
+  // 远端/账本收敛：直接覆盖容器内容（不触发生成）
+  setContainer(x, y, z, items) {
+    this.containers.set(World.containerKey(x, y, z), items);
+  }
+
+  getContainer(x, y, z) {
+    return this.containers.get(World.containerKey(x, y, z)) || null;
+  }
+
+  removeContainer(x, y, z) {
+    this.containers.delete(World.containerKey(x, y, z));
   }
 
   // 获取高度图（用于玩家生成位置）

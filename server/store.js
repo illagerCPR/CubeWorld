@@ -27,6 +27,7 @@ export function saveRoom(room, dir = DEFAULT_DIR) {
     nextMobId: room.nextMobId,
     blocks: [...room.blocks.entries()],
     drops: [...room.drops.entries()].map(([id, d]) => ({ id, ...d })),
+    containers: room.containers ? [...room.containers.entries()] : [],
     savedAt: Date.now(),
   };
   fs.writeFileSync(path.join(dir, roomFileName(room.name) + '.json'), JSON.stringify(data, null, 2), 'utf8');
