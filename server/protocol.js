@@ -10,6 +10,11 @@ export const MSG = {
   LEAVE_ROOM: 'leave_room',
   SWITCH_ROOM: 'switch_room',   // 阶段5：世界内直接换房（无需回主菜单）
   WORLD_RESET: 'world_reset',   // 阶段5：重建当前房间世界（仅 host）
+
+  // 维度（M4：联机维度同步）
+  SWITCH_DIMENSION: 'switch_dimension',   // C2S {dim}：请求切换维度
+  PLAYER_DIMENSION: 'player_dimension',   // S2C {id, dim, name, pos}：玩家维度变更广播
+  DIMENSION_WORLD: 'dimension_world',     // S2C {dim, blocks, containers}：目标维度账本下发（换维者本地世界收敛用）
   ROOM_CREATED: 'room_created',
   WORLD_INFO: 'world_info',
   PLAYER_JOIN: 'player_join',

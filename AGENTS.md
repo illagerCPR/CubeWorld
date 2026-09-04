@@ -274,10 +274,14 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 
 - **行走卡顿三件套（W-卡顿批次）**：① `LightEngine.initChunkLight` **价差入队**——只把"光照 <15 的格 + 与已处理邻列（左/后）价差 ≥2 的边缘格"入队 BFS，旧版全量入队 5 万+格致 48ms/块（跨区块行走 690ms/帧卡顿主犯），新版 2.2ms（22×）；对照验证：653 万格仅 0.09% 差异且**全部 +1**（新版传播是旧版超集，修复了旧版链式横向光漏一级的缺陷）。**勿回退全量入队**；改光照传播逻辑必须跑 node 新旧对照（653 万格 dark/哈希+单调性）。注意：光照 forward/reverse 顺序本就不幂等（存量，纯视觉不进存档/协议）。② `updateChunks` 分帧预算：缺口按距玩家排序、每帧限时 8ms（至少 1 块）；③ `rebuildDirtyChunks` 时间预算 12ms（洞穴后单块 mesh ~15ms，固定 2 个/帧会叠出 29ms）。实测跨边界：单帧 690ms → 13 帧×≤33ms 渐次补完。已知尖峰残余：30s 自动保存序列化长探索存档的单帧尖峰（未处理）。
 
-### 维度批次备忘（防回退）—— 维度基建/下界/末地/天域（M1+M2+M3；M4 联机同步待做）
+### 维度批次备忘（防回退）—— 维度基建/下界/末地/天域/联机同步（M1-M4 全部交付）
 
-- **维度注册表 `src/core/dimensions.js`**：新增维度 = 加注册表项（生成器必须纯函数 of (seed, 坐标)）；`implemented:false` 不可达（面板不展示 / switchDimension 拒绝）。天空/光照/雾/出生点全走档案，勿在 Sky/LightEngine 里硬编码维度分支。
+- **维度注册表 `src/core/dimensions.js`**：新增维度 = 加注册表项（生成器必须纯函数 of (seed, 坐标)）；`implemented:false` 不可达（面板不展示 / switchDimension 拒绝 / 服务器 safeDim 回退）。天空/光照/雾/出生点全走档案，勿在 Sky/LightEngine 里硬编码维度分支。
 - **World 维度化**：`new World(seed, dimension)`；`modifiedBlocks`/`containers` 是"当前维度"桶的指针（全量在 `dimensionBlocks`/`dimensionContainers` 分桶），换维 = 整体重建 World（`switchDimension` 合成 loadData 重走 `start()`），指针永不跨维换绑。存档 V2：`dimension` + `dimensionBlocks/dimensionContainers`；`SaveSystem.load` 把 V1 平铺字段迁移进主世界桶（内存升级不回写）。
+- **联机维度协议（M4）**：`switch_dimension`(C2S)/`player_dimension`(S2C 广播含自己，自己忽略)/`dimension_world`(S2C 目标维权威账本+同维掉落回放+同维玩家 join 回放)。服务器 `Room.dimensionBlocks/dimensionContainers` 分桶、drop 记录带 `dim`；`broadcastDim` 按维度过滤方块/容器/掉落/怪/红石/player_state/player_full；store 快照 `{dim: [entries]}`（旧平铺格式 restore 迁移）。客户端 `net.dim`+`_remoteDims` 表：异维玩家不建实体（player_dimension 异维 remove/同维重建）；BLOCK_CHANGE/DROP/MOB/CONTAINER 消息带 `d` 字段客户端二次防线。
+- **`/dim <名>` 聊天命令**（index.mjs handleCommand）：联机换维统一入口（MP 无作弊面板）；`Game.switchDimension` 联机分支乐观发请求、`applyDimensionWorld(dim, blocks, containers)`（main.js 挂 dimension_world 事件）落地重建。
+- **维度重建串行链（曾真出竞态）**：`Game._dimSwitchJob` promise 链——start() 不可重入，连续换维并发执行会互相覆盖共享子系统（表现为"切过去又弹回旧维度"）；switchDimension 单机与 applyDimensionWorld 全走 `_enqueueDimensionSwitch`。同维重复 dimension_world（重连）走账本覆盖+markAllDirty，不重建世界。
+- **start() 网络钩子绑定时机（曾真出）**：`net.bindWorld(this.world)` 必须在 `new World` 后立即执行——start 的异步加载窗口（图集/区块/换维等待）内本地放方块也要上报；绑定过晚会静默丢失窗口内的方块改动（联机账本不收敛）。
 - **无天光维度（下界）光照不变量**：LightEngine `!hasSkylight` → 整块填恒定环境天光 `ambientSky`（下界=5）+ **方块光源必须独立播种**（曾因光源播种随列循环被包进天光分支导致下界全黑——`_lt` 光源 LUT 独立扫描，勿回退）；`onBlockChanged` 天光通道整体跳过；`World.getSkyLight` 未加载兜底 = ambientSky（与 `_skyFallback` 同源）。浏览器冒烟必须断言 `getBlockLightAt(光源格)==15`——确定性测试不跑 LightEngine，此 bug 只有冒烟能抓到（已真出过）。
 - **下界生成器（`dimensions/nether.js`）**：y0/y255 基岩 + 2 格保护壳；三通道 3D 噪声场（世界对齐 4 格网格 + 三线性插值，W3 同款）；空腔 = 奶酪 c>0.46 或意面 a²+b²<0.010；y≤31 熔岩海；表面斑块（上方露天+下方空腔/岩浆）= soul_sand>0.30 / gravel<-0.42 / 熔岩缘 6 格内 6% 黑曜石（per-block hash3）；荧石挂顶（上方实心 netherrack + 3D 噪声>0.52）。密度锚点：air 14-17%、荧石 ~100/区块。改阈值先跑 9×9 漏斗统计。
 - **末地生成器（`dimensions/end.js`）**：透镜形主岛（r~60、顶 64±3、厚 (1-t²)×22+2），边缘半径用 (cos,sin) 角度域噪声保证 ±π 连续；黑曜石柱环 6-10 根（r 25±4、高 74-95、半径 2-4，全部 hashSeed(seed,i) 派生，顶端荧石）；外环小岛 r>180 阈值 0.60；无 bedrock 无天光（hasVoid）。出生探测上限 y=72（低于柱群，防出生在柱顶荧石上）；性能 0.1ms/块（纯列填充，无 3D 场）。

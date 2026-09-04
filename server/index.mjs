@@ -34,7 +34,7 @@ function getRoom(name) {
     const snap = store.loadRooms().find((s) => s.name === key);
     if (snap) {
       room.restore(snap);
-      console.log(`[世界] 恢复房间「${key}」seed=${room.seed} 方块${room.blocks.size} 掉落${room.drops.size}`);
+      console.log(`[世界] 恢复房间「${key}」seed=${room.seed} 方块${room.blocksTotal()} 掉落${room.drops.size}`);
     }
     rooms.set(key, room);
   }
@@ -52,7 +52,12 @@ function handleCommand(player, text) {
     const list = [...rooms.values()].map((r) => `「${r.name}」${r.players.size}人 seed=${r.seed}`).join('  ');
     reply = `现有房间: ${list || '无'}`;
   } else if (cmd === 'seed') {
-    reply = `当前房间「${room.name}」seed=${room.seed} 方块改动${room.blocks.size} 掉落${room.drops.size}`;
+    reply = `当前房间「${room.name}」seed=${room.seed} 方块改动${room.blocksTotal()} 掉落${room.drops.size}`;
+  } else if (cmd === 'dim') {
+    // M4：聊天命令换维（联机无作弊面板时的统一入口）
+    const target = args.slice(1).join(' ').trim();
+    if (!target) reply = '用法: /dim <overworld|nether|end|aether> 切换维度';
+    else { room.onSwitchDimension(player, { dim: target }); return; }
   } else if (cmd === 'room') {
     const target = args.slice(1).join(' ').trim();
     if (!target) reply = '用法: /room <房间名> 切换到其它房间（无需回主菜单）';
@@ -67,7 +72,7 @@ function handleCommand(player, text) {
       return; // 重建结果经 WORLD_INFO(restart) 广播告知
     }
   } else if (cmd === 'help') {
-    reply = '命令: /rooms 列出房间  /seed 当前世界  /room <名> 切换房间  /rebuild 重建世界(host)  /help 帮助';
+    reply = '命令: /rooms 列出房间  /seed 当前世界  /room <名> 切换房间  /rebuild 重建世界(host)  /dim <名> 切换维度  /help 帮助';
   } else {
     reply = `未知命令 /${cmd}（/help 查看）`;
   }

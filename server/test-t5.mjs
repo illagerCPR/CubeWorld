@@ -95,20 +95,26 @@ await sleep(200);
 const bZ = B.queue.filter(m => m.t === 'mob_spawn' && m.type === 'zombie').pop();
 assert('不带 tradeSeed 的 mob_spawn 不产生该字段', !!bZ && bZ.tradeSeed === undefined);
 
-// ── 容器落盘格式（store 单元级：写临时目录读回）──────────────────────────
+// ── 容器落盘格式（store 单元级：写临时目录读回；M4 分维格式）──────────────
 {
   const tmpDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '.t5-store-test');
   const fakeRoom = {
     name: 't5-store-unit', seed: 42, time: 0.35, nextDropId: 1, nextMobId: 1,
-    blocks: new Map([['1,2,3', 5]]),
+    dimensionBlocks: new Map([
+      ['overworld', new Map([['1,2,3', 5]])],
+    ]),
     drops: new Map(),
-    containers: new Map([['9,9,9', items([{ name: 'emerald', count: 5 }])]]),
+    dimensionContainers: new Map([
+      ['overworld', new Map([
+        ['9,9,9', items([{ name: 'emerald', count: 5 }])],
+      ])],
+    ]),
   };
   store.saveRoom(fakeRoom, tmpDir);
   const snap = store.loadRooms(tmpDir).find(r => r.name === 't5-store-unit');
-  assert('store 落盘含 containers 数组', !!snap && Array.isArray(snap.containers) && snap.containers.length === 1);
-  const [k, arr] = snap.containers[0];
-  assert('容器落盘逐槽一致（含 null 稀疏槽）', k === '9,9,9' && JSON.stringify(arr) === JSON.stringify(fakeRoom.containers.get('9,9,9')));
+  assert('store 落盘含 containers 分维数组', !!snap && Array.isArray(snap.dimensionContainers?.overworld) && snap.dimensionContainers.overworld.length === 1);
+  const [k, arr] = snap.dimensionContainers.overworld[0];
+  assert('容器落盘逐槽一致（含 null 稀疏槽）', k === '9,9,9' && JSON.stringify(arr) === JSON.stringify([...fakeRoom.dimensionContainers.get('overworld').get('9,9,9')]));
   fs.rmSync(tmpDir, { recursive: true, force: true });
 }
 

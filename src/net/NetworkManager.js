@@ -3,6 +3,7 @@ import { MSG } from '../../server/protocol.js';
 import { RemotePlayer } from '../entity/RemotePlayer.js';
 import { playerColorCss } from './playerColor.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
+import { getDimension } from '../core/dimensions.js';
 
 const RECONNECT_MAX = 8; // 断线自动重连最大尝试次数
 
@@ -35,6 +36,9 @@ export class NetworkManager {
     this._pingSeq = 0;
     this._pingTimer = 0;
     this._pingInterval = 2;       // 每 2 秒直测一次 RTT
+    // M4 维度同步：本端在服务器侧的当前维度 + 远端玩家维度表（id -> dim）
+    this.dim = 'overworld';
+    this._remoteDims = new Map();
   }
 
   on(type, fn) { this._handlers.set(type, fn); }
@@ -51,6 +55,8 @@ export class NetworkManager {
     this._pendingDrops = [];
     this._pendingMobs = [];
     this._pendingOpen = [];
+    this.dim = 'overworld';      // 新连接 = 服务器侧新玩家，恒从主世界开始
+    this._remoteDims = new Map();
     this._connectSocket(false);
   }
 
@@ -131,6 +137,12 @@ export class NetworkManager {
 
   _addRemote(info) {
     if (info.id === this.selfId) return;
+    // M4：异维度玩家不创建实体（记录维度表，等 player_dimension 回同维时再建）
+    if (info.dim) {
+      this._remoteDims.set(info.id, info.dim);
+      const own = this.game.world ? this.game.world.dimension : 'overworld';
+      if (info.dim !== own) return;
+    }
     if (this.game.remotePlayers.has(info.id)) return;
     const rp = new RemotePlayer(this.game.renderer.scene, info.id, info.name, info.pos, this.game);
     this.game.remotePlayers.set(info.id, rp);
@@ -175,6 +187,9 @@ export class NetworkManager {
         if (this._ready && this.game && this.game.world && this.game.running) {
           if (msg.restart) {
             // 阶段5：世界内换房 / 重建世界 —— 重启本地世界（保持连接），期间缓存远端数据
+            // M4：换房/重建 = 新世界，维度状态复位（恒回主世界）
+            this.dim = 'overworld';
+            this._remoteDims = new Map();
             this._ready = false;
             this.isHost = (msg.hostId === this.selfId);
             this._emit('restart_world', msg);
@@ -197,14 +212,18 @@ export class NetworkManager {
         this._emit('system', { parts: [{ text: msg.name, color: playerColorCss(msg.id) }, { text: ' 加入了游戏' }] });
         break;
       case MSG.PLAYER_LEAVE:
+        this._remoteDims.delete(msg.id);
         this._removeRemote(msg.id);
         this._emit('system', { parts: [{ text: msg.name || '玩家', color: playerColorCss(msg.id) }, { text: ' 离开了游戏' }] });
         break;
       case MSG.BLOCK_CHANGE:
+        // M4：异维度的方块变更不落地（服务器已按维度过滤，d 字段是消息在途的二次防线）
+        if (msg.d && this.game.world && msg.d !== this.game.world.dimension) break;
         if (this._ready) this.applyRemoteBlock(msg.x, msg.y, msg.z, msg.id);
         else this._pendingBlocks.push(msg);
         break;
       case MSG.DROP_SPAWN:
+        if (msg.d && this.game.world && msg.d !== this.game.world.dimension) break;
         if (this._ready) this._spawnDrop(msg);
         else this._pendingDrops.push({ type: 'spawn', msg });
         break;
@@ -213,6 +232,7 @@ export class NetworkManager {
         else this._pendingDrops.push({ type: 'take', msg });
         break;
       case MSG.MOB_SPAWN:
+        if (msg.d && this.game.world && msg.d !== this.game.world.dimension) break;
         if (this._ready) this._spawnMob(msg);
         else this._pendingMobs.push(msg);
         break;
@@ -228,8 +248,9 @@ export class NetworkManager {
         if (this.game.redstone) this.game.redstone.applyRemoteState(msg.x, msg.y, msg.z, msg.on);
         break;
       case MSG.CONTAINER_SET: {
-        // T5：他人修改箱子 → 覆盖本地容器缓存，开着的同箱界面刷新
+        // T5：他人修改箱子 → 覆盖本地容器缓存，开着的同箱界面刷新（M4：异维度忽略）
         if (!this.game.world || !Array.isArray(msg.items) || msg.items.length !== 27) break;
+        if (msg.d && msg.d !== this.game.world.dimension) break;
         this.game.world.setContainer(msg.x, msg.y, msg.z, msg.items);
         const cs = this.game.chestScreen;
         if (cs && cs.visible && cs.pos && cs.pos.x === msg.x && cs.pos.y === msg.y && cs.pos.z === msg.z) {
@@ -238,6 +259,27 @@ export class NetworkManager {
         }
         break;
       }
+      case MSG.PLAYER_DIMENSION: {
+        // M4：远端玩家换维——异维移除其实体、同维重建（自己的换维走 dimension_world 路径）
+        if (msg.id === this.selfId) break;
+        this._remoteDims.set(msg.id, msg.dim);
+        const own = this.game.world ? this.game.world.dimension : 'overworld';
+        if (msg.dim !== own) {
+          this._removeRemote(msg.id);
+        } else if (this._ready && this.game.world && !this.game.remotePlayers.has(msg.id)) {
+          this._addRemote(msg);
+        }
+        this._emit('system', { parts: [
+          { text: msg.name || '玩家', color: playerColorCss(msg.id) },
+          { text: ` 进入了${getDimension(msg.dim)?.name || msg.dim}` },
+        ] });
+        break;
+      }
+      case MSG.DIMENSION_WORLD:
+        // M4：自己的换维回执（服务器权威账本）→ Game 用它重建本地世界
+        this.dim = msg.dim;
+        this._emit('dimension_world', msg);
+        break;
       case MSG.PLAYER_STATE: {
         if (msg.id === this.selfId) break;
         const rp = this.game.remotePlayers.get(msg.id);
@@ -413,6 +455,9 @@ export class NetworkManager {
   // 阶段5：世界内换房 / 重建世界（保持连接，服务器回 WORLD_INFO(restart) 后重启本地世界）
   sendSwitchRoom(room) { this._send(MSG.SWITCH_ROOM, { room }); }
   sendWorldReset() { this._send(MSG.WORLD_RESET, {}); }
+
+  // M4：维度切换请求（服务器回 player_dimension 广播 + dimension_world 账本，客户端据此重建本地世界）
+  sendSwitchDimension(dim) { this._send(MSG.SWITCH_DIMENSION, { dim }); }
 
   close() {
     this._explicitClose = true; // 主动关闭：不触发自动重连

@@ -17,17 +17,22 @@ function ensureDir(dir) {
 }
 
 // 将房间世界写入磁盘 <dir>/<房间名>.json
+// 快照 V2（M4）：blocks/containers 按维度分桶 {dim: [entries]}；旧格式由 Room.restore 迁移
 export function saveRoom(room, dir = DEFAULT_DIR) {
   ensureDir(dir);
+  const dimensionBlocks = {};
+  for (const [dim, m] of room.dimensionBlocks) dimensionBlocks[dim] = [...m.entries()];
+  const dimensionContainers = {};
+  for (const [dim, m] of room.dimensionContainers) dimensionContainers[dim] = [...m.entries()];
   const data = {
     name: room.name,
     seed: room.seed,
     time: room.time,
     nextDropId: room.nextDropId,
     nextMobId: room.nextMobId,
-    blocks: [...room.blocks.entries()],
+    dimensionBlocks,
+    dimensionContainers,
     drops: [...room.drops.entries()].map(([id, d]) => ({ id, ...d })),
-    containers: room.containers ? [...room.containers.entries()] : [],
     savedAt: Date.now(),
   };
   fs.writeFileSync(path.join(dir, roomFileName(room.name) + '.json'), JSON.stringify(data, null, 2), 'utf8');

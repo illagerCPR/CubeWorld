@@ -206,6 +206,10 @@ export class Game {
     this.world = new World(seed, dimension);
     if (this.sky) this.sky.applyDimensionProfile(this.world.dimDef);
     this.physics.world = this.world;
+    // M4：网络方块钩子必须趁早绑定——start 的异步加载窗口（图集构建/区块加载/
+    // 换维等待）内 world 已可用，此时本地放置方块也要上报服务器（曾因绑定过晚
+    // 丢失换维后立即放置的方块，联机账本不收敛）
+    if (this.networkMode && this.net) this.net.bindWorld(this.world);
     // 重置跨存档共享的玩家运行时状态（避免上一存档的 invulnerable 残留）
     this.player.invulnerable = 0;
     // 受击红屏：所有调用 player.hurt(amount, ..., true) 的源都触发
@@ -354,7 +358,7 @@ export class Game {
         this.mobManager.spawnEnabled = !!this.net.isHost;
         this.mobManager.mobNet = this.net; // 生成/攻击/死亡事件上报接口
       }
-      this.net.bindWorld(this.world); // World.setBlock 统一上报（含防回环）
+      // 方块同步钩子已在 start() 前段趁早绑定（见 new World 处），此处不重复
       // 联机拾取掉落物：通知服务器移除并广播
       if (this.mobManager) this.mobManager.onDropTaken = (id) => this.net.sendDropTaken(id);
       // 阶段10：归属锁判定需要本地联机 id（死亡掉落物锁定期内他人不可拾取）
@@ -1131,23 +1135,47 @@ export class Game {
     }
   }
 
-  // 维度切换（M1 单机）：把当前完整状态合成 loadData 重走 start()——保留背包/血量/xp/
-  // 时间与全部维度账本，落到目标维度出生点；联机维度同步在 M4 接入
+  // 维度切换（M1 单机 / M4 联机）：把当前完整状态合成 loadData 重走 start()——
+  // 保留背包/血量/xp/时间与全部维度账本，落到目标维度出生点
   async switchDimension(dim) {
     if (!this.running || !this.world) return false;
-    if (dim === this.world.dimension) return false;
     const def = getDimension(dim);
     if (!def || !def.implemented) return false;
     if (this.networkMode) {
-      if (this.chatBox) this.chatBox.add('联机维度同步尚未开放（里程碑 M4）。', '#fa8');
-      return false;
+      // M4 联机：服务器权威——发请求，收 DIMENSION_WORLD 回执后由 applyDimensionWorld 落地
+      if (!this.net || dim === this.world.dimension) return false;
+      if (this.chatBox) this.chatBox.add(`正在切换到「${def.name}」…`, '#8f8');
+      this.net.sendSwitchDimension(dim);
+      return true;
     }
+    if (dim === this.world.dimension) return false;
+    return this._enqueueDimensionSwitch(async () => {
+      // 检查在出队时再做（排队期间维度可能已被更早的任务改变）
+      if (!this.running || !this.world || dim === this.world.dimension) return false;
+      const loadData = this._composeSwitchLoadData(dim, null, null);
+      await this.start(loadData.gamemode, loadData.seed, loadData, this.currentSlot, loadData.cheatsEnabled, this.networkMode);
+      return true;
+    });
+  }
+
+  // 维度重建串行化：start() 不可重入——连续换维（上一次重建未完成）并发执行会互相
+  // 覆盖共享子系统，表现为"切过去又弹回旧维度"。所有维度重建走同一 promise 链。
+  _enqueueDimensionSwitch(job) {
+    const run = (this._dimSwitchJob || Promise.resolve()).then(job, job);
+    this._dimSwitchJob = run.catch(() => {});
+    return run;
+  }
+
+  // 合成换维用 loadData（单机用本地全维账本；联机传入服务器权威的目标维账本覆盖）
+  _composeSwitchLoadData(dim, dimBlocksOverride, dimContainersOverride) {
     const p = this.player;
     const dimBuckets = {};
     for (const [d, m] of this.world.dimensionBlocks) dimBuckets[d] = Object.fromEntries(m);
+    if (dimBlocksOverride) dimBuckets[dim] = dimBlocksOverride;
     const contBuckets = {};
     for (const [d, m] of this.world.dimensionContainers) contBuckets[d] = Object.fromEntries(m);
-    const loadData = {
+    if (dimContainersOverride) contBuckets[dim] = dimContainersOverride;
+    return {
       seed: this.world.seed,
       gamemode: p.gamemode,
       cheatsEnabled: this.cheatsEnabled,
@@ -1164,8 +1192,39 @@ export class Game {
       redstone: this.redstone ? this.redstone.serialize() : null,
       sky: { time: this.sky ? this.sky.time : 0.35 }
     };
-    await this.start(loadData.gamemode, loadData.seed, loadData, this.currentSlot, loadData.cheatsEnabled, this.networkMode);
-    return true;
+  }
+
+  // M4 联机换维落地：服务器 dimension_world 回执（目标维度权威账本）→ 重建本地世界
+  //（走维度重建串行链——连续换维不并发 start()）
+  applyDimensionWorld(dim, blockList, containerList) {
+    if (!this.running || !this.world) return Promise.resolve(false);
+    const def = getDimension(dim);
+    if (!def || !def.implemented) return Promise.resolve(false);
+    return this._enqueueDimensionSwitch(async () => {
+      if (!this.running || !this.world) return false;
+      const key3 = (v) => { const n = Number(v); return Number.isInteger(n) && Math.abs(n) <= 30000000 ? n : 0; };
+      const dimBlocks = {};
+      for (const b of blockList || []) dimBlocks[`${key3(b.x)},${key3(b.y)},${key3(b.z)}`] = key3(b.id) | 0;
+      const dimContainers = {};
+      for (const c of containerList || []) {
+        if (Array.isArray(c.items) && c.items.length === 27) {
+          dimContainers[`${key3(c.x)},${key3(c.y)},${key3(c.z)}`] = c.items;
+        }
+      }
+      const sameDim = this.world.dimension === dim;
+      if (sameDim) {
+        // 同维账本收敛（重连/重复回执）：不重建世界，直接覆盖本地桶并重载受影响区块
+        this.world.loadDimensionBuckets(
+          { [dim]: dimBlocks }, { [dim]: dimContainers }
+        );
+        this.world.markAllDirty();
+        return true;
+      }
+      const loadData = this._composeSwitchLoadData(dim, dimBlocks, dimContainers);
+      await this.start(loadData.gamemode, loadData.seed, loadData, this.currentSlot, loadData.cheatsEnabled, this.networkMode);
+      if (this.chatBox) this.chatBox.add(`已切换到「${def.name}」`, '#8f8');
+      return true;
+    });
   }
 
   // 进入观战模式（死亡后）：旁观模式自由飞行，相机可第一人称跟随存活玩家

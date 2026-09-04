@@ -31,13 +31,13 @@ assert('恢复 seed=777', r.seed === 777);
 assert('恢复 time=0.5', r.time === 0.5);
 assert('恢复 nextDropId=3', r.nextDropId === 3);
 assert('恢复 nextMobId=2', r.nextMobId === 2);
-assert('恢复方块账本', Array.isArray(r.blocks) && r.blocks.length === 1 && r.blocks[0][1] === 1);
+assert('恢复方块账本（M4 分维：overworld 桶）', Array.isArray(r.dimensionBlocks?.overworld) && r.dimensionBlocks.overworld.length === 1 && r.dimensionBlocks.overworld[0][1] === 1);
 assert('恢复掉落物', Array.isArray(r.drops) && r.drops.length === 1 && r.drops[0].name === 'stone');
 
 // Room.restore 完整还原成可用房间对象
 const revived = new Room('测试世界', null);
 revived.restore(r);
-assert('restore 后 blocks Map 有 1 项', revived.blocks.size === 1 && revived.blocks.get('10,64,20') === 1);
+assert('restore 后 blocks Map 有 1 项', revived.dimensionBlocks.get('overworld')?.size === 1 && revived.dimensionBlocks.get('overworld').get('10,64,20') === 1);
 assert('restore 后 drops Map 有 1 项', revived.drops.size === 1 && revived.drops.get(1).count === 2);
 assert('restore 后 hostId 复位为 null(由新玩家接管)', revived.hostId === null);
 

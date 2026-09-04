@@ -66,6 +66,11 @@ if (location.search.includes('bake-panorama')) {
     net.sendPlayerFull();
   });
 
+  // M4：联机维度切换落地——服务器 dimension_world 回执（目标维度权威账本）→ 重建本地世界
+  net.on('dimension_world', ({ dim, blocks, containers }) => {
+    if (game.running) game.applyDimensionWorld(dim, blocks, containers);
+  });
+
   // 联机连接状态提示
   net.onStatusChange = (status, text) => {
     menu.setMpStatus(text, status === 'connected' ? '#6f6' : (status === 'reconnecting' ? '#fa0' : '#f88'));
