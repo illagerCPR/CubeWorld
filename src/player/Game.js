@@ -18,6 +18,7 @@ import { InfoBar } from '../ui/InfoBar.js';
 import { InventoryScreen } from '../ui/InventoryScreen.js';
 import { ChestScreen } from '../ui/ChestScreen.js';
 import { FurnaceScreen } from '../ui/FurnaceScreen.js';
+import { RecipeViewer } from '../ui/RecipeViewer.js';
 import { TradeScreen } from '../ui/TradeScreen.js';
 import { PauseMenu } from '../ui/PauseMenu.js';
 import { DeathScreen } from '../ui/DeathScreen.js';
@@ -177,6 +178,7 @@ export class Game {
     }
     if (this.chestScreen) { this.chestScreen.dispose(); this.chestScreen = null; }
     if (this.furnaceScreen) { this.furnaceScreen.dispose(); this.furnaceScreen = null; }
+    if (this.recipeViewer) { this.recipeViewer.dispose(); this.recipeViewer = null; }
     if (this.tradeScreen) { this.tradeScreen.dispose(); this.tradeScreen = null; }
     if (this.pauseMenu) { this.pauseMenu.el.remove(); this.pauseMenu = null; }
     if (this.deathScreen) { this.deathScreen.el.remove(); this.deathScreen = null; }
@@ -375,6 +377,7 @@ export class Game {
     this.inventoryScreen = new InventoryScreen(this.inventory, this.player, this);
     this.chestScreen = new ChestScreen(this);
     this.furnaceScreen = new FurnaceScreen(this);
+    this.recipeViewer = new RecipeViewer(this);
     this.tradeScreen = new TradeScreen(this);
     this.pauseMenu = new PauseMenu(this);
     this.deathScreen = new DeathScreen(this);
@@ -457,6 +460,31 @@ export class Game {
         if (this.deathScreen && this.deathScreen.visible) return;
         if (this.pauseMenu && this.pauseMenu.visible) return;
         if (this.commandPanel) this.commandPanel.toggle();
+      }
+      // J 键：JEI 风格配方查询浮层（任何存档可用）
+      if (e.code === 'KeyJ') {
+        if (!this.running || (this.deathScreen && this.deathScreen.visible)) return;
+        if (this.pauseMenu && this.pauseMenu.visible) return;
+        if (this.chatBox && this.chatBox.input) return;
+        if (this.recipeViewer) this.recipeViewer.toggle();
+      }
+      // R/U/A：配方查询键。浮层内作用于悬浮/当前物品；
+      // 背包/箱子/熔炉界面内悬浮物品按 R 查配方、按 U 查用途
+      if ((e.code === 'KeyR' || e.code === 'KeyU' || e.code === 'KeyA') && this.recipeViewer
+          && this.running && !(this.deathScreen && this.deathScreen.visible)
+          && !(this.chatBox && this.chatBox.input)) {
+        const rv = this.recipeViewer;
+        if (rv.visible) {
+          if (e.code === 'KeyR') rv.onKeyR();
+          else if (e.code === 'KeyU') rv.onKeyU();
+          else if (e.code === 'KeyA') rv.onKeyA();
+          return;
+        }
+        const hover = this._uiHoverName();
+        if (hover) {
+          if (e.code === 'KeyR') { rv.showFor(hover); return; }
+          if (e.code === 'KeyU') { rv.showUsages(hover); return; }
+        }
       }
       // 数字键切换快捷栏
       if (e.code.startsWith('Digit')) {
@@ -890,6 +918,15 @@ export class Game {
   // T5：容器修改上报出口（ChestScreen 每次改动调用）；联机整箱广播，单机 noop
   onContainerChanged(pos, items) {
     if (this.networkMode && this.net) this.net.sendContainerSet(pos.x, pos.y, pos.z, items);
+  }
+
+  // 各物品 UI 当前悬浮的物品名（R/U 配方查询的作用目标）
+  _uiHoverName() {
+    const screens = [this.inventoryScreen, this.chestScreen, this.furnaceScreen, this.tradeScreen];
+    for (const s of screens) {
+      if (s && s.visible && s._hoverName) return s._hoverName;
+    }
+    return null;
   }
 
   // 熔炉烧炼推进：遍历当前维度全部已开炉状态（惰性创建，只有打开过/放料过的炉子在表里）

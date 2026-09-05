@@ -84,14 +84,16 @@ export class InventoryScreen {
 
   _bindHover(slot, name) {
     slot.onmouseenter = () => {
-      if (!name) { this.tooltip.style.display = 'none'; return; }
+      if (!name) { this.tooltip.style.display = 'none'; this._hoverName = null; return; }
       this.tooltip.textContent = getDisplayName(name);
       this.tooltip.style.display = 'block';
       this._hoverEl = slot;
+      this._hoverName = name; // R/U 配方查询目标
     };
     slot.onmouseleave = () => {
       this.tooltip.style.display = 'none';
       this._hoverEl = null;
+      this._hoverName = null;
     };
   }
 
@@ -114,6 +116,7 @@ export class InventoryScreen {
     this.returnCursorItem();
     this.visible = false;
     this.el.style.display = 'none';
+    this._hoverName = null;
     if (this.game && this.game.controls) {
       this.game.controls.enabled = true;
     }
