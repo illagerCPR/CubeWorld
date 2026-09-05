@@ -461,12 +461,23 @@ export class Game {
         if (this.pauseMenu && this.pauseMenu.visible) return;
         if (this.commandPanel) this.commandPanel.toggle();
       }
-      // J 键：JEI 风格配方查询浮层（任何存档可用）
+      // J 键：JEI 伴随面板——容器界面打开时切换面板显隐（偏好持久化）；
+      // 无容器界面时打开背包（JEI 面板随背包自动出现）
       if (e.code === 'KeyJ') {
         if (!this.running || (this.deathScreen && this.deathScreen.visible)) return;
         if (this.pauseMenu && this.pauseMenu.visible) return;
         if (this.chatBox && this.chatBox.input) return;
-        if (this.recipeViewer) this.recipeViewer.toggle();
+        if (!this.recipeViewer) return;
+        const containerOpen = (this.inventoryScreen && this.inventoryScreen.visible) ||
+          (this.chestScreen && this.chestScreen.visible) ||
+          (this.furnaceScreen && this.furnaceScreen.visible) ||
+          (this.tradeScreen && this.tradeScreen.visible);
+        if (containerOpen) {
+          this.recipeViewer.togglePanel();
+          return;
+        }
+        this.recipeViewer.setUserEnabled(true);
+        if (this.inventoryScreen) this.inventoryScreen.show(2);
       }
       // R/U/A：配方查询键。浮层内作用于悬浮/当前物品；
       // 背包/箱子/熔炉界面内悬浮物品按 R 查配方、按 U 查用途
@@ -718,6 +729,8 @@ export class Game {
     // 熔炉烧炼推进（所有已开炉状态；界面可见时同步刷新进度显示）
     this.updateFurnaces(dt);
     if (this.furnaceScreen && this.furnaceScreen.visible) this.furnaceScreen.tick();
+    // JEI 伴随面板：跟随容器界面（背包/箱子/合成台/熔炉/交易）显隐
+    if (this.recipeViewer) this.recipeViewer.updateFrame();
     // 滚轮切换
     if (this.controls.wheelDelta !== 0) {
       let idx = this.inventory.hotbarSelected + this.controls.wheelDelta;

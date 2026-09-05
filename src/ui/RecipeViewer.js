@@ -1,7 +1,9 @@
-// RecipeViewer.js -- JEI 风格配方查询浮层（J 键开关）
+// RecipeViewer.js -- JEI 风格配方查询伴随面板（容器界面打开时自动显示于屏幕右缘）
 // 左侧收藏夹（A 键收藏，localStorage 全局持久）+ 右侧全物品列表（搜索过滤）
-// + 配方区：合成（shaped/shapeless）与熔炼（Smelting）配方；R 查配方 / U 查用途。
-// 纯查询界面：不改背包、不产生物品；配方内材料图标可点击继续导航。
+// + 配方详情弹窗（物品列表左侧弹出）：合成（shaped/shapeless）与熔炼（Smelting）配方。
+// R 查配方 / U 查用途 / A 收藏 / J 开关面板（无容器界面时按 J 打开背包）。
+// 纯查询界面：不改背包、不产生物品；配方内材料图标可点击继续导航；
+// 不接管 controls（随容器界面显隐，容器界面自身已处理指针与按键）。
 import { getAllRecipes } from '../core/Crafting.js';
 import { getAllSmeltingRecipes, getFuelTime, SMELT_TIME } from '../core/Smelting.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
@@ -9,6 +11,7 @@ import { ItemRegistry } from '../core/ItemRegistry.js';
 import { SVGTextures } from '../render/SVGTextures.js';
 
 const FAV_KEY = 'cubeworld-jei-favorites';
+const PANEL_KEY = 'cubeworld-jei-panel-enabled';
 
 function getDisplayName(name) {
   const item = ItemRegistry.getByName(name);
@@ -21,33 +24,59 @@ function getDisplayName(name) {
 export class RecipeViewer {
   constructor(game) {
     this.game = game;
-    this.visible = false;
+    this.visible = false;          // 面板当前是否显示（容器界面打开 且 用户未用 J 关闭）
+    this.containerVisible = false; // 是否有容器界面打开（每帧从各 screen 同步）
+    this.userEnabled = this._loadEnabled(); // J 键开关的面板偏好（全局持久）
     this.mode = 'recipes';    // recipes=查看该物品配方 | usages=查看该物品作为材料的配方
-    this.current = null;      // 当前查看的物品名
-    this._hoverName = null;   // 浮层内悬浮的物品名（R/U/A 作用对象）
-    this._prevControls = false;
+    this.current = null;      // 当前查看的物品名（非空时显示配方弹窗）
+    this._hoverName = null;   // 面板内悬浮的物品名（R/U/A 作用目标）
+    this._shown = false;      // DOM 显示状态（防每帧重渲染）
+    this._searchText = '';
     this.favorites = this._loadFavorites();
 
+    // 主竖条：搜索 + 左收藏夹 + 右全物品
     this.el = document.createElement('div');
     this.el.style.cssText = `
-      position: absolute; inset: 0; display: none; z-index: 60;
-      background: rgba(0,0,0,0.55); align-items: center; justify-content: center;
-      font-family: 'Segoe UI', sans-serif;
+      position: fixed; right: 6px; top: 50%; transform: translateY(-50%);
+      width: 200px; height: min(86vh, 720px);
+      display: none; flex-direction: column; gap: 6px;
+      background: #c6c6c6; border: 3px solid #555; box-shadow: 0 0 0 2px #000;
+      padding: 6px; box-sizing: border-box; z-index: 35;
+      font-family: 'Segoe UI', sans-serif; user-select: none;
     `;
-    this.el.addEventListener('mousedown', (e) => { if (e.target === this.el) this.hide(); });
-
-    this.panel = document.createElement('div');
-    this.panel.style.cssText = `
-      background: #c6c6c6; border: 4px solid #555; box-shadow: 0 0 0 2px #000;
-      width: min(980px, 94vw); height: min(640px, 88vh);
-      display: flex; flex-direction: column; user-select: none; padding: 10px;
-    `;
-    this.el.appendChild(this.panel);
     document.body.appendChild(this.el);
+
+    // 配方详情弹窗（竖条左侧，仅当前有查看物品时显示）
+    this.popEl = document.createElement('div');
+    this.popEl.style.cssText = `
+      position: fixed; right: 214px; top: 50%; transform: translateY(-50%);
+      width: 340px; height: min(86vh, 720px);
+      display: none; flex-direction: column;
+      background: #c6c6c6; border: 3px solid #555; box-shadow: 0 0 0 2px #000;
+      padding: 8px; box-sizing: border-box; z-index: 35;
+      font-family: 'Segoe UI', sans-serif; user-select: none;
+    `;
+    this.popTitle = document.createElement('div');
+    this.popTitle.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 6px;';
+    this.popName = document.createElement('div');
+    this.popName.style.cssText = 'flex: 1; font-size: 14px; font-weight: bold; color: #333; min-width: 0;';
+    this.popTitle.appendChild(this.popName);
+    this.popClose = document.createElement('button');
+    this.popClose.textContent = '✕';
+    this.popClose.title = '关闭配方详情';
+    this.popClose.style.cssText = 'padding: 2px 8px; cursor: pointer;';
+    this.popClose.addEventListener('click', () => { this.current = null; this.renderRecipe(); });
+    this.popTitle.appendChild(this.popClose);
+    this.popEl.appendChild(this.popTitle);
+    this.popScroll = document.createElement('div');
+    this.popScroll.style.cssText = 'overflow-y: auto; flex: 1; min-height: 0;';
+    this.popEl.appendChild(this.popScroll);
+    document.body.appendChild(this.popEl);
   }
 
   dispose() {
     this.el.remove();
+    this.popEl.remove();
   }
 
   _loadFavorites() {
@@ -62,50 +91,87 @@ export class RecipeViewer {
     try { localStorage.setItem(FAV_KEY, JSON.stringify(this.favorites)); } catch { /* ignore */ }
   }
 
-  toggle() {
-    if (this.visible) this.hide();
-    else this.show();
+  _loadEnabled() {
+    try {
+      const v = localStorage.getItem(PANEL_KEY);
+      return v === null ? true : v === '1';
+    } catch { return true; }
   }
 
-  show() {
-    this.visible = true;
-    this._prevControls = this.game.controls ? this.game.controls.enabled : false;
-    this.el.style.display = 'flex';
-    this.renderAll();
-    if (this.game.controls) {
-      this.game.controls.enabled = false;
-      this.game.controls.mouseLeft = false;
-      this.game.controls.mouseRight = false;
+  _saveEnabled() {
+    try { localStorage.setItem(PANEL_KEY, this.userEnabled ? '1' : '0'); } catch { /* ignore */ }
+  }
+
+  // J 键：容器界面打开时切换面板显隐（偏好持久化）
+  togglePanel() {
+    this.setUserEnabled(!this.userEnabled);
+  }
+
+  setUserEnabled(v) {
+    this.userEnabled = !!v;
+    this._saveEnabled();
+    this._syncDisplay();
+  }
+
+  // 每帧同步：跟随容器界面（背包/箱子/合成台/熔炉/交易）显隐
+  updateFrame() {
+    const g = this.game;
+    this.containerVisible = !!(
+      (g.inventoryScreen && g.inventoryScreen.visible) ||
+      (g.chestScreen && g.chestScreen.visible) ||
+      (g.furnaceScreen && g.furnaceScreen.visible) ||
+      (g.tradeScreen && g.tradeScreen.visible)
+    );
+    this._syncDisplay();
+  }
+
+  _syncDisplay() {
+    const want = this.containerVisible && this.userEnabled;
+    if (want === this._shown) return;
+    this._shown = want;
+    this.visible = want;
+    if (want) {
+      this.el.style.display = 'flex';
+      this._buildShell();
+    } else {
+      this.el.style.display = 'none';
+      this._hoverName = null;
     }
-    if (document.pointerLockElement) document.exitPointerLock();
+    this.renderRecipe(); // 弹窗跟随面板显隐
   }
 
-  // 从物品打开配方视图（背包/箱子/熔炉内 hover 按 R）
+  // 从物品打开配方视图（容器界面内 hover 按 R）
   showFor(name) {
     if (!name) return;
+    this._ensureShown();
     this.mode = 'recipes';
     this.current = name;
-    this.show();
+    this.renderRecipe();
   }
 
   // 从物品打开用途视图（按 U）
   showUsages(name) {
     if (!name) return;
+    this._ensureShown();
     this.mode = 'usages';
     this.current = name;
-    this.show();
+    this.renderRecipe();
   }
 
-  hide() {
-    this.visible = false;
-    this.el.style.display = 'none';
-    this._hoverName = null;
-    if (this.game.controls) this.game.controls.enabled = this._prevControls;
+  // 面板被 J 关闭时，主动查询配方应重新启用（用户意图明确）
+  _ensureShown() {
+    if (!this.userEnabled && this.containerVisible) this.setUserEnabled(true);
   }
 
-  // R/U/A 在浮层内的作用目标：优先悬浮格，否则当前物品
+  // R/U/A 的作用目标：面板内悬浮 > 容器界面内悬浮 > 当前查看物品
   _actionTarget() {
-    return this._hoverName || this.current;
+    if (this._hoverName) return this._hoverName;
+    const g = this.game;
+    if (g && typeof g._uiHoverName === 'function') {
+      const h = g._uiHoverName();
+      if (h) return h;
+    }
+    return this.current;
   }
 
   onKeyR() {
@@ -119,7 +185,7 @@ export class RecipeViewer {
   }
 
   onKeyA() {
-    const t = this._hoverName || this.current;
+    const t = this._actionTarget();
     if (!t) return;
     const i = this.favorites.indexOf(t);
     if (i >= 0) this.favorites.splice(i, 1);
@@ -156,50 +222,38 @@ export class RecipeViewer {
   }
 
   // ── 渲染 ──
-  renderAll() {
-    this.panel.innerHTML = '';
-    // 头部：标题 + 搜索 + 关闭
-    const header = document.createElement('div');
-    header.style.cssText = 'display: flex; align-items: center; gap: 10px; margin-bottom: 8px;';
-    const title = document.createElement('div');
-    title.textContent = '物品与配方查询 (JEI)';
-    title.style.cssText = 'font-size: 15px; font-weight: bold; color: #333;';
-    header.appendChild(title);
+  // 竖条骨架：每次显示时重建（搜索词保留）
+  _buildShell() {
+    this.el.innerHTML = '';
     this.searchInput = document.createElement('input');
     this.searchInput.placeholder = '搜索物品…';
+    this.searchInput.value = this._searchText;
     this.searchInput.style.cssText = `
-      flex: 1; padding: 4px 8px; border: 2px solid #555; background: #8b8b8b;
-      color: #fff; font-size: 13px; outline: none;
+      padding: 4px 8px; border: 2px solid #555; background: #8b8b8b;
+      color: #fff; font-size: 13px; outline: none; box-sizing: border-box;
     `;
-    this.searchInput.addEventListener('input', () => this.renderList());
+    this.searchInput.addEventListener('input', () => {
+      this._searchText = this.searchInput.value;
+      this.renderList();
+    });
+    // 阻止按键冒泡到 Game 快捷键（E/J/R/U/A/数字键）
     this.searchInput.addEventListener('keydown', (e) => e.stopPropagation());
-    header.appendChild(this.searchInput);
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '✕ 关闭';
-    closeBtn.style.cssText = 'padding: 4px 10px; cursor: pointer;';
-    closeBtn.addEventListener('click', () => this.hide());
-    header.appendChild(closeBtn);
-    this.panel.appendChild(header);
+    this.el.appendChild(this.searchInput);
 
-    // 三列：收藏夹 | 全部物品 | 配方区
     const body = document.createElement('div');
-    body.style.cssText = 'display: flex; gap: 8px; flex: 1; min-height: 0;';
+    body.style.cssText = 'display: flex; gap: 6px; flex: 1; min-height: 0;';
+
     this.favCol = document.createElement('div');
-    this.favCol.style.cssText = 'width: 172px; display: flex; flex-direction: column; background: #999; border: 2px solid #555; padding: 4px;';
+    this.favCol.style.cssText = 'width: 40px; display: flex; flex-direction: column; background: #999; border: 2px solid #555; padding: 2px; box-sizing: border-box;';
     body.appendChild(this.favCol);
 
     this.listCol = document.createElement('div');
-    this.listCol.style.cssText = 'flex: 1; display: flex; flex-direction: column; background: #999; border: 2px solid #555; padding: 4px; min-width: 0;';
+    this.listCol.style.cssText = 'flex: 1; display: flex; flex-direction: column; background: #999; border: 2px solid #555; padding: 4px; box-sizing: border-box; min-width: 0;';
     body.appendChild(this.listCol);
 
-    this.recipeCol = document.createElement('div');
-    this.recipeCol.style.cssText = 'width: 330px; display: flex; flex-direction: column; background: #999; border: 2px solid #555; padding: 4px;';
-    body.appendChild(this.recipeCol);
-
-    this.panel.appendChild(body);
+    this.el.appendChild(body);
     this.renderFavorites();
     this.renderList();
-    this.renderRecipe();
   }
 
   _itemCell(name, size = 36, opts = {}) {
@@ -207,7 +261,7 @@ export class RecipeViewer {
     cell.style.cssText = `
       width: ${size}px; height: ${size}px; background: #8b8b8b; border: 2px solid #555;
       position: relative; display: flex; align-items: center; justify-content: center;
-      cursor: pointer; image-rendering: pixelated; box-sizing: content-box;
+      cursor: pointer; image-rendering: pixelated; box-sizing: content-box; flex: none;
     `;
     cell.title = getDisplayName(name);
     const canvas = document.createElement('canvas');
@@ -265,30 +319,38 @@ export class RecipeViewer {
   }
 
   renderFavorites() {
+    if (!this.favCol) return;
     this.favCol.innerHTML = '';
     const h = document.createElement('div');
-    h.textContent = '★ 收藏夹';
-    h.style.cssText = 'font-size: 13px; font-weight: bold; color: #333; margin-bottom: 4px;';
+    h.textContent = '★';
+    h.title = '收藏夹（对物品按 A 收藏/取消）';
+    h.style.cssText = 'font-size: 12px; font-weight: bold; color: #333; text-align: center; flex: none;';
     this.favCol.appendChild(h);
-    const grid = document.createElement('div');
-    grid.style.cssText = 'display: grid; grid-template-columns: repeat(4, 36px); gap: 3px; align-content: start;';
-    for (const name of this.favorites) grid.appendChild(this._itemCell(name, 36));
-    this.favCol.appendChild(grid);
-    const hint = document.createElement('div');
-    hint.style.cssText = 'margin-top: auto; font-size: 11px; color: #444; line-height: 1.6;';
-    hint.innerHTML = 'A 收藏/取消<br>R 查看配方<br>U 查看用途<br>右键 = 用途';
-    this.favCol.appendChild(hint);
+    const scroll = document.createElement('div');
+    scroll.style.cssText = 'display: flex; flex-direction: column; gap: 3px; overflow-y: auto; flex: 1; align-items: center; padding-top: 3px;';
+    if (this.favorites.length === 0) {
+      const empty = document.createElement('div');
+      empty.textContent = 'A\n收\n藏';
+      empty.title = '对物品按 A 键加入收藏夹';
+      empty.style.cssText = 'color: #555; font-size: 10px; text-align: center; line-height: 1.4; padding-top: 4px; white-space: pre-line;';
+      scroll.appendChild(empty);
+    } else {
+      for (const name of this.favorites) scroll.appendChild(this._itemCell(name, 34));
+    }
+    this.favCol.appendChild(scroll);
   }
 
   renderList() {
+    if (!this.listCol) return;
     this.listCol.innerHTML = '';
     const h = document.createElement('div');
-    h.textContent = `全部物品（点击看配方 / A 收藏）`;
-    h.style.cssText = 'font-size: 13px; font-weight: bold; color: #333; margin-bottom: 4px;';
+    h.textContent = '全部物品';
+    h.title = '点击看配方 / 右键看用途 / A 收藏';
+    h.style.cssText = 'font-size: 11px; font-weight: bold; color: #333; margin-bottom: 3px; flex: none;';
     this.listCol.appendChild(h);
     const grid = document.createElement('div');
-    grid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, 42px); gap: 3px; align-content: start; overflow-y: auto; flex: 1;';
-    const filter = (this.searchInput ? this.searchInput.value : '').trim().toLowerCase();
+    grid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, 36px); gap: 3px; align-content: start; overflow-y: auto; flex: 1; justify-content: space-around;';
+    const filter = this._searchText.trim().toLowerCase();
     const favSet = new Set(this.favorites);
     let shown = 0;
     for (const def of this._allItems()) {
@@ -303,31 +365,24 @@ export class RecipeViewer {
       empty.textContent = '无匹配物品';
       empty.style.cssText = 'color: #444; font-size: 12px; padding: 6px;';
       grid.appendChild(empty);
+    } else if (shown >= 400 && !filter) {
+      const tip = document.createElement('div');
+      tip.textContent = '仅显示前 400 个，搜索可缩小范围';
+      tip.style.cssText = 'grid-column: 1 / -1; color: #444; font-size: 10px; padding: 4px;';
+      grid.appendChild(tip);
     }
     this.listCol.appendChild(grid);
   }
 
   renderRecipe() {
-    if (!this.recipeCol) return;
-    this.recipeCol.innerHTML = '';
-    const h = document.createElement('div');
+    if (!this.popEl) return;
+    const show = !!this.current && this._shown;
+    this.popEl.style.display = show ? 'flex' : 'none';
+    if (!show) return;
+    this.popScroll.innerHTML = '';
     const modeLabel = this.mode === 'usages' ? '用途（作为材料）' : '获取配方';
-    h.innerHTML = this.current
-      ? `<b>${getDisplayName(this.current)}</b> · ${modeLabel}`
-      : '点击左侧物品查看配方';
-    h.style.cssText = 'font-size: 13px; color: #333; margin-bottom: 6px;';
-    this.recipeCol.appendChild(h);
+    this.popName.innerHTML = `<b>${getDisplayName(this.current)}</b> · ${modeLabel}`;
 
-    if (!this.current) {
-      const tip = document.createElement('div');
-      tip.style.cssText = 'font-size: 12px; color: #444; line-height: 1.8;';
-      tip.innerHTML = '← 点击任意物品<br>R = 配方 · U = 用途 · A = 收藏<br>熔炉配方同样收录（火焰标记）';
-      this.recipeCol.appendChild(tip);
-      return;
-    }
-
-    const scroll = document.createElement('div');
-    scroll.style.cssText = 'overflow-y: auto; flex: 1;';
     const { crafting, smelting } = this.mode === 'usages'
       ? this._usagesFor(this.current)
       : this._recipesFor(this.current);
@@ -336,31 +391,30 @@ export class RecipeViewer {
       const none = document.createElement('div');
       none.textContent = this.mode === 'usages' ? '没有以该物品为材料的配方' : '没有已注册的配方（可能只能从世界获取）';
       none.style.cssText = 'font-size: 12px; color: #444; padding: 6px;';
-      scroll.appendChild(none);
+      this.popScroll.appendChild(none);
     }
 
     if (crafting.length > 0) {
       const sec = document.createElement('div');
       sec.textContent = '合成';
       sec.style.cssText = 'font-size: 12px; font-weight: bold; color: #333; margin: 4px 0;';
-      scroll.appendChild(sec);
-      for (const r of crafting) scroll.appendChild(this._craftingRow(r));
+      this.popScroll.appendChild(sec);
+      for (const r of crafting) this.popScroll.appendChild(this._craftingRow(r));
     }
 
     if (smelting.length > 0) {
       const sec = document.createElement('div');
       sec.textContent = '熔炼（熔炉）';
       sec.style.cssText = 'font-size: 12px; font-weight: bold; color: #333; margin: 8px 0 4px 0;';
-      scroll.appendChild(sec);
-      for (const r of smelting) scroll.appendChild(this._smeltingRow(r));
+      this.popScroll.appendChild(sec);
+      for (const r of smelting) this.popScroll.appendChild(this._smeltingRow(r));
     }
-    this.recipeCol.appendChild(scroll);
 
     // 操作提示行
     const ops = document.createElement('div');
-    ops.style.cssText = 'font-size: 11px; color: #444; margin-top: 4px;';
+    ops.style.cssText = 'font-size: 11px; color: #444; margin-top: 6px; flex: none;';
     ops.innerHTML = 'R 配方 · U 用途 · A 收藏当前/悬浮物品';
-    this.recipeCol.appendChild(ops);
+    this.popScroll.appendChild(ops);
   }
 
   // 一条合成配方：材料格 → 箭头 → 产出
@@ -415,7 +469,7 @@ export class RecipeViewer {
 
   _emptyCell(size) {
     const d = document.createElement('div');
-    d.style.cssText = `width: ${size}px; height: ${size}px; background: #777; border: 2px solid #555; box-sizing: content-box;`;
+    d.style.cssText = `width: ${size}px; height: ${size}px; background: #777; border: 2px solid #555; box-sizing: content-box; flex: none;`;
     return d;
   }
 }
