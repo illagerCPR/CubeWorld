@@ -47,6 +47,30 @@ const TABLES = {
     ['flint', 1, 2, 6], ['blaze_rod', 1, 2, 4], ['golden_apple', 1, 1, 2],
     ['diamond', 1, 1, 2], ['saddle', 1, 1, 2],
   ],
+  // 末地城：紫珀/矿物/紫颂（箱子在顶层战利品房×2）
+  end_city: [
+    ['iron_ingot', 1, 4, 12], ['gold_ingot', 1, 3, 10], ['emerald', 1, 3, 10],
+    ['diamond', 1, 2, 6], ['chorus_fruit', 2, 6, 14], ['purpur_block', 2, 6, 6],
+    ['golden_apple', 1, 1, 3], ['ender_pearl', 1, 2, 6], ['experience_bottle', 1, 3, 6],
+    ['saddle', 1, 1, 2],
+  ],
+  // 末地船（货舱）：矿物为主
+  end_ship: [
+    ['iron_ingot', 2, 6, 12], ['gold_ingot', 1, 4, 10], ['diamond', 1, 3, 8],
+    ['emerald', 2, 5, 10], ['chorus_fruit', 3, 8, 12], ['ender_pearl', 1, 3, 8],
+    ['experience_bottle', 2, 4, 8], ['obsidian', 2, 4, 6],
+  ],
+  // 末地船船长箱：鞘翅必出（FORCED 表驱动，杂项仍走加权抽取）
+  end_ship_captain: [
+    ['diamond', 1, 3, 10], ['emerald', 2, 6, 10], ['golden_apple', 1, 2, 8],
+    ['experience_bottle', 2, 5, 8], ['ender_pearl', 1, 3, 8], ['iron_ingot', 3, 8, 10],
+  ],
+};
+
+// 必出项（表名 → [物品, min, max] 列表）：占用最低序槽位，消耗同一 rng 流。
+// 旧表无条目 → rng 流与行为完全不变（联机箱子内容一致性不受影响）。
+const FORCED = {
+  end_ship_captain: [['elytra', 1, 1]],
 };
 
 // 生成箱子内容：27 槽数组（索引 0-26），空槽为 null
@@ -58,8 +82,15 @@ export function chestLoot(seed, tableName, x, y, z) {
   if (!live.length) return slots;
   const rng = makeRng(hash32(seed | 0, x * 31 + y, z * 17 + y, 4242));
   const totalW = live.reduce((s, e) => s + e[3], 0);
-  const groups = 4 + Math.floor(rng() * 4); // 4-7 组
   const used = new Set();
+  // 必出项：先占用最低序槽（消耗同一 rng 流；无必出项的表流不变）
+  const forced = FORCED[tableName] || [];
+  for (const f of forced) {
+    const n = f[1] + Math.floor(rng() * (f[2] - f[1] + 1));
+    slots[used.size] = { name: f[0], count: n, data: null };
+    used.add(used.size);
+  }
+  const groups = 4 + Math.floor(rng() * 4); // 4-7 组
   for (let k = 0; k < groups; k++) {
     let roll = rng() * totalW;
     let pick = live[live.length - 1];

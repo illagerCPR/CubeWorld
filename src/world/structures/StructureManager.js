@@ -246,6 +246,7 @@ export class StructureManager {
         if (name === 'village') return rec.meta && rec.meta.variant === 'desert' ? '沙漠村庄' : '村庄';
         if (name === 'stronghold') return '要塞';
         if (name === 'fortress') return '下界要塞';
+        if (name === 'end_city') return '末地城';
         return name;
       }
     }

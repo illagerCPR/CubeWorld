@@ -1032,6 +1032,7 @@ export class Game {
             this.hand.swing(); // 阶段10：进食挥动
             this.inventory.removeSelected(1);
             this.hotbar.update();
+            if (itemDef.name === 'chorus_fruit') this._chorusTeleport(); // 紫颂果随机短距传送
           }
           this.controls.mouseRight = false;
           return;
@@ -1349,6 +1350,28 @@ export class Game {
       if (dmg > 0) this.player.hurt(dmg, 'explosion', true);
     }
     if (this.chatBox) this.chatBox.add('末影水晶碎裂，爆发出紫色的冲击！', '#c8f');
+  }
+
+  // 紫颂果食用后随机短距传送（原版机制）：±8 格水平随机落点，下探找立地面，
+  // 找不到安全面则原地不动（不垫台——保底是"不传送"而非"造出悬空平台"）
+  _chorusTeleport() {
+    const p = this.player.position;
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 4 + Math.random() * 8;
+    const tx = Math.floor(p.x + Math.cos(ang) * dist);
+    const tz = Math.floor(p.z + Math.sin(ang) * dist);
+    const top = Math.min(CHUNK_HEIGHT - 3, Math.floor(p.y) + 12);
+    let y = top;
+    while (y >= 1) {
+      if (this.world.getBlock(tx, y, tz) !== 0 || this.world.getBlock(tx, y + 1, tz) !== 0) { y--; continue; }
+      const def = BlockRegistry.getById(this.world.getBlock(tx, y - 1, tz));
+      if (def && def.solid) break;
+      y--;
+    }
+    if (y < 1) return;
+    p.set(tx + 0.5, y, tz + 0.5);
+    this.player.velocity.set(0, 0, 0); // 传送落地速度清零（摔落伤害按落地速度计算）
+    if (this.chatBox) this.chatBox.add('紫颂果把你拉向了虚空中的另一处……', '#c8f');
   }
 
   // 传送门落点立足面预解析：临时生成器 + 临时区块探测（纯函数，不碰当前世界）；

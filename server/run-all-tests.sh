@@ -97,6 +97,15 @@ else
     exit 1
 fi
 
+# 末地城结构回归（纯 node：方块/潜影贝注册/选址漏斗/落地/箱子三向/loot 保底/确定性）
+echo "=== end-city ==="
+if node tests/end-city.mjs; then
+    echo "end-city: OK"
+else
+    echo "end-city: FAILED"
+    exit 1
+fi
+
 # 测试非幂等：先确认 3001 空闲，再清空运行时数据保证干净状态
 if (exec 3<>/dev/tcp/127.0.0.1/3001) 2>/dev/null; then
     exec 3>&- 3<&- 2>/dev/null

@@ -145,6 +145,8 @@ const C = {
   dScale: [28, 22, 34], dScaleD: [18, 14, 24], dBelly: [86, 78, 96],
   dWing: [96, 84, 116], dWingD: [64, 54, 82], dEye: [188, 92, 236], dEyeD: [120, 52, 160],
   dHorn: [172, 168, 178],
+  // 潜影贝：淡紫壳 + 深紫底座
+  sShell: [176, 150, 198], sShellD: [126, 96, 152], sShellHi: [216, 198, 232],
 };
 
 // === 各怪皮肤 SVG 生成（原版风） ===
@@ -520,9 +522,32 @@ function blazeSkinSVG() {
   return buildSkinSVG(cells);
 }
 
+// 潜影贝：淡紫壳（深紫斑纹）+ 深紫底座（原地附着，弹幕攻击）
+function shulkerSkinSVG() {
+  const shellBase = noisy(C.sShell, 10, 281);
+  const baseBase = noisy(C.sShellD, 10, 282);
+
+  // 壳面：竖向条纹 + 斑纹
+  const shellFront = (x, y) => {
+    if (x % 4 === 0) return C.sShellD;
+    if (hash01(x, y, 283) < 0.15) return C.sShellHi;
+    return null;
+  };
+  const shellTop = () => C.sShellHi;
+
+  // 底座：深紫 + 顶缘亮线
+  const baseFront = (x, y) => (y <= 1 ? C.sShellHi : null);
+  const baseTop = () => C.sShellHi;
+
+  const cells = [
+    ...partCells(0, shellBase, { front: shellFront, back: shellFront, left: shellFront, right: shellFront, top: shellTop }),
+    ...partCells(1, baseBase, { front: baseFront, top: baseTop }),
+  ];
+  return buildSkinSVG(cells);
+}
+
 // 末影龙：黑鳞 + 紫眼 + 灰腹膜翼（原版末影龙配色）
-function dragonSkinSVG() {
-  const scaleBase = noisy(C.dScale, 12, 291);        // 头/颈/尾：黑鳞
+function dragonSkinSVG() {  const scaleBase = noisy(C.dScale, 12, 291);        // 头/颈/尾：黑鳞
   const bodyBase = noisy(C.dScaleD, 12, 292);        // 躯干：更暗鳞
   const wingBase = mottle(C.dWing, C.dWingD, 7, 293); // 翼膜：灰紫斑驳
   const legBase = noisy(C.dScaleD, 10, 294);         // 爪腿
@@ -662,6 +687,12 @@ const DRAGON_PARTS = [
   { name: 'legBR', row: 3, box: [ 0.20, 0.85, -1.55,  0.62, 1.90, -0.85] },
 ];
 
+// 潜影贝：深紫底座 + 淡紫壳（原地附着，蓄力弹幕；row0=壳，row1=底座）
+const SHULKER_PARTS = [
+  { name: 'shell', row: 0, box: [-0.50, 0.30, -0.50,  0.50, 1.05, 0.50] },
+  { name: 'base',  row: 1, box: [-0.45, 0,    -0.45,  0.45, 0.30, 0.45] },
+];
+
 // === 入口：返回各 type 的 skin SVG + parts ===
 export function generateMobSkinSVGs() {
   return {
@@ -674,6 +705,7 @@ export function generateMobSkinSVGs() {
     wither_skeleton:   witherSkeletonSkinSVG(),
     blaze:             blazeSkinSVG(),
     dragon:            dragonSkinSVG(),
+    shulker:           shulkerSkinSVG(),
   };
 }
 
@@ -839,6 +871,23 @@ export const MobTypes = {
     model: { parts: DRAGON_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'dragon_egg', min: 1, max: 1 },
+    ],
+  },
+  shulker: {
+    name: 'shulker',
+    displayName: '潜影贝',
+    width: 1.0,
+    height: 1.1,
+    health: 30,
+    damage: 4,
+    speed: 0,            // 原地附着：不移动
+    attackRange: 24,     // 弹幕射程（直线视线判定）
+    detectionRange: 24,
+    burningInDay: false,
+    stationary: true,    // Mob.update 专用分支：蓄力延迟弹，无位移
+    model: { parts: SHULKER_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'shulker_shell', min: 0, max: 1 },
     ],
   },
 };

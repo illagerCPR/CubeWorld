@@ -82,6 +82,14 @@ export class Mob extends Entity {
       return;
     }
 
+    if (this.typeName === 'shulker') {
+      // 潜影贝：原地附着 + 蓄力直线弹，不走通用索敌/游荡链
+      this.updateShulker(dt, player);
+      physics.collide(this, dt);
+      if (this.position.y < -20) this.dead = true;
+      return;
+    }
+
     if (this.type.passive) {
       // 村民等被动生物：游荡/注视/逃离，永不索敌
       this.updatePassiveAI(dt, player, physics, mobManager);
@@ -174,6 +182,31 @@ export class Mob extends Entity {
     if (this.position.y < -20) {
       this.dead = true;
     }
+  }
+
+  // 潜影贝 AI：原地附着（速度清零）；玩家进入射程 → 0.6s 蓄力（hitFlash 紫闪提示）
+  // → 直线视线判定命中（4 伤 + 击退），射击间隔 2.5s；走位脱离视线即可躲（无投射物实体）
+  updateShulker(dt, player) {
+    this.velocity.x = 0;
+    this.velocity.z = 0;
+    this.target = null;
+    const d = this.position.distanceTo(player.position);
+    if (d > this.detectionRange || player.dead) {
+      this.shulkerCharge = 0;
+      return;
+    }
+    this.shulkerCharge = (this.shulkerCharge || 0) + dt;
+    if (this.shulkerCharge < 0.6) {
+      this.hitFlash = Math.max(this.hitFlash, 0.08); // 蓄力提示：淡紫闪烁
+      return;
+    }
+    this.shulkerCharge = 0;
+    if (this.attackCooldown > 0) return;
+    if (this.hasLineOfSight(player)) {
+      const hit = player.hurt(this.attackDamage, 'mob', true);
+      if (hit) this.knockbackPlayer(player);
+    }
+    this.attackCooldown = 2.5;
   }
 
   // 被动 AI（村民）：8 格内敌对怪 → 背向逃离；4 格内玩家 → 注视；否则绳拴游荡

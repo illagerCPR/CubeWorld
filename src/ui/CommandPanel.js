@@ -269,6 +269,11 @@ export class CommandPanel {
       for (const rec of sm.recordsAround('fortress', p.x, p.z, EXPLORE_FORTRESS_CELL_R)) {
         items.push({ name: '下界要塞', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
       }
+    } else if (world.dimension === 'end') {
+      // 末地：末地城（recordsAround ±2 cell，带 groundY 传送层——同下界要塞模式）
+      for (const rec of sm.recordsAround('end_city', p.x, p.z, 2)) {
+        items.push({ name: '末地城', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
+      }
     } else {
       for (const rec of sm.recordsAround('village', p.x, p.z, EXPLORE_VILLAGE_CELL_R)) {
         const d = Math.hypot(rec.ax - p.x, rec.az - p.z);

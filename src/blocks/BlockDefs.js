@@ -1101,6 +1101,63 @@ reg('end_gateway', { displayName: '末地折跃门', transparent: true, solid: f
     }
     return pixelSvg(px); })()
   });
+// 紫珀系列：末地城主体材料（原版配色：淡紫底 + 深紫纹路）
+reg('purpur_block', { displayName: '紫珀块', hardness: 1.5, tool: 'pickaxe' }, { purpur_block: (function () {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const t = hash2(x >> 2, y >> 2, 214);
+    let c = t < 0.3 ? 'rgb(166,124,186)' : 'rgb(184,142,202)'; // 4×4 块状斑驳
+    if ((x % 8 === 0 || y % 8 === 0)) c = 'rgb(146,104,166)';  // 拼缝
+    px[y * 16 + x] = c;
+  }
+  return pixelSvg(px); })()
+});
+reg('purpur_pillar', { displayName: '紫珀柱', textures: { top: 'purpur_pillar_top', side: 'purpur_pillar_side', bottom: 'purpur_pillar_top' }, hardness: 1.5, tool: 'pickaxe' },
+  { purpur_pillar_top: (function () { const px = makeTex();
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+        const ring = Math.max(Math.abs(x - 8), Math.abs(y - 8));
+        px[y * 16 + x] = ring === 3 || ring === 6 ? 'rgb(146,104,166)' : 'rgb(184,142,202)';
+      }
+      return pixelSvg(px); })(),
+    purpur_pillar_side: (function () { const px = makeTex();
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+        let c = (x === 3 || x === 12) ? 'rgb(146,104,166)' : 'rgb(180,138,198)'; // 竖棱
+        if (x >= 6 && x <= 9 && y % 5 === 0) c = 'rgb(160,118,180)';            // 中槽纹
+        px[y * 16 + x] = c;
+      }
+      return pixelSvg(px); })()
+  });
+reg('end_stone_bricks', { displayName: '末地砖', hardness: 3, tool: 'pickaxe' }, { end_stone_bricks: (function () {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    let c = 'rgb(219,222,167)';
+    const row = Math.floor(y / 8), off = (row % 2) * 4;
+    if (y % 8 === 7 || (x + off) % 8 === 7) c = 'rgb(180,184,130)'; // 砖缝（错缝排布）
+    if (hash2(x, y, 217) < 0.12) c = 'rgb(200,204,146)';
+    px[y * 16 + x] = c;
+  }
+  return pixelSvg(px); })()
+});
+// 紫颂植物：末地城花园装饰（茎 = 节状柱；花 = 顶端白紫色十字植物，可采紫颂果掉落）
+reg('chorus_plant', { displayName: '紫颂植株', transparent: true, solid: false, hardness: 0.4, renderType: 'cross' },
+  { chorus_plant: (function () { const px = makeTex();
+    for (let y = 2; y < 15; y++) {
+      const w = (y % 4 < 2) ? 2 : 1;
+      for (let x = 8 - w; x <= 8 + w; x++) px[y * 16 + x] = 'rgb(120,84,150)';
+    }
+    for (let x = 6; x <= 10; x++) px[2 * 16 + x] = 'rgb(150,112,182)';
+    return pixelSvg(px); })()
+  });
+reg('chorus_flower', { displayName: '紫颂花', transparent: true, solid: false, hardness: 0.4, renderType: 'cross' },
+  { chorus_flower: (function () { const px = makeTex();
+    for (let y = 3; y < 13; y++) for (let x = 3; x < 13; x++) {
+      const edge = x === 3 || x === 12 || y === 3 || y === 12;
+      px[y * 16 + x] = edge ? 'rgb(224,206,238)' : 'rgb(168,132,198)';
+    }
+    px[6 * 16 + 6] = 'rgb(120,84,150)'; px[9 * 16 + 9] = 'rgb(120,84,150)';
+    px[6 * 16 + 9] = 'rgb(120,84,150)'; px[9 * 16 + 6] = 'rgb(120,84,150)';
+    return pixelSvg(px); })()
+  });
 
 // --- 红石相关 ---
 reg('redstone_lamp', { displayName: '红石灯', light: 15, hardness: 0.3 }, { redstone_lamp: redstoneLampTex(131) });

@@ -7,6 +7,7 @@
 import { SimplexNoise } from '../noise.js';
 import { BlockRegistry } from '../../core/BlockRegistry.js';
 import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT } from '../../core/Chunk.js';
+import { StructureManager } from '../structures/StructureManager.js';
 
 // ── 末地参数 ─────────────────────────────────────────────────────────
 const ISLAND_R = 60;          // 主岛基准半径
@@ -38,6 +39,8 @@ export class EndGenerator {
     this.outerNoise = new SimplexNoise(seed * 37 + 204);  // 外岛边缘扰动
     // 外岛锚点缓存（memoization：键到值纯派生，不影响确定性；上限保护防长跑膨胀）
     this._anchorCache = new Map();
+    // 结构管理器（末地城——dims 过滤保证仅末地参与求解）
+    this.structureManager = new StructureManager(this, seed);
     // 生物群系名表（InfoBar 按 generator.biomeNames 读取）
     this.biomeNames = {
       main_island: '末地主岛',
@@ -164,7 +167,9 @@ export class EndGenerator {
     return 'void';
   }
 
-  generateChunk(chunk) {
+  // decorate=false：结构选址探针/出生探测用（结构求解在 generateChunk 内部再入
+  // generateChunk 生成临时区块，不关装饰会递归——与下界要塞同款）
+  generateChunk(chunk, decorate = true) {
     const { cx, cz } = chunk;
     const blocks = chunk.blocks;
     const ES = BlockRegistry.getId('end_stone');
@@ -205,6 +210,9 @@ export class EndGenerator {
         }
       }
     }
+
+    // ③ 结构装饰（末地城等，dims 过滤在 StructureManager 内）
+    if (decorate) this.structureManager.decorateChunk(chunk);
   }
 
   // 出生点：主岛表面（从原点螺旋外推找"2 格空气 + 实心地板"，临时生成候选区块探测）
@@ -213,7 +221,7 @@ export class EndGenerator {
     const chunkAt = (cx, cz) => {
       const k = cx + ',' + cz;
       let c = cache.get(k);
-      if (!c) { c = new Chunk(cx, cz); this.generateChunk(c); cache.set(k, c); }
+      if (!c) { c = new Chunk(cx, cz); this.generateChunk(c, false); cache.set(k, c); }
       return c;
     };
     const probe = (x, z) => {

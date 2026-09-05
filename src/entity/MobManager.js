@@ -76,6 +76,7 @@ export class MobManager {
     this.mobNet = null;       // 联机怪物事件接口（sendMobSpawn/sendMobAttack/sendMobDied），由 Game 注入
     this.onBlockDestroyed = null; // 爆炸销毁方块回调 (x,y,z,def)，由 Game 注入（碎屑粒子）
     this.spawnedVillages = new Set(); // 已生成村民的村庄锚点 key "ax,az"（本会话去重，死亡不重生）
+    this.spawnedEndCities = new Set(); // 已生成潜影贝的末地城锚点 key（同上惯例）
   }
 
   // 异步初始化：mob 用私有 skin atlas，不再注入全局 atlas
@@ -364,6 +365,46 @@ export class MobManager {
     }
   }
 
+  // 末地城潜影贝生成：meta.shulkerSpawns 确定性点位，去重 spawnedEndCities；
+  // 卸载清扫（>200 格）全端执行（防客户端残留漂移实体，与村民清扫同惯例）
+  updateEndCitySpawns(player) {
+    if (!this.world || !player || this.world.dimension !== 'end') return;
+    const sm = this.world.generator && this.world.generator.structureManager;
+    if (!sm) return;
+
+    if (this.spawnEnabled) {
+      const records = sm.recordsAround('end_city', player.position.x, player.position.z)
+        .filter(rec => Math.hypot(rec.ax - player.position.x, rec.az - player.position.z) <= 160);
+      for (const rec of records) {
+        const key = rec.ax + ',' + rec.az;
+        if (this.spawnedEndCities.has(key)) continue;
+        this.spawnedEndCities.add(key);
+        const spawns = rec.meta.shulkerSpawns || [];
+        for (const [x, y, z] of spawns) {
+          if (this.mobNet) {
+            this.mobNet.sendMobSpawn('shulker', x, y + 0.1, z);
+          } else {
+            const mob = new Mob('shulker', this.world);
+            mob.position.set(x, y + 0.1, z);
+            mob.home = { x: rec.ax, z: rec.az, radius: 48 };
+            this.spawnMob(mob);
+          }
+        }
+      }
+    }
+
+    for (let i = this.mobs.length - 1; i >= 0; i--) {
+      const m = this.mobs[i];
+      if (m.typeName !== 'shulker' || !m.home) continue;
+      const hd = Math.hypot(m.home.x - player.position.x, m.home.z - player.position.z);
+      if (hd > 200) {
+        this._removeMobResources(m);
+        this.mobs.splice(i, 1);
+        this.spawnedEndCities.delete(m.home.x + ',' + m.home.z);
+      }
+    }
+  }
+
   // 其它端攻击：本端同步扣血 + 受击反馈 + 位置校正（减少各端 AI 漂移）
   applyRemoteMobAttack(netId, damage, x, y, z) {
     const mob = this.findMobByNetId(netId);
@@ -490,6 +531,9 @@ export class MobManager {
 
     // 村庄村民生成（host/单机权威；去重由 spawnedVillages 保证，村民死亡本会话不重生）
     this.updateVillageSpawns(player);
+
+    // 末地城潜影贝生成（host/单机权威；随城清扫全端执行）
+    this.updateEndCitySpawns(player);
 
     if (this.spawnTimer <= 0) {
       this.spawnTimer = SPAWN_INTERVAL;
