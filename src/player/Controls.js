@@ -92,6 +92,9 @@ export class Controls {
   }
 
   onWheel(e) {
+    // UI（背包/箱子/熔炉/暂停等）打开时 enabled=false：不累积滚轮增量，
+    // 否则物品栏内滚动鼠标会在关闭界面时意外切换快捷栏
+    if (!this.enabled) return;
     this.wheelDelta += Math.sign(e.deltaY);
   }
 

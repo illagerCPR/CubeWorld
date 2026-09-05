@@ -345,6 +345,11 @@ export class InventoryScreen {
   }
 
   renderSlotContent(el, stack) {
+    // 内容签名：未变化的槽位跳过重建（移动物品时 bindSlots 会全量刷新，
+    // 重建 canvas + 异步图标绘制的空窗期就是"物品栏内拖动物品闪烁"的来源）
+    const sig = stack ? `${stack.name}|${stack.count}` : '';
+    if (el._sig === sig) return;
+    el._sig = sig;
     if (stack) {
       this.fillSlotEl(el, stack.name, stack.count);
     } else {
@@ -495,12 +500,7 @@ export class InventoryScreen {
   updateCraftOutput() {
     const outEl = this.panel.querySelector('[data-slot="craft-output"]');
     if (!outEl) return;
-    const result = this.getCurrentRecipeMatch();
-    if (result) {
-      this.fillSlotEl(outEl, result.name, result.count);
-    } else {
-      outEl.innerHTML = '';
-    }
+    this.renderSlotContent(outEl, this.getCurrentRecipeMatch());
   }
 
   // 设置光标物品

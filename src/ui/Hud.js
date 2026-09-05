@@ -98,6 +98,15 @@ export class Hud {
     this.underwaterOverlay.style.opacity = on ? '1' : '0';
   }
 
+  // 全部状态栏隐藏（返回主菜单时调用；Hud 是跨存档共享实例，
+  // 不隐藏会让血量/饥饿/经验条/氧气/准星残留在菜单界面上）
+  hideAll() {
+    this.el.style.display = 'none';
+    this.xpBar.style.display = 'none';
+    this.crosshair.style.display = 'none';
+    this.airBar.style.display = 'none';
+  }
+
   // 着火滤镜开关（同款幂等开关）
   setOnFire(on) {
     if (this._onFireShown === on) return;

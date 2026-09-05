@@ -54,13 +54,23 @@ const generators = {
 // SVG -> Image -> Canvas -> THREE.Texture
 const svgCache = new Map();
 const textureCache = new Map();
+// svgText -> 已解码 Image 缓存：同一 SVG 只解码一次，重复绘制同步命中
+//（UI 图标高频重绘必须零延迟，否则画布先清后画的空窗期表现为物品闪烁；
+//  buildAtlas 启动时已对全部 SVG 调过 svgToImage，等于全量预热）
+const svgImageCache = new Map();
 
 function svgToImage(svgText) {
+  const cached = svgImageCache.get(svgText);
+  if (cached) return Promise.resolve(cached);
   return new Promise((resolve, reject) => {
     const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const img = new Image();
-    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onload = () => {
+      svgImageCache.set(svgText, img);
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
     img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
     img.src = url;
   });

@@ -1734,7 +1734,7 @@ export class Game {
     if (this.net) this.net.close();
     this.networkMode = false;
     if (this.infoBar) this.infoBar.hide();
-    if (this.hud) this.hud.setUnderwater(false);
+    if (this.hud) { this.hud.setUnderwater(false); this.hud.hideAll(); }
     this.paused = false;
     if (this.controls) this.controls.enabled = false;
     if (this.hand) this.hand.setVisible(false); // 回菜单不显示第一人称手臂

@@ -41,6 +41,8 @@ export class Hotbar {
     }
     document.body.appendChild(this.el);
     this.iconCache = new Map();
+    this._sig = new Array(9).fill(null); // 槽位内容签名（name|count），未变化不重绘
+    this._sel = new Array(9).fill(null); // 选中态缓存
 
     // 切换物品时的名称提示
     this.namePopup = document.createElement('div');
@@ -68,27 +70,35 @@ export class Hotbar {
     for (let i = 0; i < 9; i++) {
       const s = this.inventory.slots[i];
       const slot = this.slots[i];
-      slot.el.style.borderColor = i === this.inventory.hotbarSelected ? '#fff' : 'rgba(255,255,255,0.2)';
-      slot.el.style.borderWidth = i === this.inventory.hotbarSelected ? '3px' : '2px';
-      
-      const ctx = slot.canvas.getContext('2d');
-      ctx.clearRect(0, 0, 32, 32);
-      
-      if (s) {
-        // 渲染物品图标
-        let svgText = this.iconCache.get(s.name);
-        if (!svgText) {
-          svgText = this.getIconSvg(s.name);
-          if (svgText) this.iconCache.set(s.name, svgText);
+      const selected = i === this.inventory.hotbarSelected;
+      // 槽位内容签名：未变化的槽位完全不重绘（滚轮切换/拾取频繁触发 update，
+      // 全量清空重画 + 异步图标解码的空窗期就是"物品闪烁"的来源）
+      const sig = s ? `${s.name}|${s.count}` : '';
+      if (this._sig[i] !== sig) {
+        this._sig[i] = sig;
+        const ctx = slot.canvas.getContext('2d');
+        ctx.clearRect(0, 0, 32, 32);
+        if (s) {
+          // 渲染物品图标
+          let svgText = this.iconCache.get(s.name);
+          if (!svgText) {
+            svgText = this.getIconSvg(s.name);
+            if (svgText) this.iconCache.set(s.name, svgText);
+          }
+          if (svgText) {
+            const img = await SVGTextures.svgToImage(svgText);
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, 0, 0, 32, 32);
+          }
+          slot.count.textContent = s.count > 1 ? s.count : '';
+        } else {
+          slot.count.textContent = '';
         }
-        if (svgText) {
-          const img = await SVGTextures.svgToImage(svgText);
-          ctx.imageSmoothingEnabled = false;
-          ctx.drawImage(img, 0, 0, 32, 32);
-        }
-        slot.count.textContent = s.count > 1 ? s.count : '';
-      } else {
-        slot.count.textContent = '';
+      }
+      if (this._sel[i] !== selected) {
+        this._sel[i] = selected;
+        slot.el.style.borderColor = selected ? '#fff' : 'rgba(255,255,255,0.2)';
+        slot.el.style.borderWidth = selected ? '3px' : '2px';
       }
     }
   }
