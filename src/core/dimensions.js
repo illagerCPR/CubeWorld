@@ -50,9 +50,14 @@ export const DIMENSIONS = {
     name: '天域',
     implemented: true,
     createGenerator: (seed) => new AetherGenerator(seed),
-    noDayCycle: false, // 主世界风格：正常昼夜/日月/云
-    sky: { fixedColor: null, celestials: true, clouds: true, cloudsY: 190, fog: { color: null, nearK: 0.5, farK: 0.95 } },
-    light: { hasSkylight: true }, // 正常天光（与主世界同款光照路径）
+    noDayCycle: false,
+    // 永昼：polarDay 让太阳绕天穹打转恒不落（Sky.update）；fixedColor 恒亮天蓝（雾色同步）；
+    // skyLightLevel 恒 1 → 体素光 uDayLight 恒定全亮（与下界同款覆盖路径，但天光仍正常传播）
+    sky: {
+      fixedColor: [0.45, 0.70, 1.0], polarDay: true,
+      celestials: true, clouds: true, cloudsY: 190, fog: { color: null, nearK: 0.5, farK: 0.95 },
+    },
+    light: { hasSkylight: true, skyLightLevel: 1.0 },
     hasVoid: true, // 掉下浮岛坠虚空
   },
 };

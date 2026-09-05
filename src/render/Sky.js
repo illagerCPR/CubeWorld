@@ -178,6 +178,7 @@ export class Sky {
     this.stars.visible = celestials;
     this._showClouds = sky.clouds !== false;
     this._cloudsY = sky.cloudsY || 140;
+    this._polarDay = !!sky.polarDay; // 永昼：太阳绕天穹打转恒不落
   }
 
   _makeStars() {
@@ -209,20 +210,29 @@ export class Sky {
     // 天空球/太阳/月亮/星空/云层全部跟随玩家（天空球保持以相机为球心）
     this.skyMesh.position.set(playerPos.x, playerPos.y, playerPos.z);
 
-    // 太阳角度
+    // 太阳角度（永昼维度太阳绕天穹水平打转、高度小幅起伏恒不落山）
     const angle = this.time * Math.PI * 2 - Math.PI / 2;
-    const sunX = Math.cos(angle) * 200;
-    const sunY = Math.sin(angle) * 200;
+    const dayFactor = this._polarDay ? 1 : Math.max(0, Math.sin(angle));
+    let sunX, sunY, sunZ;
+    if (this._polarDay) {
+      const a = this.time * Math.PI * 2;
+      sunX = Math.cos(a) * 200;
+      sunZ = Math.sin(a) * 200;
+      sunY = 120 + Math.sin(a * 2) * 50; // 高度 70~170：始终在地平线上
+    } else {
+      sunX = Math.cos(angle) * 200;
+      sunY = Math.sin(angle) * 200;
+      sunZ = 0;
+    }
 
-    this.sun.position.set(playerPos.x + sunX, playerPos.y + sunY, playerPos.z);
+    this.sun.position.set(playerPos.x + sunX, playerPos.y + sunY, playerPos.z + sunZ);
     this.sun.lookAt(playerPos.x, playerPos.y, playerPos.z);
-    this.moon.position.set(playerPos.x - sunX, playerPos.y - sunY, playerPos.z);
+    this.moon.position.set(playerPos.x - sunX, playerPos.y - sunY, playerPos.z - sunZ);
     this.moon.lookAt(playerPos.x, playerPos.y, playerPos.z);
 
-    this.sunLight.position.set(sunX, sunY, 0).normalize();
+    this.sunLight.position.set(sunX, sunY, sunZ).normalize();
 
-    // 光强（sin 可能负，取 max(0,.)）
-    const dayFactor = Math.max(0, Math.sin(angle));
+    // 光强（永昼 dayFactor 恒 1：正午亮度/正白色恒定）
     this.sunLight.intensity = 0.15 + dayFactor * 1.3;  // 正午 1.45，夜晚 0.15（月光余晖）
     this.ambient.intensity = 0.30 + dayFactor * 0.50;  // 正午 0.80，夜晚 0.30
 
@@ -282,12 +292,13 @@ export class Sky {
   }
 
   isDay() {
-    if (this.dimDef && this.dimDef.noDayCycle) return false; // 无昼夜维度：不燃烧怪物
+    const dd = this.dimDef;
+    if (dd && dd.sky && dd.sky.polarDay) return true; // 永昼维度：恒白天（怪物白天表/不燃烧）
+    if (dd && dd.noDayCycle) return false;            // 无昼夜维度：不燃烧怪物
     return this.time > 0.25 && this.time < 0.75;
   }
 
   isNight() {
-    if (this.dimDef && this.dimDef.noDayCycle) return true;  // 无昼夜维度：生成无视昼夜
     return !this.isDay();
   }
 

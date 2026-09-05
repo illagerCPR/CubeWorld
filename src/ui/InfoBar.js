@@ -59,7 +59,10 @@ export class InfoBar {
       : `生物群系: ${biomeLabel || '未知'}`;
 
     if (sky) {
-      if (sky.dimDef && sky.dimDef.noDayCycle) {
+      if (sky.dimDef && sky.dimDef.sky && sky.dimDef.sky.polarDay) {
+        // 永昼维度（天域）：太阳恒亮无时钟语义
+        this.timeLine.textContent = '时间: 永昼';
+      } else if (sky.dimDef && sky.dimDef.noDayCycle) {
         // 无昼夜维度（下界/末地）：时钟无意义
         this.timeLine.textContent = '时间: 无昼夜';
       } else {
