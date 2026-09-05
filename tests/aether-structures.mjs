@@ -45,19 +45,20 @@ const RES = { aether_temple: null, aether_tower: null, aether_ship: null };
 for (const seed of SEEDS) {
   const gen = new AetherGenerator(seed);
 
-  // ② 选址漏斗：±4 cell 扫描三种结构各至少一例
-  const CELLS = { aether_temple: 20, aether_tower: 14, aether_ship: 24 };
+  // ② 选址漏斗：按类型扫描（ship 网格大，半径同步放大）找到各至少一例
+  const CELLS = { aether_temple: 14, aether_tower: 14, aether_ship: 32 };
   const found = {};
   for (const t of TYPES) {
     const CELL = CELLS[t] * CHUNK_SIZE;
+    const R = t === 'aether_ship' ? 6 : 4;
     outer:
-    for (let cx = -4; cx <= 4; cx++) {
-      for (let cz = -4; cz <= 4; cz++) {
+    for (let cx = -R; cx <= R; cx++) {
+      for (let cz = -R; cz <= R; cz++) {
         const rec = gen.structureManager.ensureRecord(t, cx, cz);
         if (rec) { found[t] = rec; break outer; }
       }
     }
-    ok(!!found[t], `seed=${seed} ±4 cell 未找到 ${t}（选址门过严或密度参数改动）`);
+    ok(!!found[t], `seed=${seed} 扫描区未找到 ${t}（选址门过严或密度参数改动）`);
   }
 
   // ②b 神殿群系门：锚点必须在水晶秘境
@@ -107,9 +108,10 @@ for (const seed of SEEDS) {
   const gen2 = new AetherGenerator(seed);
   for (const t of TYPES) {
     const CELL = CELLS[t] * CHUNK_SIZE;
+    const R2 = t === 'aether_ship' ? 6 : 4;
     outer2:
-    for (let cx = -4; cx <= 4; cx++) {
-      for (let cz = -4; cz <= 4; cz++) {
+    for (let cx = -R2; cx <= R2; cx++) {
+      for (let cz = -R2; cz <= R2; cz++) {
         const rec2 = gen2.structureManager.ensureRecord(t, cx, cz);
         if (rec2) {
           ok(sig(rec2) === sig(found[t]), `seed=${seed} ${t} 双次求解不一致`);

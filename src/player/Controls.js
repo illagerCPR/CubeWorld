@@ -49,7 +49,10 @@ export class Controls {
 
   onKeyDown(e) {
     this.keys[e.code] = true;
-    if (!this.enabled) return;
+    // 自动重复（长按触发的 OS keydown 连发）：保持按键状态，但不得进入单击/双击触发逻辑
+    //——否则长按空格期间 lastJumpTap 被连发刷新（间隔恒 <300ms），飞行状态被以键率翻转，
+    // 释放时空格相位随机落在"关"上（表现为松开空格意外取消飞行）
+    if (!this.enabled || e.repeat) return;
     if (e.code === 'Space') {
       const now = performance.now();
       if (now - this.lastJumpTap < 300 && this.player.creative) {

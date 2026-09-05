@@ -35,9 +35,11 @@ function probeIsland(gen, ax, az, biomes, maxSlope = 8, probeR = 6) {
   return floors[4] + 1;
 }
 
-function placeTemple(gen, ax, az) { return probeIsland(gen, ax, az, ['crystal']); }
-function placeTower(gen, ax, az) { return probeIsland(gen, ax, az, ['verdant', 'autumn']); }
-function placeShip(gen, ax, az) { return probeIsland(gen, ax, az, ['verdant', 'autumn', 'frost', 'crystal']); }
+// 探针环按结构占地缩放：天域浮岛碎小（12% 列占比独立圆斑），大环会系统性拒掉
+// 小岛上的候选（9 列任一落空即拒）——tower/ship ±3、temple ±5（底台 ±7 由悬浮基座兜底）
+function placeTemple(gen, ax, az) { return probeIsland(gen, ax, az, ['crystal'], 8, 5); }
+function placeTower(gen, ax, az) { return probeIsland(gen, ax, az, ['verdant', 'autumn'], 8, 3); }
+function placeShip(gen, ax, az) { return probeIsland(gen, ax, az, ['verdant', 'autumn', 'frost', 'crystal'], 8, 3); }
 
 // ── 天空神殿：白水晶底台 + 石砖殿身 + 石英尖顶 + 四角晶柱 ────────────────
 export function solveTemple(rng, ax, y0, az) {
@@ -200,9 +202,9 @@ export const AETHER_TOWER_DEF = {
 };
 
 export const AETHER_SHIP_DEF = {
-  cell: 24,          // 24 区块网格（384 格）——稀有残骸
+  cell: 32,          // 32 区块网格（512 格）——稀有残骸（全群系门最宽，网格取大压密度）
   attempts: 2,
-  chance: 0.5,
+  chance: 0.4,
   radius: 26,
   salt: 7263,
   dims: ['aether'],

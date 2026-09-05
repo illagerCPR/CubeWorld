@@ -255,8 +255,9 @@ export class CommandPanel {
   }
 
   // W2：探索列表 —— 主世界：村庄（recordsAround ±3 cell）+ 要塞环带 3 点（seed 直接派生）；
-  // 下界：下界要塞（recordsAround ±2 cell，带 groundY 传送层）。按距离排序；
-  // 每行带"传送"按钮（主世界落地地表 +2，下界落要塞平台 +2）
+  // 下界：下界要塞（recordsAround ±2 cell，带 groundY 传送层）；
+  // 末地：末地城（±2 cell）；天域：神殿/瞭望塔/沉船（各 ±2 cell）。
+  // 按距离排序；每行带"传送"按钮（主世界落地地表 +2，其余维度落结构立地面 +2）
   _refreshExplore() {
     const box = this.exploreBox;
     box.innerHTML = '';
@@ -273,6 +274,17 @@ export class CommandPanel {
       // 末地：末地城（recordsAround ±2 cell，带 groundY 传送层——同下界要塞模式）
       for (const rec of sm.recordsAround('end_city', p.x, p.z, 2)) {
         items.push({ name: '末地城', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
+      }
+    } else if (world.dimension === 'aether') {
+      // 天域：三结构（recordsAround ±2 cell，带 groundY 传送层——同下界/末地模式）
+      for (const rec of sm.recordsAround('aether_temple', p.x, p.z, 2)) {
+        items.push({ name: '天空神殿', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
+      }
+      for (const rec of sm.recordsAround('aether_tower', p.x, p.z, 2)) {
+        items.push({ name: '浮空瞭望塔', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
+      }
+      for (const rec of sm.recordsAround('aether_ship', p.x, p.z, 2)) {
+        items.push({ name: '天域沉船', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
       }
     } else {
       for (const rec of sm.recordsAround('village', p.x, p.z, EXPLORE_VILLAGE_CELL_R)) {
