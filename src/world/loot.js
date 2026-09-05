@@ -65,6 +65,25 @@ const TABLES = {
     ['diamond', 1, 3, 10], ['emerald', 2, 6, 10], ['golden_apple', 1, 2, 8],
     ['experience_bottle', 2, 5, 8], ['ender_pearl', 1, 3, 8], ['iron_ingot', 3, 8, 10],
   ],
+  // 天空神殿：金饰/钻石/发光系（箱子在殿内对角×2）
+  aether_temple: [
+    ['golden_apple', 1, 2, 6], ['diamond', 1, 3, 8], ['gold_ingot', 2, 5, 12],
+    ['iron_ingot', 2, 6, 12], ['emerald', 1, 3, 10], ['glowstone', 2, 6, 10],
+    ['sea_lantern', 1, 3, 8], ['experience_bottle', 2, 5, 10], ['bread', 1, 3, 10],
+    ['quartz_block', 2, 6, 8],
+  ],
+  // 浮空瞭望塔：巡逻补给（顶部瞭望台单箱）
+  aether_tower: [
+    ['bread', 1, 3, 16], ['arrow', 4, 12, 12], ['coal', 3, 8, 12],
+    ['iron_ingot', 1, 3, 10], ['emerald', 1, 2, 8], ['torch', 4, 8, 10],
+    ['apple', 1, 3, 10], ['experience_bottle', 1, 2, 6],
+  ],
+  // 天域沉船：远航货物（甲板/舱室两箱）
+  aether_ship: [
+    ['iron_ingot', 2, 6, 12], ['gold_ingot', 1, 4, 10], ['diamond', 1, 2, 6],
+    ['emerald', 1, 4, 10], ['bread', 2, 5, 12], ['experience_bottle', 1, 3, 8],
+    ['glowstone', 1, 4, 8], ['ender_pearl', 1, 1, 4],
+  ],
 };
 
 // 必出项（表名 → [物品, min, max] 列表）：占用最低序槽位，消耗同一 rng 流。

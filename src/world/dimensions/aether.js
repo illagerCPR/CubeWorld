@@ -6,6 +6,7 @@
 import { SimplexNoise } from '../noise.js';
 import { BlockRegistry } from '../../core/BlockRegistry.js';
 import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT } from '../../core/Chunk.js';
+import { StructureManager } from '../structures/StructureManager.js';
 
 // ── 天域参数 ─────────────────────────────────────────────────────────
 const ISLE_FREQ = 0.008;      // 岛屿场频率（独立岛轮廓，波长 ~125 格）
@@ -37,6 +38,9 @@ export class AetherGenerator {
     this.bottomNoise = new SimplexNoise(seed * 41 + 303); // 岛底起伏
     this.biomeNoise = new SimplexNoise(seed * 41 + 304);  // 群系场（crystal/frost 分带）
     this.groveNoise = new SimplexNoise(seed * 41 + 305);  // 秋色林密度场
+    // 自然建筑（天空神殿/瞭望塔/沉船）：decorateChunk 在 generateChunk 尾部调用；
+    // 选址探测传 decorate=false 防递归（place 内部再入 generateChunk 临时区块）
+    this.structureManager = new StructureManager(this, seed);
     // 生物群系名表（InfoBar 按 generator.biomeNames 读取）
     this.biomeNames = {
       verdant: '翡翠浮岛', crystal: '水晶秘境', frost: '银霜浮岛',
@@ -128,7 +132,8 @@ export class AetherGenerator {
     }
   }
 
-  generateChunk(chunk) {
+  // decorate=false：跳过树木/晶柱装饰与结构装饰（选址探测/出生探测用——防递归且只要剖面）
+  generateChunk(chunk, decorate = true) {
     const { cx, cz } = chunk;
     const blocks = chunk.blocks;
     const ids = {
@@ -172,11 +177,12 @@ export class AetherGenerator {
           }
           blocks[idx(y, z, x)] = id;
         }
-        if (x >= 2 && x <= 13 && z >= 2 && z <= 13) {
+        if (decorate && x >= 2 && x <= 13 && z >= 2 && z <= 13) {
           this._decorate(chunk, x, z, wx, wz, span, biome, ids);
         }
       }
     }
+    if (decorate) this.structureManager.decorateChunk(chunk);
   }
 
   // 出生点：原点保底岛表面（螺旋外推找"2 格空气 + 实心地板"）
@@ -185,7 +191,7 @@ export class AetherGenerator {
     const chunkAt = (cx, cz) => {
       const k = cx + ',' + cz;
       let c = cache.get(k);
-      if (!c) { c = new Chunk(cx, cz); this.generateChunk(c); cache.set(k, c); }
+      if (!c) { c = new Chunk(cx, cz); this.generateChunk(c, false); cache.set(k, c); }
       return c;
     };
     const probe = (x, z) => {

@@ -247,6 +247,9 @@ export class StructureManager {
         if (name === 'stronghold') return '要塞';
         if (name === 'fortress') return '下界要塞';
         if (name === 'end_city') return '末地城';
+        if (name === 'aether_temple') return '天空神殿';
+        if (name === 'aether_tower') return '浮空瞭望塔';
+        if (name === 'aether_ship') return '天域沉船';
         return name;
       }
     }

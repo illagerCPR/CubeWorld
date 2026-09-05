@@ -7,6 +7,7 @@ import { VILLAGE_DEF } from './village.js';
 import { STRONGHOLD_DEF } from './stronghold.js';
 import { FORTRESS_DEF } from './fortress.js';
 import { END_CITY_DEF } from './endCity.js';
+import { AETHER_TEMPLE_DEF, AETHER_TOWER_DEF, AETHER_SHIP_DEF } from './aetherStructures.js';
 
 VILLAGE_DEF.dims = ['overworld'];
 STRONGHOLD_DEF.dims = ['overworld'];
@@ -14,3 +15,7 @@ registerStructureType('village', VILLAGE_DEF);
 registerStructureType('stronghold', STRONGHOLD_DEF);
 registerStructureType('fortress', FORTRESS_DEF);
 registerStructureType('end_city', END_CITY_DEF);
+// 天域三结构（defs 自带 dims: ['aether']）
+registerStructureType('aether_temple', AETHER_TEMPLE_DEF);
+registerStructureType('aether_tower', AETHER_TOWER_DEF);
+registerStructureType('aether_ship', AETHER_SHIP_DEF);
