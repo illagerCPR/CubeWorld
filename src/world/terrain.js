@@ -121,6 +121,11 @@ export class TerrainGenerator {
             blockId = BlockRegistry.getId(cfg.subsurfaceBlock);
           } else if (y < height) {
             blockId = BlockRegistry.getId(cfg.surfaceBlock);
+            // 水下列（列顶在海平面下）：表面铺泥土（草方块不该出现在水下）
+            if (y < SEA_LEVEL) {
+              const surfName = BlockRegistry.getById(BlockRegistry.getId(cfg.surfaceBlock))?.name;
+              if (surfName === 'grass_block' || surfName === 'snow_block') blockId = DIRT();
+            }
             // 河流区域水位以下
             if (biome === Biomes.RIVER && y < SEA_LEVEL) {
               blockId = SAND();
@@ -211,17 +216,18 @@ export class TerrainGenerator {
     return c > CAVE_CHEESE_T;
   }
 
-  // 矿石分布
+  // 矿石分布（链式窄带：各矿占比=首中即停的带宽分位差×深度带占比，总矿率 ~2%（旧版 38%）；
+  // 阈值非单调是有意为之——深带矿先匹配，浅带按剩余窗口校准：煤>铁>铜>红石>金>钻>青金>绿宝）
   getOreAt(wx, wy, wz) {
     const n = this.oreNoise.fbm3D(wx * 0.1, wy * 0.1, wz * 0.1, 2);
-    if (wy < 16 && n > 0.6) return 'diamond_ore';
-    if (wy < 32 && n > 0.55) return 'gold_ore';
-    if (wy < 24 && n > 0.5) return 'lapis_ore';
-    if (wy < 48 && n > 0.5) return 'redstone_ore';
-    if (wy < 64 && n > 0.45) return 'emerald_ore';
-    if (wy < 72 && n > 0.4) return 'copper_ore';
-    if (n > 0.3) return 'iron_ore';
-    if (n > 0.2) return 'coal_ore';
+    if (wy < 16 && n > 0.738) return 'diamond_ore';
+    if (wy < 32 && n > 0.757) return 'gold_ore';
+    if (wy < 24 && n > 0.716) return 'lapis_ore';
+    if (wy < 48 && n > 0.73) return 'redstone_ore';
+    if (wy < 64 && n > 0.773) return 'emerald_ore';
+    if (wy < 72 && n > 0.72) return 'copper_ore';
+    if (n > 0.66) return 'iron_ore';
+    if (n > 0.601) return 'coal_ore';
     return null;
   }
 
