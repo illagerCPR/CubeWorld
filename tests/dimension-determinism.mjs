@@ -166,6 +166,20 @@ for (const def of Object.values(DIMENSIONS)) {
         fail(`[nether] seed=${seed} 峡谷列 @(${valleyCol[0]},${sy},${valleyCol[1]}) 行走地面未铺灵魂沙`);
       }
     }
+
+    // ⑨ 末地专属：外岛锚点场群系在场（末地城/折跃门落点依赖）
+    if (def.id === 'end') {
+      const found = { highlands: false, small: false };
+      for (let gx = -640; gx <= 640 && !(found.highlands && found.small); gx += 16) {
+        for (let gz = -640; gz <= 640; gz += 16) {
+          const b = fw.gen.getBiome(gx, gz);
+          if (b === 'end_highlands') found.highlands = true;
+          else if (b === 'small_end_islands') found.small = true;
+        }
+      }
+      if (!found.highlands) fail(`[end] seed=${seed} ±640 未见末地高原（外岛锚点场改动过严？）`);
+      if (!found.small) fail(`[end] seed=${seed} ±640 未见末地碎岛`);
+    }
   }
 
   // ⑥ 单区块生成耗时预算

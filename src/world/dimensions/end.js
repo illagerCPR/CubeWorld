@@ -1,7 +1,9 @@
 // end.js -- 末地维度地形生成（纯函数 of (seed, 坐标)，零 Math.random，联机确定性根基）
 // 结构：虚空世界；主岛 = 围绕原点的透镜形 end_stone 岛（半径 ~60，噪声扰动边缘）；
 // 黑曜石柱环（6-10 根，角度/高度/半径 per-seed 确定性派生，顶端荧石）；
-// 外环小岛（r>180，2D 噪声阈值）；无 bedrock 无天光——掉出岛即坠虚空（hasVoid）。
+// 外岛 = 锚点场（模仿原版 island origin：96 格网格 per-cell 确定性派生 0-2 个岛心，
+// 每岛圆锥+透镜剖面）；大岛=末地高原（末地城候选），碎岛=末地碎岛；
+// 无 bedrock 无天光——掉出岛即坠虚空（hasVoid）。
 import { SimplexNoise } from '../noise.js';
 import { BlockRegistry } from '../../core/BlockRegistry.js';
 import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT } from '../../core/Chunk.js';
@@ -12,8 +14,12 @@ const ISLAND_TOP = 64;        // 主岛顶面基准
 const ISLAND_DEPTH = 22;      // 主岛中心最大厚度（透镜形，边缘收薄）
 const PILLAR_RING_R = 25;     // 黑曜石柱环半径
 const PILLAR_MIN_H = 74;      // 柱顶高度下限
-const OUTER_MIN_R = 180;      // 外环小岛起始半径
-const OUTER_FREQ = 0.006, OUTER_T = 0.60; // 外环小岛 2D 噪声阈值
+// ── 外岛锚点场参数（模仿原版 island origin 网格分布）────────────────
+const OUTER_CELL = 96;        // 锚点网格尺寸
+const ISLAND_MIN_R = 24;      // 岛半径下限
+const ISLAND_MAX_R = 40;      // 岛半径上限
+// 末地高原群系分界（≥此半径=高原，末地城候选）；导出供测试/选址共用
+export const HIGHLANDS_MIN_R = 28;
 
 // 确定性整数哈希（per-seed/per-index 派生，结果可复现）
 function hashSeed(seed, k) {
@@ -29,9 +35,16 @@ export class EndGenerator {
     this.edgeNoise = new SimplexNoise(seed * 37 + 201);   // 主岛边缘扰动（角度域连续）
     this.topNoise = new SimplexNoise(seed * 37 + 202);    // 顶面高度起伏
     this.bottomNoise = new SimplexNoise(seed * 37 + 203); // 岛底起伏
-    this.outerNoise = new SimplexNoise(seed * 37 + 204);  // 外环小岛场
+    this.outerNoise = new SimplexNoise(seed * 37 + 204);  // 外岛边缘扰动
+    // 外岛锚点缓存（memoization：键到值纯派生，不影响确定性；上限保护防长跑膨胀）
+    this._anchorCache = new Map();
     // 生物群系名表（InfoBar 按 generator.biomeNames 读取）
-    this.biomeNames = { main_island: '末地主岛', outer_islands: '末地外岛', void: '末地虚空' };
+    this.biomeNames = {
+      main_island: '末地主岛',
+      end_highlands: '末地高原',
+      small_end_islands: '末地碎岛',
+      void: '末地虚空',
+    };
   }
 
   // 黑曜石柱布局（纯函数 of seed；每次调用结果一致）
@@ -67,21 +80,87 @@ export class EndGenerator {
     return { top, bottom };
   }
 
-  // 列的外环小岛轮廓；不在小岛内返回 null
-  _outerSpan(wx, wz) {
-    const r = Math.hypot(wx, wz);
-    if (r <= OUTER_MIN_R) return null;
-    const n = this.outerNoise.fbm2D(wx * OUTER_FREQ, wz * OUTER_FREQ, 3);
-    if (n <= OUTER_T) return null;
-    const top = 58 + Math.round(this.topNoise.fbm2D(wx * 0.02 + 91, wz * 0.02, 2) * 6);
-    const thickness = 4 + Math.round((n - OUTER_T) * 46);
-    return { top, bottom: Math.max(8, top - thickness) };
+  // ── 外岛锚点场（模仿原版 island origin）────────────────────────────
+  // per-cell 确定性哈希（组合键，与 hashSeed 同域）
+  _cellHash(gx, gz) {
+    return (Math.imul(gx, 668265263) ^ Math.imul(gz, 374761393)) >>> 0;
   }
 
-  // 生物群系（纯函数 of 列坐标）：主岛 > 外环小岛 > 虚空
+  // 某锚点网格 cell 的岛心列表（纯函数 of (seed, cell)，缓存 memoization）
+  _anchorsFor(gx, gz) {
+    const key = gx + ',' + gz;
+    const hit = this._anchorCache.get(key);
+    if (hit) return hit;
+    const k = this._cellHash(gx, gz);
+    const draw = (salt) => hashSeed(k, salt);
+    const h0 = draw(300);
+    const count = h0 < 0.42 ? 0 : (h0 < 0.85 ? 1 : 2); // 58% cell 至少一岛
+    const list = [];
+    for (let i = 0; i < count; i++) {
+      list.push({
+        x: gx * OUTER_CELL + Math.round(draw(310 + i * 8) * OUTER_CELL),
+        z: gz * OUTER_CELL + Math.round(draw(330 + i * 8) * OUTER_CELL),
+        rad: ISLAND_MIN_R + Math.floor(draw(350 + i * 8) * (ISLAND_MAX_R - ISLAND_MIN_R + 1)), // 24-40
+        top: 55 + Math.floor(draw(370 + i * 8) * 20), // 顶面 55-74
+      });
+    }
+    if (this._anchorCache.size > 4096) this._anchorCache.clear();
+    this._anchorCache.set(key, list);
+    return list;
+  }
+
+  // 主岛外圈锚点表（按角度排序，折跃门→外岛映射用；纯函数 of seed）
+  outerAnchors() {
+    const list = [];
+    const R1 = Math.ceil((ISLAND_R + 120) / OUTER_CELL); // 覆盖主岛外的 cell 扫描半径
+    for (let gx = -R1; gx <= R1; gx++) {
+      for (let gz = -R1; gz <= R1; gz++) {
+        for (const a of this._anchorsFor(gx, gz)) {
+          const d = Math.hypot(a.x, a.z);
+          if (d > ISLAND_R + 40 && d < OUTER_CELL * (R1 + 1)) list.push(a);
+        }
+      }
+    }
+    list.sort((p, q) => Math.atan2(p.z, p.x) - Math.atan2(q.z, q.x));
+    return list;
+  }
+
+  // 列的外岛轮廓（锚点场）：扫描 3×3 邻域 cell 的岛心，重叠取顶面最高者；
+  // 不在外岛内返回 null。返回 { top, bottom, rad }（rad=岛基准半径，群系分界用）
+  _outerSpan(wx, wz) {
+    const gx = Math.floor(wx / OUTER_CELL), gz = Math.floor(wz / OUTER_CELL);
+    let best = null;
+    for (let ix = gx - 1; ix <= gx + 1; ix++) {
+      for (let iz = gz - 1; iz <= gz + 1; iz++) {
+        for (const a of this._anchorsFor(ix, iz)) {
+          const dx = wx - a.x, dz = wz - a.z;
+          const d2 = dx * dx + dz * dz;
+          const rMax = a.rad + 4; // 快速剔除（扰动最多放大 ~12%）
+          if (d2 > rMax * rMax) continue;
+          const d = Math.sqrt(d2);
+          // 边缘半径按角度域 (cos,sin) 噪声扰动（per-anchor 偏移保证岛间独立）
+          const ca = d > 0.01 ? dx / d : 1, sa = d > 0.01 ? dz / d : 0;
+          const wob = this.outerNoise.fbm2D(ca * 2.4 + a.x * 0.013, sa * 2.4 + a.z * 0.013, 2);
+          const rad = a.rad * (0.88 + 0.12 * wob);
+          if (d >= rad) continue;
+          const t = d / rad; // 0 中心 → 1 边缘
+          const top = a.top + Math.round(this.topNoise.fbm2D(wx * 0.02 + 91, wz * 0.02, 2) * 4);
+          // 圆锥+透镜剖面：中心厚（~rad×0.32+2）边缘收薄到 2
+          const thickness = Math.max(2, Math.round((1 - t * t) * a.rad * 0.32) + 2
+            + Math.round(this.bottomNoise.fbm2D(wx * 0.03 + 55, wz * 0.03, 2) * 2));
+          const bottom = Math.max(8, top - thickness);
+          if (!best || top > best.top) best = { top, bottom, rad: a.rad };
+        }
+      }
+    }
+    return best;
+  }
+
+  // 生物群系（纯函数 of 列坐标）：主岛 > 外岛（大岛=高原 / 碎岛）> 虚空
   getBiome(wx, wz) {
     if (this._islandSpan(wx, wz)) return 'main_island';
-    if (this._outerSpan(wx, wz)) return 'outer_islands';
+    const outer = this._outerSpan(wx, wz);
+    if (outer) return outer.rad >= HIGHLANDS_MIN_R ? 'end_highlands' : 'small_end_islands';
     return 'void';
   }
 

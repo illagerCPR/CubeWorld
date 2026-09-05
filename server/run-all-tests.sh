@@ -70,6 +70,15 @@ else
     exit 1
 fi
 
+# 末地外岛锚点场回归（纯 node：群系在场/密度带宽/锚点确定性/群系方块同源）
+echo "=== end-islands ==="
+if node tests/end-islands.mjs; then
+    echo "end-islands: OK"
+else
+    echo "end-islands: FAILED"
+    exit 1
+fi
+
 # 测试非幂等：先确认 3001 空闲，再清空运行时数据保证干净状态
 if (exec 3<>/dev/tcp/127.0.0.1/3001) 2>/dev/null; then
     exec 3>&- 3<&- 2>/dev/null
