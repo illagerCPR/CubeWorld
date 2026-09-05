@@ -147,6 +147,12 @@ const C = {
   dHorn: [172, 168, 178],
   // 潜影贝：淡紫壳 + 深紫底座
   sShell: [176, 150, 198], sShellD: [126, 96, 152], sShellHi: [216, 198, 232],
+  // 风灵：白青发光核心 + 淡青尾 + 淡金星屑
+  wCore: [225, 242, 255], wCoreD: [178, 210, 238], wCoreHi: [248, 252, 255],
+  wTail: [196, 226, 250], wOrb: [255, 226, 150], wOrbD: [232, 190, 96],
+  // 天域守卫：白铠金饰 + 青蓝眼 + 淡蓝翼膜
+  gArmor: [226, 230, 240], gArmorD: [176, 184, 205], gArmorHi: [244, 246, 252],
+  gTrim: [226, 184, 92], gEye: [86, 158, 255], gWing: [204, 222, 248], gWingD: [158, 182, 220],
 };
 
 // === 各怪皮肤 SVG 生成（原版风） ===
@@ -693,6 +699,82 @@ const SHULKER_PARTS = [
   { name: 'base',  row: 1, box: [-0.45, 0,    -0.45,  0.45, 0.30, 0.45] },
 ];
 
+// 风灵：悬浮光核 + 下尾 + 环绕星屑前对/后对（小型浮游，永昼漂浮）
+const WISP_PARTS = [
+  { name: 'core',  row: 0, box: [-0.22, 0.30, -0.22,  0.22, 0.74, 0.22] },
+  { name: 'tail',  row: 1, box: [-0.12, 0.06, -0.12,  0.12, 0.32, 0.12] },
+  { name: 'orbFR', row: 2, box: [ 0.24, 0.44,  0.08,  0.36, 0.56, 0.20] },
+  { name: 'orbFL', row: 2, box: [-0.36, 0.44,  0.08, -0.24, 0.56, 0.20] },
+  { name: 'orbBR', row: 3, box: [ 0.24, 0.44, -0.20,  0.36, 0.56, -0.08] },
+  { name: 'orbBL', row: 3, box: [-0.36, 0.44, -0.20, -0.24, 0.56, -0.08] },
+];
+
+// 天域守卫：白铠人形 + 横展翼膜（翼代臂）——永昼巡逻/神殿守箱
+const AETHER_GUARD_PARTS = [
+  { name: 'head',  row: 0, box: [-0.24, 1.38, -0.24,  0.24, 1.86, 0.24] },
+  { name: 'body',  row: 1, box: [-0.30, 0.74, -0.18,  0.30, 1.42, 0.18] },
+  { name: 'wingL', row: 2, box: [-1.05, 1.02, -0.44, -0.26, 1.22, 0.44] },
+  { name: 'wingR', row: 2, box: [ 0.26, 1.02, -0.44,  1.05, 1.22, 0.44] },
+  { name: 'legL',  row: 3, box: [-0.22, 0,    -0.14, -0.06, 0.78, 0.14] },
+  { name: 'legR',  row: 3, box: [ 0.06, 0,    -0.14,  0.22, 0.78, 0.14] },
+];
+
+// 风灵：白青发光核心（青蓝豆眼 + 微光斑）+ 淡青尾 + 淡金星屑
+function wispSkinSVG() {
+  const coreBase = noisy(C.wCore, 8, 301);
+  const tailBase = noisy(C.wTail, 8, 302);
+  const orbBase = noisy(C.wOrb, 8, 303);
+  const coreFront = (x, y) => {
+    if (y >= 5 && y <= 7 && ((x >= 4 && x <= 5) || (x >= 10 && x <= 11))) return C.gEye; // 青蓝豆眼
+    if (hash01(x, y, 304) < 0.2) return C.wCoreHi;
+    return null;
+  };
+  const coreTop = () => C.wCoreHi;
+  const coreBot = () => C.wCoreD;
+  const tailFront = (x) => (x % 4 < 2 ? C.wCoreD : null);
+  const orbFront = (x, y) => (hash01(x, y, 305) < 0.25 ? C.wOrbD : null);
+  const orbTop = () => C.wCoreHi;
+
+  const cells = [
+    ...partCells(0, coreBase, { front: coreFront, top: coreTop, bot: coreBot }),
+    ...partCells(1, tailBase, { front: tailFront, top: tailBase, bot: tailBase }),
+    ...partCells(2, orbBase, { front: orbFront, top: orbTop, bot: orbBase }),
+    ...partCells(3, orbBase, { front: orbFront, top: orbTop, bot: orbBase }),
+  ];
+  return buildSkinSVG(cells);
+}
+
+// 天域守卫：白铠 + 金冠缘/腰线 + 青蓝眼 + 淡蓝羽纹翼
+function aetherGuardSkinSVG() {
+  const armorBase = noisy(C.gArmor, 8, 311);
+  const wingBase = noisy(C.gWing, 10, 312);
+  const legBase = noisy(C.gArmorD, 8, 313);
+  const headFront = (x, y) => {
+    if (y >= 5 && y <= 7 && ((x >= 3 && x <= 5) || (x >= 10 && x <= 12))) return C.gEye; // 双眼
+    if (y === 10 && x >= 6 && x <= 9) return C.gArmorD;                                   // 嘴缝
+    if (y <= 1) return C.gTrim;                                                           // 头顶金冠缘
+    return null;
+  };
+  const headTop = () => C.gTrim;
+  const bodyFront = (x, y) => {
+    if (x === 0 || x === 15) return C.gTrim;   // 侧缘金线
+    if (y >= 13) return C.gTrim;               // 腰带
+    if (hash01(x, y, 314) < 0.12) return C.gArmorHi;
+    return null;
+  };
+  const wingFront = (x) => (x % 5 < 2 ? C.gWingD : null); // 羽纹
+  const wingTop = () => C.gArmorHi;
+  const legFront = (x) => (x % 4 < 2 ? C.gArmor : null);
+
+  const cells = [
+    ...partCells(0, armorBase, { front: headFront, top: headTop }),
+    ...partCells(1, armorBase, { front: bodyFront, top: bodyFront, bot: legBase }),
+    ...partCells(2, wingBase, { front: wingFront, back: wingFront, top: wingTop, bot: wingBase }),
+    ...partCells(3, legBase, { front: legFront, top: legBase, bot: legBase }),
+  ];
+  return buildSkinSVG(cells);
+}
+
 // === 入口：返回各 type 的 skin SVG + parts ===
 export function generateMobSkinSVGs() {
   return {
@@ -706,6 +788,8 @@ export function generateMobSkinSVGs() {
     blaze:             blazeSkinSVG(),
     dragon:            dragonSkinSVG(),
     shulker:           shulkerSkinSVG(),
+    wisp:              wispSkinSVG(),
+    aether_guard:      aetherGuardSkinSVG(),
   };
 }
 
@@ -888,6 +972,43 @@ export const MobTypes = {
     model: { parts: SHULKER_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'shulker_shell', min: 0, max: 1 },
+    ],
+  },
+
+  wisp: {
+    name: 'wisp',
+    displayName: '风灵',
+    width: 0.6,
+    height: 0.9,
+    health: 8,
+    damage: 0,           // 被动：无攻击
+    speed: 1.4,
+    attackRange: 0,
+    detectionRange: 0,   // 永不索敌
+    burningInDay: false,
+    flying: true,        // 悬浮漂浮（passive 游荡/逃离复用村民 AI 分支）
+    passive: true,
+    model: { parts: WISP_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'glowstone', min: 0, max: 1, chance: 0.3 },  // 碎光凝结
+    ],
+  },
+  aether_guard: {
+    name: 'aether_guard',
+    displayName: '天域守卫',
+    width: 0.7,
+    height: 1.9,
+    health: 26,
+    damage: 4,
+    speed: 2.6,
+    attackRange: 2.4,
+    detectionRange: 18,
+    burningInDay: false,  // 永昼不燃烧（天域恒白天）
+    flying: true,         // 悬浮追击（对齐目标高度）
+    model: { parts: AETHER_GUARD_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'glowstone', min: 0, max: 2, chance: 0.7 },
+      { name: 'gold_ingot', min: 0, max: 1, chance: 0.35 },
     ],
   },
 };

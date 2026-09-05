@@ -33,6 +33,15 @@ export function pickNetherSpawn(biome, inFortress, rand) {
   return rand() < 0.15 ? 'wither_skeleton' : 'zombified_piglin';
 }
 
+// 天域自然生成表（纯函数便于单测）：永昼白天表——风灵为主点缀氛围；
+// 水晶秘境守卫加成；天空神殿周边守卫主导（守箱巡逻）
+export function pickAetherSpawn(biome, nearTemple, rand) {
+  if (nearTemple) return rand() < 0.55 ? 'aether_guard' : 'wisp';
+  if (biome === 'crystal') return rand() < 0.40 ? 'aether_guard' : 'wisp';
+  if (biome === 'frost') return rand() < 0.12 ? 'aether_guard' : 'wisp';
+  return rand() < 0.06 ? 'aether_guard' : 'wisp';
+}
+
 // 皮肤 atlas 各 face 的 col 索引映射（96×64 atlas：col 4=top，col 5=bottom 独立 cell，
 // 不再复用 front/back——此前 top 复用 front cell 导致"脸贴在头顶"）
 const FACE_COL = { front: 0, back: 1, left: 2, right: 3, top: 4, bot: 5 };
@@ -156,9 +165,9 @@ export class MobManager {
   // 尝试生成怪物
   trySpawn(playerPos, isNight) {
     if (!this.spawnEnabled) return;
-    // 敌对上限不含村民（村民数量由村庄记录决定，不挤占敌对生成名额）
+    // 敌对上限不含被动生物（村民/风灵数量由各自生成逻辑决定，不挤占敌对生成名额）
     let hostileCount = 0;
-    for (const m of this.mobs) if (m.typeName !== 'villager') hostileCount++;
+    for (const m of this.mobs) if (!m.type.passive) hostileCount++;
     if (hostileCount >= MAX_MOBS) return;
 
     // 在玩家周围 16~48 格内尝试
@@ -204,13 +213,13 @@ export class MobManager {
     const headId = this.world.getBlock(x, y + 1, z);
     if (headId !== 0) return;
 
-    // 亮度检查（简化：夜晚生成）
-    if (!isNight && y > SEA_LEVEL + 5) return;
+    // 亮度检查（简化：夜晚生成）；天域永昼不受白天海拔门限制（岛面 y 恒高于海平面）
+    if (!isNight && y > SEA_LEVEL + 5 && this.world.dimension !== 'aether') return;
 
-    // 末地/天域不自然刷怪（末地唯一敌人是末影龙 Boss；天域为和平浮岛）
-    if (this.world.dimension !== 'overworld' && this.world.dimension !== 'nether') return;
+    // 末地不自然刷怪（末影龙 Boss 战场）；天域走永昼表（风灵/天域守卫）
+    if (this.world.dimension === 'end') return;
 
-    // 选择怪物类型：下界走下界表（烈焰人仅要塞平台层），主世界走昼夜表
+    // 选择怪物类型：下界走下界表（烈焰人仅要塞平台层），天域走永昼表，主世界走昼夜表
     let typeName;
     if (this.world.dimension === 'nether') {
       const gen = this.world.generator;
@@ -218,6 +227,10 @@ export class MobManager {
       const rec = this._fortressAt(x, z);
       const atLevel = rec && y >= rec.groundY - 1 && y <= rec.groundY + 8;
       typeName = pickNetherSpawn(biome, !!(rec && atLevel), Math.random);
+    } else if (this.world.dimension === 'aether') {
+      const gen = this.world.generator;
+      const biome = typeof gen.getBiome === 'function' ? gen.getBiome(x, z) : null;
+      typeName = pickAetherSpawn(biome, !!this._aetherTempleAt(x, z), Math.random);
     } else {
       const choices = isNight
         ? ['zombie', 'zombie', 'skeleton', 'creeper', 'spider']
@@ -242,6 +255,17 @@ export class MobManager {
     const sm = this.world.generator && this.world.generator.structureManager;
     if (!sm) return null;
     for (const rec of sm.recordsAround('fortress', x, z, 1)) {
+      if (x >= rec.minX && x <= rec.maxX && z >= rec.minZ && z <= rec.maxZ) return rec;
+    }
+    return null;
+  }
+
+  // 位置所在天域神殿记录（bbox 判定；守卫守箱巡逻门控/单测共用）——recordsAround 抗 LRU
+  _aetherTempleAt(x, z) {
+    if (this.world.dimension !== 'aether') return null;
+    const sm = this.world.generator && this.world.generator.structureManager;
+    if (!sm) return null;
+    for (const rec of sm.recordsAround('aether_temple', x, z, 1)) {
       if (x >= rec.minX && x <= rec.maxX && z >= rec.minZ && z <= rec.maxZ) return rec;
     }
     return null;

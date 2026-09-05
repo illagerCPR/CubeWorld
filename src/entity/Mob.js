@@ -217,7 +217,7 @@ export class Mob extends Entity {
     let threatDist = Infinity;
     if (mobManager) {
       for (const m of mobManager.mobs) {
-        if (m === this || m.dead || m.typeName === 'villager') continue;
+        if (m === this || m.dead || m.type.passive) continue;  // 被动族互不威胁（村民/风灵等）
         if (m.attackDamage <= 0) continue;
         const d = this.position.distanceTo(m.position);
         if (d < 8 && d < threatDist) { threat = m; threatDist = d; }
