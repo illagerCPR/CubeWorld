@@ -23,6 +23,7 @@ import { DeathScreen } from '../ui/DeathScreen.js';
 import { CommandPanel } from '../ui/CommandPanel.js';
 import { ChatBox } from '../ui/ChatBox.js';
 import { BossBar } from '../ui/BossBar.js';
+import { PortalOverlay } from '../ui/PortalOverlay.js';
 import { CHUNK_SIZE, Chunk, CHUNK_HEIGHT } from '../core/Chunk.js';
 import {
   PORTAL_KINDS, DIM_PORTAL_KINDS, ARRIVAL_PLATFORM,
@@ -177,6 +178,7 @@ export class Game {
     if (this.deathScreen) { this.deathScreen.el.remove(); this.deathScreen = null; }
     if (this.commandPanel) { this.commandPanel.el.remove(); this.commandPanel = null; }
     if (this.bossBar) { this.bossBar.dispose(); this.bossBar = null; }
+    if (this.portalOverlay) { this.portalOverlay.dispose(); this.portalOverlay = null; }
     // 远端玩家与联机聊天框
     for (const rp of this.remotePlayers.values()) rp.dispose();
     this.remotePlayers.clear();
@@ -373,6 +375,7 @@ export class Game {
     this.deathScreen = new DeathScreen(this);
     this.commandPanel = new CommandPanel(this);
     this.bossBar = new BossBar(); // 末影龙血条（新建型：_disposeWorld 移除）
+    this.portalOverlay = new PortalOverlay(); // 传送门屏幕特效（新建型：纯表现层）
 
     // 联机模式初始化：host 端跑怪物自然生成（事件同步）、绑定方块同步钩子、注册网络回调、创建聊天框
     if (this.networkMode && this.net) {
@@ -1155,10 +1158,11 @@ export class Game {
     if (!this.world || this.spectating || !this.player || this.player.dead) return;
     if (this._portalCooldown > 0) {
       this._portalCooldown -= dt;
+      if (this.portalOverlay) this.portalOverlay.update(null, 0);
       return;
     }
     const kinds = DIM_PORTAL_KINDS[this.world.dimension] || [];
-    if (!kinds.length) { this._portalTimer = 0; return; }
+    if (!kinds.length) { this._portalTimer = 0; if (this.portalOverlay) this.portalOverlay.update(null, 0); return; }
     const p = this.player.position;
     const bx = Math.floor(p.x), bz = Math.floor(p.z);
     const cellId = (dy) => this.world.getBlock(bx, Math.floor(p.y + dy), bz);
@@ -1172,22 +1176,21 @@ export class Game {
     if (!kindIn) {
       this._portalTimer = 0;
       this._portalArmed = true;
+      if (this.portalOverlay) this.portalOverlay.update(null, 0);
       return;
     }
-    if (!this._portalArmed) return;
-    if (kindIn === 'end') {
-      // 末地门：陷入即触（原版语义）
-      this._portalTimer = 0;
-      this._portalArmed = false;
-      this._usePortal('end');
+    if (!this._portalArmed) {
+      if (this.portalOverlay) this.portalOverlay.update(null, 0);
       return;
     }
-    this._portalTimer += dt;
-    // 折跃门站入 1s 触发（同维传送）；下界/天域门 2s
+    // 折跃门站入 1s 触发（同维传送）；下界/天域门 2s；末地门陷入即触
     const threshold = kindIn === 'gateway' ? 1.0 : 2.0;
+    if (this.portalOverlay) this.portalOverlay.update(kindIn, Math.min(1, this._portalTimer / threshold));
+    this._portalTimer += dt;
     if (this._portalTimer >= threshold) {
       this._portalTimer = 0;
       this._portalArmed = false;
+      if (this.portalOverlay) this.portalOverlay.update(kindIn, 1);
       if (kindIn === 'gateway') this._useGatewayPortal();
       else this._usePortal(kindIn);
     }
@@ -1196,6 +1199,7 @@ export class Game {
   // 传送门触发：目标维度 = 门种类配对的另一端
   //（下界 overworld↔nether 1:8 / 天域 overworld↔aether 1:1 / 末地 overworld↔end 落出生点）
   _usePortal(kind) {
+    if (this.portalOverlay) this.portalOverlay.flash();
     const dim = this.world.dimension;
     let target = null;
     let arrival = null;
@@ -1225,6 +1229,7 @@ export class Game {
   // 折跃门传送（末地同维）：不换维，账本扫描"角度最近"的配对门直达
   //（两端门角度一致由 gatewayPlacements 保证；armed/cooldown 防回弹由 updatePortals 统一处理）
   _useGatewayPortal() {
+    if (this.portalOverlay) this.portalOverlay.flash();
     const p = this.player.position;
     const target = gatewayTarget(this.world, p.x, p.z);
     if (!target) return;
