@@ -17,6 +17,7 @@ import { Hud } from '../ui/Hud.js';
 import { InfoBar } from '../ui/InfoBar.js';
 import { InventoryScreen } from '../ui/InventoryScreen.js';
 import { ChestScreen } from '../ui/ChestScreen.js';
+import { FurnaceScreen } from '../ui/FurnaceScreen.js';
 import { TradeScreen } from '../ui/TradeScreen.js';
 import { PauseMenu } from '../ui/PauseMenu.js';
 import { DeathScreen } from '../ui/DeathScreen.js';
@@ -34,6 +35,7 @@ import {
 } from '../core/Portals.js';
 import { gatewayPlacements } from '../world/dimensions/end.js';
 import { matchRecipe } from '../core/Crafting.js';
+import { SMELT_TIME, getSmeltingResult, getFuelTime } from '../core/Smelting.js';
 import { MobManager } from '../entity/MobManager.js';
 import { Mob } from '../entity/Mob.js';
 import { VoxelLightUniforms } from '../render/VoxelLight.js';
@@ -133,6 +135,7 @@ export class Game {
       if (this.chatBox && this.chatBox.input) return; // 聊天输入中不弹暂停
       if (this.inventoryScreen && this.inventoryScreen.visible) return;
       if (this.chestScreen && this.chestScreen.visible) return;
+      if (this.furnaceScreen && this.furnaceScreen.visible) return;
       if (this.tradeScreen && this.tradeScreen.visible) return;
       if (this.commandPanel && this.commandPanel.visible) return;
       if (this.pauseMenu && this.pauseMenu.visible) return;
@@ -173,6 +176,7 @@ export class Game {
       this.inventoryScreen = null;
     }
     if (this.chestScreen) { this.chestScreen.dispose(); this.chestScreen = null; }
+    if (this.furnaceScreen) { this.furnaceScreen.dispose(); this.furnaceScreen = null; }
     if (this.tradeScreen) { this.tradeScreen.dispose(); this.tradeScreen = null; }
     if (this.pauseMenu) { this.pauseMenu.el.remove(); this.pauseMenu = null; }
     if (this.deathScreen) { this.deathScreen.el.remove(); this.deathScreen = null; }
@@ -250,7 +254,7 @@ export class Game {
     
     // 恢复修改的方块/容器：V2 按维度分桶装入；V1 旧档字段直接进当前维度桶（迁移）
     if (loadData && (loadData.dimensionBlocks || loadData.dimensionContainers)) {
-      this.world.loadDimensionBuckets(loadData.dimensionBlocks, loadData.dimensionContainers);
+      this.world.loadDimensionBuckets(loadData.dimensionBlocks, loadData.dimensionContainers, loadData.dimensionFurnaces);
     } else {
       if (loadData && loadData.modifiedBlocks) {
         for (const [key, id] of Object.entries(loadData.modifiedBlocks)) {
@@ -370,6 +374,7 @@ export class Game {
     await this.hotbar.update();
     this.inventoryScreen = new InventoryScreen(this.inventory, this.player, this);
     this.chestScreen = new ChestScreen(this);
+    this.furnaceScreen = new FurnaceScreen(this);
     this.tradeScreen = new TradeScreen(this);
     this.pauseMenu = new PauseMenu(this);
     this.deathScreen = new DeathScreen(this);
@@ -440,6 +445,7 @@ export class Game {
       if (e.code === 'KeyE') {
         if (this.paused || this.spectating || (this.deathScreen && this.deathScreen.visible)) return;
         if (this.chestScreen && this.chestScreen.visible) { this.chestScreen.hide(); return; }
+        if (this.furnaceScreen && this.furnaceScreen.visible) { this.furnaceScreen.hide(); return; }
         if (this.tradeScreen && this.tradeScreen.visible) { this.tradeScreen.hide(); return; }
         if (this.inventoryScreen) {
           this.inventoryScreen.toggle(2);
@@ -484,6 +490,10 @@ export class Game {
         if (this.inventoryScreen && this.inventoryScreen.visible) return;
         if (this.chestScreen && this.chestScreen.visible) {
           this.chestScreen.hide();
+          return;
+        }
+        if (this.furnaceScreen && this.furnaceScreen.visible) {
+          this.furnaceScreen.hide();
           return;
         }
         if (this.tradeScreen && this.tradeScreen.visible) {
@@ -677,6 +687,9 @@ export class Game {
     if (this.waterTexture) {
       this.waterTexture.offset.y = (this.waterTexture.offset.y + dt * 0.06) % 1;
     }
+    // 熔炉烧炼推进（所有已开炉状态；界面可见时同步刷新进度显示）
+    this.updateFurnaces(dt);
+    if (this.furnaceScreen && this.furnaceScreen.visible) this.furnaceScreen.tick();
     // 滚轮切换
     if (this.controls.wheelDelta !== 0) {
       let idx = this.inventory.hotbarSelected + this.controls.wheelDelta;
@@ -879,6 +892,67 @@ export class Game {
     if (this.networkMode && this.net) this.net.sendContainerSet(pos.x, pos.y, pos.z, items);
   }
 
+  // 熔炉烧炼推进：遍历当前维度全部已开炉状态（惰性创建，只有打开过/放料过的炉子在表里）
+  // 语义对齐原版：燃料燃尽暂停（进度保温缓慢回退）、输出槽同类未满才续烧、燃料点燃即扣 1 个
+  updateFurnaces(dt) {
+    if (!this.world || !this.world.furnaces) return;
+    for (const [, st] of this.world.furnaces) {
+      const recipe = st.input ? getSmeltingResult(st.input.name) : null;
+      const canSmelt = !!(recipe && (!st.output ||
+        (st.output.name === recipe.output && st.output.count + recipe.count <= 64)));
+      if (st.burnTime > 0) st.burnTime -= dt;
+      // 点火：火焰熄了但还能烧且有燃料
+      if (st.burnTime <= 0 && canSmelt && st.fuel) {
+        const ft = getFuelTime(st.fuel.name);
+        if (ft > 0) {
+          st.burnMax = ft;
+          st.burnTime = ft;
+          st.fuel.count--;
+          if (st.fuel.count <= 0) st.fuel = null;
+        }
+      }
+      if (st.burnTime > 0 && canSmelt) {
+        st.cookTime += dt;
+        // 有界循环：大步长 dt（卡顿/追赶）也能连续产出，不积压 cookTime
+        let guard = 0;
+        while (st.cookTime >= SMELT_TIME && guard++ < 64) {
+          const r = st.input ? getSmeltingResult(st.input.name) : null;
+          if (!r || (st.output && (st.output.name !== r.output || st.output.count + r.count > 64))) break;
+          st.cookTime -= SMELT_TIME;
+          if (st.output) st.output.count += r.count;
+          else st.output = { name: r.output, count: r.count, data: null };
+          st.input.count--;
+          if (st.input.count <= 0) st.input = null;
+        }
+        if (!st.input) st.cookTime = 0; // 断料清进度（原版语义）
+      } else if (st.cookTime > 0) {
+        // 熄火/断料：进度缓慢回退而不是瞬间清零
+        st.cookTime = Math.max(0, st.cookTime - dt * 2);
+      }
+    }
+  }
+
+  // 挖毁熔炉：清理状态 + 内容物散落（箱子同款语义），关掉正开着的炉界面
+  _breakFurnace(block) {
+    const st = this.world.getFurnace(block.x, block.y, block.z);
+    this.world.removeFurnace(block.x, block.y, block.z);
+    if (this.furnaceScreen && this.furnaceScreen.visible && this.furnaceScreen.pos &&
+        this.furnaceScreen.pos.x === block.x && this.furnaceScreen.pos.y === block.y &&
+        this.furnaceScreen.pos.z === block.z) {
+      this.furnaceScreen.hide();
+    }
+    if (!st) return;
+    for (const s of [st.input, st.fuel, st.output]) {
+      if (!s) continue;
+      if (this.networkMode && this.net) {
+        this.net.sendDropSpawn(block.x + 0.5, block.y + 0.5, block.z + 0.5, s.name, s.count);
+      } else if (this.mobManager) {
+        this.mobManager.spawnDrop(
+          new THREE.Vector3(block.x + 0.5, block.y + 0.5, block.z + 0.5), s.name, s.count);
+      }
+    }
+  }
+
   updateRaycast() {
     const origin = this.player.position.clone();
     origin.y += 1.62;
@@ -923,6 +997,7 @@ export class Game {
   handleMouseInput(dt) {
     if (this.inventoryScreen && this.inventoryScreen.visible) return;
     if (this.chestScreen && this.chestScreen.visible) return;
+    if (this.furnaceScreen && this.furnaceScreen.visible) return;
     if (this.tradeScreen && this.tradeScreen.visible) return;
     if (!this.selectedBlock && !(this.controls.mouseLeft && this.mobManager)) return;
     
@@ -964,6 +1039,7 @@ export class Game {
       if (this.player.creative) {
         if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
         if (def.name === 'chest') this._breakChest(hit.block, false);
+        if (def.name === 'furnace') this._breakFurnace(hit.block);
         if (def.name === 'end_crystal') this._breakCrystal(hit.block.x, hit.block.y, hit.block.z);
         this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
         removeConnectedPortals(this.world, hit.block.x, hit.block.y, hit.block.z);
@@ -986,6 +1062,7 @@ export class Game {
         if (this.breakingProgress >= 1) {
           if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
           if (def.name === 'chest') this._breakChest(hit.block, true);
+          if (def.name === 'furnace') this._breakFurnace(hit.block);
           if (def.name === 'end_crystal') this._breakCrystal(hit.block.x, hit.block.y, hit.block.z);
           this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
           removeConnectedPortals(this.world, hit.block.x, hit.block.y, hit.block.z);
@@ -1023,6 +1100,15 @@ export class Game {
           this.controls.mouseRight = false;
           return;
         }
+      }
+
+      // 右键熔炉打开熔炉界面（方块交互优先于手持食物食用，与原版一致）
+      const furnaceHit = this.selectedBlock;
+      const furnaceDef = furnaceHit ? BlockRegistry.getById(furnaceHit.id) : null;
+      if (furnaceDef && furnaceDef.name === 'furnace' && this.furnaceScreen && !this.player.spectator) {
+        this.furnaceScreen.show(furnaceHit.block.x, furnaceHit.block.y, furnaceHit.block.z);
+        this.controls.mouseRight = false;
+        return;
       }
 
       const hit = this.selectedBlock;
@@ -1561,6 +1647,8 @@ export class Game {
     const contBuckets = {};
     for (const [d, m] of this.world.dimensionContainers) contBuckets[d] = Object.fromEntries(m);
     if (dimContainersOverride) contBuckets[dim] = dimContainersOverride;
+    const furnBuckets = {};
+    for (const [d, m] of this.world.dimensionFurnaces) furnBuckets[d] = Object.fromEntries(m);
     const playerData = {
       yaw: p.yaw, pitch: p.pitch, health: p.health, food: p.food,
       saturation: p.saturation, exhaustion: p.exhaustion,
@@ -1587,6 +1675,7 @@ export class Game {
       inventory: this.inventory.serialize(),
       dimensionBlocks: dimBuckets,
       dimensionContainers: contBuckets,
+      dimensionFurnaces: furnBuckets,
       redstone: this.redstone ? this.redstone.serialize() : null,
       sky: { time: this.sky ? this.sky.time : 0.35 }
     };

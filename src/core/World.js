@@ -18,8 +18,10 @@ export class World {
     //（切换维度 = 整体重建 World，指针永不跨维度换绑）
     this.dimensionBlocks = new Map();     // dimId -> Map("x,y,z" -> 方块 id)
     this.dimensionContainers = new Map(); // dimId -> Map("x,y,z" -> 27 槽数组)
+    this.dimensionFurnaces = new Map();   // dimId -> Map("x,y,z" -> 熔炉状态 {input,fuel,output,burnTime,burnMax,cookTime})
     this.modifiedBlocks = this.dimBucket(this.dimensionBlocks);
     this.containers = this.dimBucket(this.dimensionContainers);
+    this.furnaces = this.dimBucket(this.dimensionFurnaces);
     // T5 容器：打开时惰性生成（结构箱子按 (seed,表名,坐标) 确定性 loot），
     // 玩家改动即落 Map（存档持久化；联机经 container_set 广播收敛）
     this.onLocalBlockChange = null;  // 本地发起方块修改回调 (x,y,z,id)，由 NetworkManager 注册（联机上报）
@@ -34,7 +36,7 @@ export class World {
   }
 
   // 从存档/换维数据装入全部维度桶，并把当前维度指针指向对应桶
-  loadDimensionBuckets(blocksObj, containersObj) {
+  loadDimensionBuckets(blocksObj, containersObj, furnacesObj = null) {
     for (const [dim, entries] of Object.entries(blocksObj || {})) {
       const m = new Map();
       for (const [k, v] of Object.entries(entries || {})) m.set(k, v | 0);
@@ -47,8 +49,18 @@ export class World {
       }
       this.dimensionContainers.set(dim, m);
     }
+    if (furnacesObj) {
+      for (const [dim, entries] of Object.entries(furnacesObj)) {
+        const m = new Map();
+        for (const [k, v] of Object.entries(entries || {})) {
+          if (v && typeof v === 'object') m.set(k, v);
+        }
+        this.dimensionFurnaces.set(dim, m);
+      }
+    }
     this.modifiedBlocks = this.dimBucket(this.dimensionBlocks);
     this.containers = this.dimBucket(this.dimensionContainers);
+    this.furnaces = this.dimBucket(this.dimensionFurnaces);
   }
 
   key(cx, cz) { return `${cx},${cz}`; }
@@ -176,6 +188,28 @@ export class World {
 
   removeContainer(x, y, z) {
     this.containers.delete(World.containerKey(x, y, z));
+  }
+
+  // ── 熔炉状态（单机持久化；打开时惰性创建，进度随 Game.update 推进）──
+  static furnaceKey(x, y, z) { return `${x},${y},${z}`; }
+
+  getFurnace(x, y, z) {
+    return this.furnaces.get(World.furnaceKey(x, y, z)) || null;
+  }
+
+  // 取（或建）熔炉状态：新建返回默认空状态并落账本（打开过的熔炉进存档）
+  getOrOpenFurnace(x, y, z) {
+    const k = World.furnaceKey(x, y, z);
+    let st = this.furnaces.get(k);
+    if (!st) {
+      st = { input: null, fuel: null, output: null, burnTime: 0, burnMax: 0, cookTime: 0 };
+      this.furnaces.set(k, st);
+    }
+    return st;
+  }
+
+  removeFurnace(x, y, z) {
+    this.furnaces.delete(World.furnaceKey(x, y, z));
   }
 
   // 获取高度图（用于玩家生成位置；仅主世界生成器有此语义）

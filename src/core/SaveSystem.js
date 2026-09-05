@@ -43,6 +43,7 @@ export class SaveSystem {
         inventory: game.inventory.serialize(),
         dimensionBlocks: serializeDimBuckets(game.world.dimensionBlocks),
         dimensionContainers: serializeDimBuckets(game.world.dimensionContainers),
+        dimensionFurnaces: serializeDimBuckets(game.world.dimensionFurnaces),
         dragonDefeated: !!game.world.dragonDefeated, // 末影龙击败标记（进末地是否再生成龙）
         redstone: game.redstone ? game.redstone.serialize() : null,
         sky: { time: game.sky.time || 0 }
@@ -66,6 +67,7 @@ export class SaveSystem {
         data.dimension = 'overworld';
         data.dimensionBlocks = { overworld: data.modifiedBlocks || {} };
         data.dimensionContainers = { overworld: data.containers || {} };
+        data.dimensionFurnaces = {}; // V1 无熔炉状态
       } else if (data.version !== SAVE_VERSION) {
         console.warn(`存档槽 ${slot} 版本不匹配`);
         return null;
