@@ -758,6 +758,7 @@ export class Game {
 
     // 传送门穿越检测（所有模式；观战/死亡在函数内早退）
     this.updatePortals(dt);
+    this.updatePortalParticles(dt);
 
     // 自动保存（联机模式不自动保存，避免覆盖本地槽位）
     if (!this.networkMode) {
@@ -1193,6 +1194,30 @@ export class Game {
       if (this.portalOverlay) this.portalOverlay.update(kindIn, 1);
       if (kindIn === 'gateway') this._useGatewayPortal();
       else this._usePortal(kindIn);
+    }
+  }
+
+  // 传送门环境粒子（M3）：从已加载区块的 portalCells 随机抽样发射（mesh build 时收集，与方块数据同步）。
+  // 纯视觉客户端本地效果，不进存档/协议；密度随视频设置 densityScale 缩放。
+  updatePortalParticles(dt) {
+    if (!this.fireParticles || !this.world || this.paused) return;
+    this._portalPartT = (this._portalPartT || 0) + dt;
+    if (this._portalPartT < 0.04) return;
+    this._portalPartT = 0;
+    const cand = [];
+    for (const [, chunk] of this.world.chunks) {
+      if (chunk.portalCells && chunk.portalCells.length) cand.push(chunk);
+    }
+    if (!cand.length) return;
+    const n = Math.max(1, Math.round(4 * this.fireParticles.densityScale));
+    for (let k = 0; k < n; k++) {
+      const chunk = cand[(Math.random() * cand.length) | 0];
+      const cells = chunk.portalCells;
+      const i = ((Math.random() * cells.length) / 3 | 0) * 3;
+      const wx = chunk.cx * CHUNK_SIZE + cells[i], wy = cells[i + 1], wz = chunk.cz * CHUNK_SIZE + cells[i + 2];
+      const def = BlockRegistry.getById(this.world.getBlock(wx, wy, wz));
+      if (!def || !def.ambientParticles) continue; // 方块可能已被改动（mesh 尚未重建）
+      this.fireParticles.portalAmbient(wx, wy, wz, def.name);
     }
   }
 

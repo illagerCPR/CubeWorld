@@ -31,6 +31,7 @@ function register(def) {
     light: def.light ?? 0,
     fluid: def.fluid ?? false,
     renderType: def.renderType || 'cube',
+    ambientParticles: def.ambientParticles ?? false,
     color: def.color || null
   };
   blocks.set(id, block);

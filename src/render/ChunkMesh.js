@@ -187,6 +187,8 @@ export class ChunkMeshBuilder {
     this._curChunk = chunk;
     this._fillCache(chunk);
     this._refreshOpaqueLUT();
+    // 环境粒子发射点（M3）：每次 build 重建，与方块数据天然同步（portal 增删必触发脏重建）
+    chunk.portalCells = null;
 
     const positions = [];
     const normals = [];
@@ -226,6 +228,10 @@ export class ChunkMeshBuilder {
           if (id === 0) continue;
           const def = BlockRegistry.getById(id);
           if (!def) continue;
+          if (def.ambientParticles) {
+            if (!chunk.portalCells) chunk.portalCells = [];
+            chunk.portalCells.push(x, y, z);
+          }
           if (def.renderType === 'portal') {
             // 传送门薄片：门面方向按水平邻格推断，相邻门格薄片共面连成整幕（无 cross 对角锯齿）。
             // 只画 light mesh 一份（portal light:13 自发光幕，昼夜恒亮、原版语义）——

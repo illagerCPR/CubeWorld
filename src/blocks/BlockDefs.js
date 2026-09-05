@@ -865,7 +865,7 @@ function endPortalTex(seed) {
   }
   return pixelSvg(px);
 }
-reg('end_portal', { displayName: '末地传送门', solid: false, transparent: true, light: 15, hardness: -1 }, { end_portal: endPortalTex(100) });
+reg('end_portal', { displayName: '末地传送门', solid: false, transparent: true, light: 15, hardness: -1, ambientParticles: true }, { end_portal: endPortalTex(100) });
 
 // 苔石砖：石砖基底 + 苔斑侵蚀（要塞材质）
 function stoneBricksMossyTex(seed) {
@@ -1033,8 +1033,8 @@ function aetherPortalTex(seed) {
   return pixelSvg(px);
 }
 
-reg('nether_portal', { displayName: '下界传送门', solid: false, transparent: true, renderType: 'portal', light: 13, hardness: 0.1 }, { nether_portal: netherPortalTex(97) });
-reg('aether_portal', { displayName: '天域传送门', solid: false, transparent: true, renderType: 'portal', light: 13, hardness: 0.1 }, { aether_portal: aetherPortalTex(98) });
+reg('nether_portal', { displayName: '下界传送门', solid: false, transparent: true, renderType: 'portal', light: 13, hardness: 0.1, ambientParticles: true }, { nether_portal: netherPortalTex(97) });
+reg('aether_portal', { displayName: '天域传送门', solid: false, transparent: true, renderType: 'portal', light: 13, hardness: 0.1, ambientParticles: true }, { aether_portal: aetherPortalTex(98) });
 reg('torch', { displayName: '火把', transparent: true, light: 14, hardness: 0, renderType: 'cross', solid: false },
   { torch: (function () { const px = makeTex();
     // 火把：上半黄色火，下半棕色棍
@@ -1090,7 +1090,7 @@ reg('dragon_egg', { displayName: '龙蛋', hardness: 3, tool: 'pickaxe' }, { dra
   return pixelSvg(px); })()
 });
 // 末地折跃门：龙败后在主岛缘/外岛缘生成（基岩框内嵌光束；踩入触发同维传送）
-reg('end_gateway', { displayName: '末地折跃门', transparent: true, solid: false, light: 15, hardness: -1, renderType: 'cross' },
+reg('end_gateway', { displayName: '末地折跃门', transparent: true, solid: false, light: 15, hardness: -1, renderType: 'cross', ambientParticles: true },
   { end_gateway: (function () { const px = makeTex();
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
       const beam = Math.abs(x - 8) < 2 + (y % 3);

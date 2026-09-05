@@ -11,6 +11,14 @@ const TILE = 16; // 图集 cell 尺寸（TEX_SIZE）
 const FIRE_A = [1.0, 0.92, 0.35];
 const FIRE_B = [0.95, 0.45, 0.05];
 
+// 传送门粒子色板（暗 → 亮双色随机插值；自发光不做体素光衰减；亮端高于门幕底色保证可见）
+const PORTAL_TINTS = {
+  nether_portal: [[0.72, 0.35, 1.00], [1.00, 0.88, 1.00]],
+  aether_portal: [[1.00, 0.95, 0.70], [1.00, 1.00, 1.00]],
+  end_portal: [[0.45, 0.95, 0.70], [0.85, 1.00, 0.95]],
+  end_gateway: [[0.85, 0.75, 1.00], [1.00, 1.00, 1.00]],
+};
+
 export class ParticleSystem {
   // size: 点精灵世界尺寸；atlasTexture.image 为图集 canvas（取色源）
   constructor(scene, atlasTexture, atlasUV, size = 0.12, maxParticles = 1600) {
@@ -132,6 +140,23 @@ export class ParticleSystem {
         (Math.random() - 0.5) * 2, Math.random() * 2 + 0.5, (Math.random() - 0.5) * 2,
         Math.min(1, r * light), Math.min(1, g * light), Math.min(1, b * light),
         0.3 + Math.random() * 0.25, -13, 0.99
+      );
+    }
+  }
+
+  // 传送门环境粒子（M3）：方块格内随机飘动上浮，自发光（夜里也可见）
+  portalAmbient(bx, by, bz, name) {
+    const tint = PORTAL_TINTS[name] || [[0.8, 0.5, 0.95], [1, 1, 1]];
+    const n = Math.max(1, Math.round(2 * this.densityScale));
+    for (let k = 0; k < n; k++) {
+      const t = Math.random();
+      const r = tint[0][0] + (tint[1][0] - tint[0][0]) * t;
+      const g = tint[0][1] + (tint[1][1] - tint[0][1]) * t;
+      const b = tint[0][2] + (tint[1][2] - tint[0][2]) * t;
+      this.spawn(
+        bx + 0.15 + Math.random() * 0.7, by + 0.15 + Math.random() * 0.7, bz + 0.15 + Math.random() * 0.7,
+        (Math.random() - 0.5) * 0.4, 0.3 + Math.random() * 0.5, (Math.random() - 0.5) * 0.4,
+        r, g, b, 0.6 + Math.random() * 0.8, 0.15, 0.96
       );
     }
   }
