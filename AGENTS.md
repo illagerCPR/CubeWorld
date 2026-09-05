@@ -388,3 +388,11 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **材质重绘结构**：`BlockDefs.js` 用 `makeTex/setPx/fillRect/rgb([r,g,b],f)/hash2` 像素画工具 + 三色噪声 `noiseTex`（基色为主 + 暗/亮碎点 + 轻微抖动）+ 2×2 斑驳 `blotchTex`，结构化图案（圆石砌块错位、石砖大砖受光边、红砖交错缝、木板拼条端缝、原木年轮、矿石晶簇高光/阴影点、TNT 白带字样、工作台网格、熔炉炉口、砂岩分层）按原版配色校准。注册名 / textures key / SVG 管线未变；`redstone_block` 双注册已清理（保留 light 0）。
 - **水体纹理平铺**：`waterTex` 的波纹用 `sin(x*π/8 + y*π/4)`（16 的整数分频周期）保证世界坐标 RepeatWrapping 平铺无缝，勿改回非周期函数。
 - **验证**：`node --check` + `npm run build`（45 模块）+ agent-browser 冒烟（创造物品栏一屏全图标核对 + 16 种方块阵列特写 + 摆放荧石后 `sky.time` 持续推进无冻结）。
+
+### JEI 伴随面板批次备忘（防回退）—— 容器界面内嵌配方查询（原独立浮层已改版）
+
+- **RecipeViewer 是"伴随面板"非独立浮层**：`updateFrame()` 每帧（Game.update 内）同步 `containerVisible`（inventory/chest/furnace/trade 四 screen 任一 visible）；`visible = containerVisible && userEnabled`（J 键偏好，localStorage `cubeworld-jei-panel-enabled`）。**不再接管 controls / 不进 ESC、handleMouseInput、pauseOnUnlock guard 登记**（随容器界面显隐，容器界面自身已处理指针与按键）——勿回退为给 Game 四处 guard 加 recipeViewer。
+- **新增容器类 UI 必须把它的 visible 加进 `RecipeViewer.updateFrame` 的 containerVisible 检测**，否则面板不跟随新界面显隐。
+- **J 键双语义**：容器界面打开时 `togglePanel()`；无容器界面时打开背包（面板随之自动出现）。R/U 作用目标优先级：面板内 `_hoverName` > `game._uiHoverName()`（容器内悬浮）> `current`（弹窗当前物品），全在 `_actionTarget()` 一处；showFor/showUsages 内 `_ensureShown()`——面板被 J 关闭时主动查询配方会重新启用面板。
+- **布局**：右缘竖条（搜索 + 左收藏夹列 + 右全物品网格，fixed right:6px，z-index 35）；配方详情弹窗在竖条左侧（`popEl`，right:214px），显示条件 `current && _shown`，✕ 关闭；点物品/配方材料格继续导航，右键=用途，A 收藏（localStorage `cubeworld-jei-favorites` 全局持久）。
+- **冒烟注意**：eval 内 show/toggle 后面板 DOM 状态下一帧才被 updateFrame 刷新，同步断言会假阴性——sleep ≥0.3s 再断言；物品名在 `title` 属性不在 innerText。
