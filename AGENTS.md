@@ -322,6 +322,22 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **测试**：`tests/nether-fortress.mjs`（36 断言×2 seeds：维度作用域/记录自洽/布局确定性/区块落地/要塞表确定性）与 `tests/nether-mobs.mjs`（70 断言：类型注册/模型盒一致/生成表分布/中立悬浮标记/全类型可构造）接入 run-all-tests.sh。
 
 
+### 末地完善批次备忘（防回退）—— 外岛锚点场 / 末影龙 / 龙败奖励链 / 末地城 / 传送门特效
+
+- **外岛锚点场**：`end.js` 外岛从噪声阈值场改为模仿原版 island origin——96 格网格 per-cell `_cellHash` 派生 0-2 个岛心（58% cell 有岛），半径 24-40/顶面 55-74，圆锥+透镜剖面 + 角度域 (cos,sin) fbm 边缘扰动（per-anchor 偏移保证岛间独立）。`_anchorCache` memoization 上限 4096 清空。群系分界：`outer.rad ≥ HIGHLANDS_MIN_R(28)` = end_highlands（末地城候选）否则 small_end_islands；**主岛与柱环逻辑零改动**（出生/龙战链依赖）。`outerAnchors()` 主岛外圈锚点表（角度有序）是折跃门选址唯一来源——勿在别处另造锚点。
+- **末影龙**：`DragonAI.js` 三态状态机（circle 盘旋 r30/h88 引导点切向飞行 → dive 周期俯冲 1.7x 速 → perch 低血<40% 栖息最近存活水晶柱顶回血 4/s）。`Mob.update` dragon 专用分支全接管（不走通用索敌链）。柱顶 = 基岩底座 + `end_crystal`（light 15）；水晶存活查询 `getBlock(p.x, p.top+2, p.z)`——**柱顶+2 是硬约定**（end.js 与 DragonAI 两处依赖）。水晶击碎爆炸走 `Game._breakCrystal`（复用 mobManager.pendingExplosions 破坏路径 + 距离衰减伤害）。**末地/天域 trySpawn 直接 return**（末地唯一敌人是龙）——勿回退主世界表。
+- **龙败链路**：`MobManager._fireDragonDefeated` 幂等（dragonDefeatedFired 标记），本地死亡链 + applyRemoteMobAttack 致死 + applyRemoteMobDeath 三个入口都挂（远端死亡链 diedHandled 已置 true，只在 diedHandled 分支挂会漏远端）。击败判定 = `world.dragonDefeated`（会话态）OR `_endPadExists()`（账本 16 格内 end_portal——跨会话/联机一致）；**击败标记持久化三处同改**：SaveSystem.save / _composeSwitchLoadData / start 恢复（漏一处=换维或存档后龙复活）。
+- **末地回程门语义（M3 起变更）**：到达末地**不再自动建回程垫**（`_afterPortalArrival` 无坐标分支已移除 `_ensureEndReturnPad`）——龙败 `_activateEndRewards` 才建（喷泉造型 `buildEndReturnPad({fountain:true})` 中央 3 格基岩柱，站位偏门环西列防嵌柱）。portals-unit 旧断言按无喷泉默认参数不受影响。
+- **折跃门（gateway）**：`PORTAL_KINDS.gateway`（frame bedrock / portal end_gateway）+ `DIM_PORTAL_KINDS.end = ['end','gateway']`；`end_gateway` cross 非固体发光 hardness -1。选址 `gatewayPlacements(anchors, 4)` 纯函数（角度均布 4 对：主岛缘 r50 ↔ 外岛锚点边缘）——**两端门角度一致是 `gatewayTarget` 角度最近配对的前提**。站入触发：updatePortals gateway 分支探测**脚下格**（`cellId(-0.3)`，门嵌地面层 solid:false 陷入即踩）+ 1s 阈值；传送 `_useGatewayPortal` 账本扫描角度最近门直达（同维不换维，armed/cooldown 防回弹沿用）。`_ensureGateways` 幂等：账本已有 end_gateway 即全跳过。
+- **末地死亡重生**：`respawn()` 末地分支 `switchDimension('overworld')`（异步串行链，落主世界出生点，背包经 loadData 保留）——防败龙前死亡软锁末地；勿回退为"重生当前维度出生点"。
+- **末地城**：`endCity.js` END_CITY_DEF（cell16/chance0.6/attempts2，dims:['end']）——选址门 end_highlands + 9 列平坦全距≤8（外岛 fbm 扰动天然落差，结构后写覆盖地形，低侧悬空=原版悬浮基座风格；**全距门勿收紧回 6**——seed 20250903 会 0 接受）；布局=末地砖底台+双层紫珀塔（南门/三级阶梯）+战利品房 2 箱+紫颂花园，rng 门 40% 末地船（货舱+船长箱）。`meta.shulkerSpawns` 确定性点位供 MobManager 生成。loot 三表 + `FORCED` 必出机制（end_ship_captain 鞘翅保底；**FORCED 消耗同一 rng 流**，旧表无条目流不变——勿改 chestLoot 抽取顺序）。
+- **潜影贝**：`MobTypes.shulker`（stationary，speed 0 原地附着）+ `Mob.updateShulker`——0.6s 蓄力（hitFlash 复用为紫闪提示）→ hasLineOfSight 直线判定命中（4 伤+击退），射击间隔 2.5s；**无投射物实体**（躲墙后=躲弹，玩家实测墙后不命中是设计行为）。生成走 `updateEndCitySpawns`（仿村民：host 权威广播 / spawnedEndCities 去重 / 随城清扫全端>200 格）。
+- **紫颂果**：chorus_fruit food:4，`Game._chorusTeleport` ±8 格随机落点下探安全立地面（找不到=不传送不垫台）；velocity 清零即防摔伤（本作摔落伤害按落地瞬时速度算，无 fallDistance 累积——勿臆造字段）。
+- **传送门屏幕特效**：`PortalOverlay.js` 纯表现层（只读 kind+progress，**不干预三件套**）；径向 vignette + conic 漩涡 + 末地系星点层，opacity=0.25+progress*0.75 线性渐强、离门 0.18s 渐隐；白闪 flash() 用 offsetWidth 重启动画；updatePortals 各早退分支（cooldown/未武装/离门）统一喂 update(null,0)——**未武装（到达站位在门内）不显特效**是防回弹语义的一部分。
+- **测试**：`tests/end-islands.mjs`（181 断言：群系在场/密度带宽/锚点确定性/群系→方块单一来源）+ `tests/end-dragon.mjs`（104 断言：类型/柱顶水晶×2 seeds/DragonAI 六场景/击败幂等/末地门控）+ `tests/end-gateway.mjs`（41 断言：折跃门注册/选址/建门/角度配对/喷泉布局/幂等门控）+ `tests/end-city.mjs`（111 断言：注册/漏斗/落地/箱子三向/loot 保底/双次一致）全接入 run-all-tests.sh。
+- **冒烟陷阱**：测试 eval 里建方块用 `BlockRegistry.getByName(name).id`（id 数字会变，勿硬编码 54/80——M5 冒烟曾因硬编码 id 误判"门未生成"）；站门特效采样必须先确认 `_portalArmed`（到达站位在门内时 armed=false 特效不显是正确语义）；换维窗口 10-20s，"未传送"结论前先排除窗口中。
+
+
 ### 阶段 10 关键实现备忘（防回退）—— 手持物 3D 化 + 快捷栏同步 + 掉落归属锁 + 多账号 + RTT
 
 - **手持物 3D 化**：`src/render/HeldItemMesh.js`（模板缓存进程级，clone 复用；方块=六面贴图立方体、`renderType==='cross'` 方块=交叉双面薄片、物品=双面薄片；材质 `MeshLambertMaterial` + `emissiveMap` 同贴图 0.35 自发光，夜晚可见；**勿改回 sprite billboard**）。`src/render/FirstPersonHand.js` 第一人称：**camera 必须加入 scene（`scene.add(camera)`）其子节点才渲染**（`Game.constructor` 一次性挂载，属共享型子系统——`start()` 里重置 `currentName=undefined` 强制重建）；按住左键自动连续挥动（0.3s 冷却），放置/食用/命中命中时 `hand.swing()`。`RemotePlayer._setHeld` 挂 `armR.pivot`（dispose 只 remove 不 dispose，几何/材质为共享缓存）。
