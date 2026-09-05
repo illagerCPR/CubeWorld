@@ -76,7 +76,7 @@ async function buildBlockTemplate(name, def) {
     return group;
   }
   const group = new THREE.Group();
-  if (def.renderType === 'cross') {
+  if (def.renderType === 'cross' || def.renderType === 'portal') {
     const mat = heldMaterial(sideTex);
     const p1 = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
     const p2 = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);

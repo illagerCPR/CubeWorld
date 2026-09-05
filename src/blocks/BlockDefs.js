@@ -997,7 +997,7 @@ reg('glowstone', { displayName: '荧石', light: 15, hardness: 0.3 }, { glowston
 reg('sea_lantern', { displayName: '海晶灯', light: 15, hardness: 0.3 }, { sea_lantern: seaLanternTex(96) });
 
 // --- 传送门（迭代：原版式维度传送门）---
-// cross 渲染双面薄片 + 自发光（light:13 走光源 LUT/亮块重绘管线）；solid:false 可穿行。
+// portal 渲染薄片（门面方向由水平邻格推断，双面可见）+ 自发光（light:13 走光源 LUT/亮块重绘管线）；solid:false 可穿行。
 // 框校验/点火/穿越逻辑在 src/core/Portals.js + Game.js。
 
 // 下界传送门：紫色涡流能量幕
@@ -1033,8 +1033,8 @@ function aetherPortalTex(seed) {
   return pixelSvg(px);
 }
 
-reg('nether_portal', { displayName: '下界传送门', solid: false, transparent: true, renderType: 'cross', light: 13, hardness: 0.1 }, { nether_portal: netherPortalTex(97) });
-reg('aether_portal', { displayName: '天域传送门', solid: false, transparent: true, renderType: 'cross', light: 13, hardness: 0.1 }, { aether_portal: aetherPortalTex(98) });
+reg('nether_portal', { displayName: '下界传送门', solid: false, transparent: true, renderType: 'portal', light: 13, hardness: 0.1 }, { nether_portal: netherPortalTex(97) });
+reg('aether_portal', { displayName: '天域传送门', solid: false, transparent: true, renderType: 'portal', light: 13, hardness: 0.1 }, { aether_portal: aetherPortalTex(98) });
 reg('torch', { displayName: '火把', transparent: true, light: 14, hardness: 0, renderType: 'cross', solid: false },
   { torch: (function () { const px = makeTex();
     // 火把：上半黄色火，下半棕色棍

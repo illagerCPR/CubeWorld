@@ -226,6 +226,15 @@ export class ChunkMeshBuilder {
           if (id === 0) continue;
           const def = BlockRegistry.getById(id);
           if (!def) continue;
+          if (def.renderType === 'portal') {
+            // 传送门薄片：门面方向按水平邻格推断，相邻门格薄片共面连成整幕（无 cross 对角锯齿）。
+            // 只画 light mesh 一份（portal light:13 自发光幕，昼夜恒亮、原版语义）——
+            // 若 solid+light 双份共面，斜视角深度精度不足会 z-fighting 出三角干涉纹。
+            if (def.light >= 13) {
+              lIdx = this.addPortalPane(lightPos, lightNorm, lightUv, lightCol, lightIdx, x, y, z, def, lIdx, null);
+            }
+            continue;
+          }
           if (def.renderType === 'cross') {
             this.addCross(positions, normals, uvs, colors, indices, x, y, z, def, idx, voxLight);
             idx += 4;
@@ -471,6 +480,42 @@ export class ChunkMeshBuilder {
           idx += 4;
         }
       }
+    }
+    return idx;
+  }
+
+  // 传送门薄片渲染（renderType 'portal'）：竖直满格薄片，门面法线取"宽度方向"的正交轴——
+  // 水平邻格存在同类型门方块 → 门沿该方向延展 → 薄片位于正交轴的 0.5 平面，
+  // 相邻门格薄片共面无缝拼合（替代旧 cross 对角双面：斜视角半透明锯齿 + FrontSide 背面整面消失）。
+  // 薄片画正反两组索引（材质 FrontSide，双向可见）。孤立格（四周无门格）退化画正交双片。
+  // 返回推进后的顶点索引。voxLight 非空时写入自身格光照（light mesh 传 null 跳过）。
+  addPortalPane(positions, normals, uvs, colors, indices, x, y, z, def, idx, voxLight) {
+    const isPortal = (lx, ly, lz) => {
+      const d = BlockRegistry.getById(this._solidAt(lx, ly, lz));
+      return !!(d && d.renderType === 'portal');
+    };
+    const alongX = isPortal(x + 1, y, z) || isPortal(x - 1, y, z);
+    const alongZ = isPortal(x, y, z + 1) || isPortal(x, y, z - 1);
+    // 门沿 x 延展 → 法线 z（薄片 z=0.5）；沿 z 延展 → 法线 x（薄片 x=0.5）；孤立 → 双片
+    const panes = alongX ? ['z'] : alongZ ? ['x'] : ['z', 'x'];
+    const texName = def.side;
+    const uv = this.atlasUV.get(texName) || { u0: 0, v0: 0, u1: 1, v1: 1 };
+    const skyL = voxLight ? this._skyAt(x, y, z) / 15 : 0;
+    const blkL = voxLight ? this._blockLAt(x, y, z) / 15 : 0;
+    for (const axis of panes) {
+      const corners = axis === 'z'
+        ? [[0, 0, 0.5], [0, 1, 0.5], [1, 0, 0.5], [1, 1, 0.5]]
+        : [[0.5, 0, 0], [0.5, 1, 0], [0.5, 0, 1], [0.5, 1, 1]];
+      for (const [cx, cy, cz] of corners) {
+        positions.push(x + cx, y + cy, z + cz);
+        normals.push(0, 1, 0);
+        colors.push(1, 1, 1);
+        if (voxLight) voxLight.push(skyL, blkL);
+      }
+      uvs.push(uv.u0, uv.v0, uv.u0, uv.v1, uv.u1, uv.v0, uv.u1, uv.v1);
+      indices.push(idx, idx + 1, idx + 2, idx + 2, idx + 1, idx + 3); // 正面组（-z 侧可见）
+      indices.push(idx, idx + 2, idx + 1, idx + 2, idx + 3, idx + 1); // 反面组（+z 侧可见，两三角均 CCW）
+      idx += 4;
     }
     return idx;
   }
