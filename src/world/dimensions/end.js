@@ -241,3 +241,25 @@ export class EndGenerator {
     return { x: 0.5, y: ISLAND_TOP + 2, z: 0.5 }; // 兜底：主岛顶面（理论不可达）
   }
 }
+
+// 龙败折跃门选址（纯函数 of 锚点表）：角度均布取样 n 个锚点，
+// 每锚点给一对门位——主岛缘（inner，r=50）与外岛锚点朝主岛一侧边缘（outer）。
+// 两端门角度一致 → 运行时 gatewayTarget 按"角度最近"配对传送（Portals.js）。
+export const GATEWAY_INNER_R = 50;
+export function gatewayPlacements(anchors, n = 4) {
+  const list = [];
+  const count = Math.min(n, anchors.length);
+  for (let i = 0; i < count; i++) {
+    const a = anchors[Math.floor((i * anchors.length) / count)];
+    const d = Math.hypot(a.x, a.z) || 1;
+    list.push({
+      angle: Math.atan2(a.z, a.x),
+      outer: {
+        x: Math.round(a.x - (a.x / d) * (a.rad - 3)),
+        z: Math.round(a.z - (a.z / d) * (a.rad - 3)),
+      },
+      inner: { x: Math.round((a.x / d) * GATEWAY_INNER_R), z: Math.round((a.z / d) * GATEWAY_INNER_R) },
+    });
+  }
+  return list;
+}

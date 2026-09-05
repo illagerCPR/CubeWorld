@@ -29,7 +29,9 @@ import {
   portalBlockId, portalTargetPos, detectPortalInterior, fillPortal,
   findPortalNear, buildReturnPortal, removeConnectedPortals,
   detectEndRing, fillEndPortalCenter, buildEndReturnPad,
+  buildGatewayPad, gatewayTarget,
 } from '../core/Portals.js';
+import { gatewayPlacements } from '../world/dimensions/end.js';
 import { matchRecipe } from '../core/Crafting.js';
 import { MobManager } from '../entity/MobManager.js';
 import { Mob } from '../entity/Mob.js';
@@ -1162,7 +1164,9 @@ export class Game {
     let kindIn = null;
     for (const kind of kinds) {
       const pid = portalBlockId(kind);
-      if (cellId(0.1) === pid || cellId(1.0) === pid) { kindIn = kind; break; }
+      // gateway 是"踩入式"（嵌地面层，非固体）——额外探测脚下格
+      const probes = kind === 'gateway' ? [-0.3, 0.1, 1.0] : [0.1, 1.0];
+      if (probes.some(dy => cellId(dy) === pid)) { kindIn = kind; break; }
     }
     if (!kindIn) {
       this._portalTimer = 0;
@@ -1178,10 +1182,13 @@ export class Game {
       return;
     }
     this._portalTimer += dt;
-    if (this._portalTimer >= 2.0) {
+    // 折跃门站入 1s 触发（同维传送）；下界/天域门 2s
+    const threshold = kindIn === 'gateway' ? 1.0 : 2.0;
+    if (this._portalTimer >= threshold) {
       this._portalTimer = 0;
       this._portalArmed = false;
-      this._usePortal(kindIn);
+      if (kindIn === 'gateway') this._useGatewayPortal();
+      else this._usePortal(kindIn);
     }
   }
 
@@ -1214,13 +1221,23 @@ export class Game {
     this.switchDimension(target, arrival);
   }
 
+  // 折跃门传送（末地同维）：不换维，账本扫描"角度最近"的配对门直达
+  //（两端门角度一致由 gatewayPlacements 保证；armed/cooldown 防回弹由 updatePortals 统一处理）
+  _useGatewayPortal() {
+    const p = this.player.position;
+    const target = gatewayTarget(this.world, p.x, p.z);
+    if (!target) return;
+    p.set(target.x + 0.5, target.y + 1, target.z + 0.5);
+    this.player.velocity.set(0, 0, 0);
+    if (this.chatBox) this.chatBox.add('折跃门的光束把你送往远方的岛屿……', '#a7f');
+  }
+
   // 传送门到达落地：有坐标落点 → 半径 24 搜既有同类门吸附、无门自动建返程门（原版语义）；
-  // 无坐标落点（末地链）→ 到末地时在出生点旁确保回程垫，回主世界无需建
+  // 无坐标落点（末地链）→ 仅落维度出生点（M3 起回程门由击败末影龙激活，到达不再自动建垫）
   _afterPortalArrival(arrival) {
     if (!this.world || !this.running) return;
     const kind = arrival.portal && PORTAL_KINDS[arrival.portal] ? arrival.portal : null;
     if (!Number.isFinite(arrival.x) || !Number.isFinite(arrival.z)) {
-      if (kind === 'end' && this.world.dimension === 'end') this._ensureEndReturnPad();
       this._portalCooldown = 4;
       this._portalArmed = false;
       return;
@@ -1242,31 +1259,40 @@ export class Game {
     this._portalArmed = false;
   }
 
-  // 末地出生点旁的回程门垫：16 格内已有 end_portal 则跳过（重连/多端幂等），
-  // 否则在出生点偏移 ~5 格建造（防出生即踩回程门）
+  // 末地出生点旁的回程门垫（龙败激活，原版喷泉基座造型）：
+  // 16 格内已有 end_portal 则跳过（重连/多端幂等），否则在出生点偏移 ~5 格建造
   _ensureEndReturnPad() {
+    if (this._endPadExists()) return;
     const w = this.world;
     const sp = w.getSpawnPoint();
-    const EP = BlockRegistry.getId('end_portal');
-    for (const [k, id] of w.modifiedBlocks) {
-      if (id !== EP) continue;
-      const p = k.split(',');
-      if ((+p[0] - sp.x) ** 2 + (+p[2] - sp.z) ** 2 <= 256) return;
-    }
     buildEndReturnPad(w, Math.floor(sp.x) + 4, Math.floor(sp.z) + 4, {
       top: w.dimDef.spawnScanTop || 140,
       platformY: 64,
+      fountain: true,
     });
-    if (this.chatBox) this.chatBox.add('出生点旁出现了一座回程门垫——踩上去返回主世界', '#a7f');
+    if (this.chatBox) this.chatBox.add('主岛中心升起基岩喷泉——踩上门垫返回主世界', '#a7f');
+  }
+
+  // 出生点 16 格内是否已有激活回程门（_ensureEndReturnPad 与 _ensureDragon 共用）
+  _endPadExists() {
+    const w = this.world;
+    const EP = BlockRegistry.getId('end_portal');
+    const sp = w.getSpawnPoint();
+    for (const [k, id] of w.modifiedBlocks) {
+      if (id !== EP) continue;
+      const p = k.split(',');
+      if ((+p[0] - sp.x) ** 2 + (+p[2] - sp.z) ** 2 <= 256) return true;
+    }
+    return false;
   }
 
   // 末地开局生成末影龙（未击败时；单机/host 权威生成，联机经 mob_spawn 广播）
-  // 击败标记 M2 为会话态（world.dragonDefeated）；M3 接管为主岛返回门账本判定（服务器权威持久化）
+  // 击败判定：会话标记 OR 账本内已有回程门（跨会话/联机一致——门方块账本服务器权威持久化）
   _ensureDragon() {
     if (!this.world || this.world.dimension !== 'end') return;
     if (!this.mobManager) return;
     if (this.networkMode && this.net && !this.net.isHost) return; // 联机非 host 等广播
-    if (this.world.dragonDefeated) return;
+    if (this.world.dragonDefeated || this._endPadExists()) return;
     if (this.mobManager.mobs.some(m => m.typeName === 'dragon' && !m.dead)) return;
     const mob = new Mob('dragon', this.world);
     // 出生在柱环外缘上空（主岛中心偏移，盘旋半径与 DragonAI.CIRCLE_R 对齐）
@@ -1279,11 +1305,36 @@ export class Game {
     if (this.chatBox) this.chatBox.add('末影龙的咆哮在虚空回荡……', '#c5f');
   }
 
-  // 末影龙被击败：置标记（M2）；M3 在此激活主岛返回门 + 生成折跃门
+  // 末影龙被击败：置标记 + 激活末地奖励（返回门喷泉 + 主岛缘/外岛缘折跃门阵列）
+  // 各端独立触发（本地死亡链/远端同步入口）——建门幂等（账本已有即跳过），位置确定性保证一致
   _onDragonDefeated(mob) {
     if (!this.world) return;
     this.world.dragonDefeated = true;
     if (this.chatBox) this.chatBox.add('末影龙被击败了！', '#c5f');
+    if (this.world.dimension === 'end') this._activateEndRewards();
+  }
+
+  // 龙败奖励：① 出生点旁激活基岩喷泉返程门（踩上回主世界）
+  //           ② 主岛缘 + 外岛缘折跃门阵列（角度配对，站入同维传送）
+  _activateEndRewards() {
+    this._ensureEndReturnPad();
+    this._ensureGateways();
+  }
+
+  // 折跃门阵列（幂等：账本已有 end_gateway 即跳过）
+  _ensureGateways() {
+    const GW = BlockRegistry.getId('end_gateway');
+    for (const [, id] of this.world.modifiedBlocks) {
+      if (id === GW) return;
+    }
+    const anchors = this.world.generator && typeof this.world.generator.outerAnchors === 'function'
+      ? this.world.generator.outerAnchors() : [];
+    if (!anchors.length) return;
+    for (const place of gatewayPlacements(anchors, 4)) {
+      buildGatewayPad(this.world, place.inner.x, place.inner.z, { top: 140, platformY: 64 });
+      buildGatewayPad(this.world, place.outer.x, place.outer.z, { top: 140, platformY: 64 });
+    }
+    if (this.chatBox) this.chatBox.add('主岛边缘升起了数座折跃门——它们通向外岛', '#a7f');
   }
 
   // 末影水晶被击碎：范围爆炸（复用怪物爆炸破坏路径）+ 按距离衰减伤害
@@ -1375,6 +1426,19 @@ export class Game {
     this.player.exhaustion = 0;
     this.player.onFire = 0;
     this.player.invulnerable = 0;
+    // 末地死亡回主世界重生（原版语义；防"败龙前死亡软锁在末地"）：
+    // switchDimension 重建世界并落主世界出生点（背包/账本经 loadData 保留）
+    if (this.world && this.world.dimension === 'end') {
+      this.switchDimension('overworld');
+      if (this.spectating) {
+        this.spectating = false;
+        this.spectateTargetId = null;
+        this._specSmoothed = null;
+        if (this._preSpectateMode && this.player.spectator) this.player.setMode(this._preSpectateMode);
+        this._preSpectateMode = null;
+      }
+      return;
+    }
     // 重生到当前维度出生点（跨维度回主世界重生需重建世界，此处不切换维度）
     const sp = this.world.getSpawnPoint();
     this.player.position.set(sp.x, sp.y, sp.z);

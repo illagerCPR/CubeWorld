@@ -5,10 +5,12 @@ import { CHUNK_HEIGHT } from './Chunk.js';
 
 // 传送门种类：框材料 → 门方块。下界=黑曜石框，天域=萤石框（迭代决策：原版方式）。
 // 末地=end_portal（要塞逐框嵌眼激活，无换算坐标；buildReturnPortal 不适用，用 buildEndReturnPad）
+// 折跃门=gateway（龙败后生成，末地同维传送：主岛缘 ↔ 外岛缘，角度配对）
 export const PORTAL_KINDS = {
   nether: { frame: 'obsidian', portal: 'nether_portal' },
   aether: { frame: 'glowstone', portal: 'aether_portal' },
   end: { frame: null, portal: 'end_portal' },
+  gateway: { frame: 'bedrock', portal: 'end_gateway' },
 };
 
 // 各维度生效的传送门种类
@@ -16,7 +18,7 @@ export const DIM_PORTAL_KINDS = {
   overworld: ['nether', 'aether', 'end'],
   nether: ['nether'],
   aether: ['aether'],
-  end: ['end'],
+  end: ['end', 'gateway'],
 };
 
 // 到达落点无立足面时垫平台的材料/高度（按目标维度）
@@ -220,11 +222,12 @@ export function fillEndPortalCenter(world, ring, portalId) {
 }
 
 // 末地到达回程垫：3×3 end_portal + 12 带眼框环（激活态），落在立地面或垫黑曜石台。
-// 玩家踩上即回主世界。返回垫中心站位。
-export function buildEndReturnPad(world, bx, bz, { top = 140, platformY = 64 } = {}) {
+// fountain=true 时中央加基岩喷泉柱（龙败返程门标志），站位偏到门环西列防嵌柱。
+export function buildEndReturnPad(world, bx, bz, { top = 140, platformY = 64, fountain = false } = {}) {
   const frameId = BlockRegistry.getId('end_portal_frame_eye');
   const portalId = BlockRegistry.getId('end_portal');
   const obsId = BlockRegistry.getId('obsidian');
+  const bedId = BlockRegistry.getId('bedrock');
   let baseY = world.findGroundY(bx + 2, bz + 2, top);
   if (baseY <= 0 || baseY + 4 >= top) {
     for (let ix = -1; ix <= 5; ix++) {
@@ -243,5 +246,51 @@ export function buildEndReturnPad(world, bx, bz, { top = 140, platformY = 64 } =
   for (let ix = 1; ix <= 3; ix++) {
     for (let iz = 1; iz <= 3; iz++) world.setBlock(bx + ix, baseY, bz + iz, portalId);
   }
+  if (fountain) {
+    // 中央基岩喷泉柱（3 高，原版龙败基座喷泉意象）；portal 中心格被柱覆盖
+    for (let dy = 1; dy <= 3; dy++) world.setBlock(bx + 2, baseY + dy, bz + 2, bedId);
+    return { x: bx + 1.5, y: baseY + 1, z: bz + 2.5 }; // 门环西列站位（不嵌柱）
+  }
   return { x: bx + 2.5, y: baseY + 1, z: bz + 2.5 };
+}
+
+// 折跃门（单座）：3×3 基岩框环绕 + 中心 end_gateway（嵌地面层，非固体可陷入）。
+// 无立地面（虚空/岛缘外）→ 垫 3×3 end_stone 码头平台。返回门格坐标。
+export function buildGatewayPad(world, bx, bz, { top = 140, platformY = 64 } = {}) {
+  const bedId = BlockRegistry.getId('bedrock');
+  const gwId = BlockRegistry.getId('end_gateway');
+  const esId = BlockRegistry.getId('end_stone');
+  let baseY = world.findGroundY(bx, bz, top);
+  if (baseY <= 0 || baseY + 4 >= top) {
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) world.setBlock(bx + dx, platformY - 1, bz + dz, esId);
+    }
+    baseY = platformY;
+  }
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      const id = dx === 0 && dz === 0 ? gwId : bedId;
+      world.setBlock(bx + dx, baseY, bz + dz, id);
+    }
+  }
+  return { x: bx, y: baseY, z: bz };
+}
+
+// 折跃门配对：账本内除自身（6 格内）外，按"角度最近"取另一座门（两端门角度一致）。
+// 返回 { x, y, z } 门格坐标或 null（无配对门）。
+export function gatewayTarget(world, x, z) {
+  const gwId = BlockRegistry.getId('end_gateway');
+  const ang = Math.atan2(z, x);
+  let best = null, bestDiff = Infinity;
+  for (const [key, id] of world.modifiedBlocks) {
+    if (id !== gwId) continue;
+    const p = key.split(',');
+    const bx = +p[0], by = +p[1], bz = +p[2];
+    const dx = bx - x, dz = bz - z;
+    if (dx * dx + dz * dz < 36) continue; // 排除自身（及同门邻格）
+    let diff = Math.abs(Math.atan2(bz, bx) - ang);
+    if (diff > Math.PI) diff = Math.PI * 2 - diff;
+    if (diff < bestDiff) { bestDiff = diff; best = { x: bx, y: by, z: bz }; }
+  }
+  return best;
 }
