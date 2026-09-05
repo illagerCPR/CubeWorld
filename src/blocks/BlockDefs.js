@@ -726,7 +726,7 @@ const BlockCN = {
   deepslate_gold_ore: '深板岩金矿石', deepslate_diamond_ore: '深板岩钻石矿石',
   oak_log: '橡木原木', spruce_log: '云杉原木', birch_log: '白桦原木', dark_oak_log: '深色橡木原木', acacia_log: '金合欢原木',
   oak_planks: '橡木木板', spruce_planks: '云杉木板', birch_planks: '白桦木板', dark_oak_planks: '深色橡木木板', acacia_planks: '金合欢木板',
-  oak_leaves: '橡树树叶', spruce_leaves: '云杉树叶', birch_leaves: '白桦树叶',
+  oak_leaves: '橡树树叶', spruce_leaves: '云杉树叶', birch_leaves: '白桦树叶', acacia_leaves: '金合欢树叶',
   cobblestone: '圆石', stone_bricks: '石砖', mossy_stone_bricks: '苔石砖', cracked_stone_bricks: '裂石砖',
   mossy_cobblestone: '苔石', brick_block: '红砖块', nether_bricks: '下界砖块',
   bookshelf: '书架', end_portal_frame: '末地传送门框架', end_portal_frame_eye: '末地传送门框架（已嵌眼）', end_portal: '末地传送门',
@@ -816,6 +816,7 @@ reg('acacia_planks', { hardness: 2 }, { acacia_planks: planksTex([168, 88, 44], 
 reg('oak_leaves', { transparent: true, solid: true, hardness: 0.2 }, { oak_leaves: leavesTex(71, [64, 118, 38]) });
 reg('spruce_leaves', { transparent: true, solid: true, hardness: 0.2 }, { spruce_leaves: leavesTex(72, [46, 86, 50]) });
 reg('birch_leaves', { transparent: true, solid: true, hardness: 0.2 }, { birch_leaves: leavesTex(73, [98, 140, 58]) });
+reg('acacia_leaves', { transparent: true, solid: true, hardness: 0.2 }, { acacia_leaves: leavesTex(74, [202, 118, 26]) });
 
 // --- 砖/石砖 ---
 reg('cobblestone', { hardness: 2, tool: 'pickaxe' }, { cobblestone: cobbleTex(81) });

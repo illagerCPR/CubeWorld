@@ -180,6 +180,34 @@ for (const def of Object.values(DIMENSIONS)) {
       if (!found.highlands) fail(`[end] seed=${seed} ±640 未见末地高原（外岛锚点场改动过严？）`);
       if (!found.small) fail(`[end] seed=${seed} ±640 未见末地碎岛`);
     }
+
+    // ⑩ 天域专属：四群系在场 + 群系列剖面一致（frost 顶=雪 / crystal 顶=石）
+    if (def.id === 'aether') {
+      const found = { verdant: false, crystal: false, frost: false, autumn: false };
+      const cols = {};
+      for (let gx = -640; gx <= 640; gx += 16) {
+        for (let gz = -640; gz <= 640; gz += 16) {
+          const b = fw.gen.getBiome(gx, gz);
+          if (b in found && !found[b]) found[b] = true;
+          if ((b === 'crystal' || b === 'frost') && !cols[b]) cols[b] = [gx, gz];
+        }
+      }
+      for (const k of ['verdant', 'crystal', 'frost', 'autumn']) {
+        if (!found[k]) fail(`[aether] seed=${seed} ±640 未见群系 ${k}（阈值/频率改动过严？）`);
+      }
+      for (const [b, [gx, gz]] of Object.entries(cols)) {
+        const bcx = Math.floor(gx / 16), bcz = Math.floor(gz / 16);
+        const bc = new Chunk(bcx, bcz);
+        DIMENSIONS.aether.createGenerator(seed).generateChunk(bc);
+        const lx = gx - bcx * 16, lz = gz - bcz * 16;
+        let sy = 130;
+        while (sy > 4 && bc.get(lx, sy, lz) === 0) sy--;
+        const expect = b === 'frost' ? 'snow_block' : 'stone';
+        if (bc.get(lx, sy, lz) !== BlockRegistry.getId(expect)) {
+          fail(`[aether] seed=${seed} ${b} 列 @(${gx},?,${gz}) 顶面非 ${expect}（剖面与 getBiome 脱钩？）`);
+        }
+      }
+    }
   }
 
   // ⑥ 单区块生成耗时预算
