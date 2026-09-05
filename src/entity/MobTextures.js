@@ -141,6 +141,10 @@ const C = {
   bGold: [222, 172, 50], bGoldD: [180, 130, 34], bGoldHi: [244, 200, 90],
   bCore: [52, 44, 34], bCoreD: [36, 30, 24],
   bRod: [236, 156, 42], bRodD: [196, 116, 30],
+  // 末影龙：黑鳞 + 灰紫翼膜 + 紫眼 + 角爪
+  dScale: [28, 22, 34], dScaleD: [18, 14, 24], dBelly: [86, 78, 96],
+  dWing: [96, 84, 116], dWingD: [64, 54, 82], dEye: [188, 92, 236], dEyeD: [120, 52, 160],
+  dHorn: [172, 168, 178],
 };
 
 // === 各怪皮肤 SVG 生成（原版风） ===
@@ -516,6 +520,52 @@ function blazeSkinSVG() {
   return buildSkinSVG(cells);
 }
 
+// 末影龙：黑鳞 + 紫眼 + 灰腹膜翼（原版末影龙配色）
+function dragonSkinSVG() {
+  const scaleBase = noisy(C.dScale, 12, 291);        // 头/颈/尾：黑鳞
+  const bodyBase = noisy(C.dScaleD, 12, 292);        // 躯干：更暗鳞
+  const wingBase = mottle(C.dWing, C.dWingD, 7, 293); // 翼膜：灰紫斑驳
+  const legBase = noisy(C.dScaleD, 10, 294);         // 爪腿
+
+  // 龙脸：紫色大眼 + 吻部缝 + 头顶双角根（front 视角 16×16）
+  const headFront = (x, y) => {
+    if (y >= 5 && y <= 7 && ((x >= 2 && x <= 4) || (x >= 11 && x <= 13))) return C.dEye;
+    if (y >= 5 && y <= 7 && ((x === 1) || (x === 3) || (x === 12) || (x === 14))) return C.dEyeD;
+    if (y >= 11 && y <= 12 && x >= 5 && x <= 10) return C.black;   // 嘴缝
+    if (y >= 13 && x >= 6 && x <= 9) return C.dScaleD;             // 下颚
+    return null;
+  };
+  const headTop = (x, y) => {
+    if (y >= 3 && y <= 4 && ((x >= 3 && x <= 4) || (x >= 11 && x <= 12))) return C.dHorn; // 角根
+    return hash01(x, y, 295) < 0.2 ? C.dScaleD : null;
+  };
+  const headSide = (x, y) => (y >= 5 && y <= 7 && x <= 3 ? C.dEyeD : null); // 侧脸眼角
+  const headBot = () => C.dBelly;
+
+  // 躯干：腹侧灰膜（bot）+ 背脊暗刺
+  const bodyTop = (x, y) => (hash01(x, y, 296) < 0.3 ? C.black : null);   // 背脊刺
+  const bodyBot = () => C.dBelly;                                          // 腹膜
+  const bodyFront = (x, y) => (y >= 12 ? C.dBelly : null);
+
+  // 翼膜：翼骨走向暗纹（front/back 为翼面上下面）
+  const wingFront = (x, y) => (x % 5 === 0 ? C.dWingD : (hash01(x, y, 297) < 0.15 ? C.dWingD : null));
+  const wingTop = () => C.dScaleD;   // 翼骨侧（top/bot 是骨边）
+  const wingBot = () => C.dScaleD;
+
+  // 爪：端部亮爪尖
+  const legFront = (x, y) => (y >= 13 ? C.dHorn : null);
+  const legBot = () => C.dHorn;
+
+  const cells = [
+    ...partCells(0, scaleBase, { front: headFront, left: headSide, right: headSide, top: headTop, bot: headBot }),
+    ...partCells(1, bodyBase, { front: bodyFront, top: bodyTop, bot: bodyBot }),
+    ...partCells(2, wingBase, { front: wingFront, back: wingFront, top: wingTop, bot: wingBot }),
+    ...partCells(3, legBase, { front: legFront, top: null, bot: legBot }),
+  ];
+  return buildSkinSVG(cells);
+}
+
+
 // === 部件定义 ===
 // box = [minX, minY, minZ, maxX, maxY, maxZ]，局部坐标，原点在脚 y=0，+Z 朝脸的方向
 // （Mob.js yaw=atan2(nx,nz) 使 +Z 指向移动方向：脸朝玩家、蜘蛛头在前）
@@ -595,6 +645,23 @@ const BLAZE_PARTS = [
   { name: 'rodBL',  row: 3, box: [-0.34, 0,    -0.20, -0.22, 0.72, -0.08] },
 ];
 
+// 末影龙：头颈朝 +Z、三段尾朝 -Z、双翼横展薄片、4 短爪（Boss 体型 ~7 格长 3.4 高）
+// row 复用：row0=鳞色（头/颈/尾），row1=躯干，row2=翼膜，row3=爪腿
+const DRAGON_PARTS = [
+  { name: 'head',  row: 0, box: [-0.45, 2.55,  1.55,  0.45, 3.35, 2.75] },
+  { name: 'neck',  row: 0, box: [-0.30, 2.45,  0.85,  0.30, 3.15, 1.70] },
+  { name: 'body',  row: 1, box: [-0.75, 1.85, -1.75,  0.75, 3.10, 1.60] },
+  { name: 'tail1', row: 0, box: [-0.35, 2.05, -3.10,  0.35, 2.60, -1.60] },
+  { name: 'tail2', row: 0, box: [-0.22, 1.95, -4.50,  0.22, 2.40, -3.00] },
+  { name: 'tail3', row: 0, box: [-0.12, 1.90, -5.55,  0.12, 2.25, -4.40] },
+  { name: 'wingL', row: 2, box: [-3.60, 2.65, -1.55, -0.60, 2.85,  1.30] },
+  { name: 'wingR', row: 2, box: [ 0.60, 2.65, -1.55,  3.60, 2.85,  1.30] },
+  { name: 'legFL', row: 3, box: [-0.70, 0.85,  0.75, -0.25, 1.90,  1.45] },
+  { name: 'legFR', row: 3, box: [ 0.25, 0.85,  0.75,  0.70, 1.90,  1.45] },
+  { name: 'legBL', row: 3, box: [-0.62, 0.85, -1.55, -0.20, 1.90, -0.85] },
+  { name: 'legBR', row: 3, box: [ 0.20, 0.85, -1.55,  0.62, 1.90, -0.85] },
+];
+
 // === 入口：返回各 type 的 skin SVG + parts ===
 export function generateMobSkinSVGs() {
   return {
@@ -606,6 +673,7 @@ export function generateMobSkinSVGs() {
     zombified_piglin:  zombifiedPiglinSkinSVG(),
     wither_skeleton:   witherSkeletonSkinSVG(),
     blaze:             blazeSkinSVG(),
+    dragon:            dragonSkinSVG(),
   };
 }
 
@@ -753,6 +821,24 @@ export const MobTypes = {
     model: { parts: BLAZE_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'blaze_rod', min: 0, max: 1, chance: 0.6 },
+    ],
+  },
+  dragon: {
+    name: 'dragon',
+    displayName: '末影龙',
+    width: 3.2,          // 水平碰撞体（翼展不含碰撞）
+    height: 3.4,         // 头部顶点（attackMob 球体射线半径 = height/2）
+    health: 200,
+    damage: 8,
+    speed: 6,
+    attackRange: 3.8,
+    detectionRange: 96,
+    burningInDay: false,
+    flying: true,        // 龙全程飞行（DragonAI 接管全部速度/朝向）
+    boss: true,          // Boss 标记：不进自然生成表；死亡触发 onDragonDefeated
+    model: { parts: DRAGON_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'dragon_egg', min: 1, max: 1 },
     ],
   },
 };

@@ -22,6 +22,7 @@ import { PauseMenu } from '../ui/PauseMenu.js';
 import { DeathScreen } from '../ui/DeathScreen.js';
 import { CommandPanel } from '../ui/CommandPanel.js';
 import { ChatBox } from '../ui/ChatBox.js';
+import { BossBar } from '../ui/BossBar.js';
 import { CHUNK_SIZE, Chunk, CHUNK_HEIGHT } from '../core/Chunk.js';
 import {
   PORTAL_KINDS, DIM_PORTAL_KINDS, ARRIVAL_PLATFORM,
@@ -31,6 +32,7 @@ import {
 } from '../core/Portals.js';
 import { matchRecipe } from '../core/Crafting.js';
 import { MobManager } from '../entity/MobManager.js';
+import { Mob } from '../entity/Mob.js';
 import { VoxelLightUniforms } from '../render/VoxelLight.js';
 import { RedstoneSystem } from '../core/RedstoneSystem.js';
 import { SaveSystem } from '../core/SaveSystem.js';
@@ -172,6 +174,7 @@ export class Game {
     if (this.pauseMenu) { this.pauseMenu.el.remove(); this.pauseMenu = null; }
     if (this.deathScreen) { this.deathScreen.el.remove(); this.deathScreen = null; }
     if (this.commandPanel) { this.commandPanel.el.remove(); this.commandPanel = null; }
+    if (this.bossBar) { this.bossBar.dispose(); this.bossBar = null; }
     // 远端玩家与联机聊天框
     for (const rp of this.remotePlayers.values()) rp.dispose();
     this.remotePlayers.clear();
@@ -214,6 +217,7 @@ export class Game {
     // 维度：存档携带（V2）或新建默认主世界；世界与天空档案按维度装配
     const dimension = (loadData && loadData.dimension) || 'overworld';
     this.world = new World(seed, dimension);
+    this.world.dragonDefeated = !!(loadData && loadData.dragonDefeated); // 末影龙击败标记（存档恢复）
     if (this.sky) this.sky.applyDimensionProfile(this.world.dimDef);
     this.physics.world = this.world;
     // M4：网络方块钩子必须趁早绑定——start 的异步加载窗口（图集构建/区块加载/
@@ -278,6 +282,8 @@ export class Game {
     this.mobManager.onBlockDestroyed = (x, y, z, def) => {
       if (this.particles) this.particles.burstBlockBreak(x + 0.5, y, z + 0.5, def, this.world, 8);
     };
+    // 末影龙击败事件（本地死亡链 + 远端同步入口，幂等）：置击败标记 + M3 建返回门/折跃门
+    this.mobManager.onDragonDefeated = (mob) => this._onDragonDefeated(mob);
     // 新建的粒子系统按视频设置套密度（其余项已在构造时套用，跨存档不变）
     applySettings(this);
     // 用图集初始化怪物材质
@@ -364,6 +370,7 @@ export class Game {
     this.pauseMenu = new PauseMenu(this);
     this.deathScreen = new DeathScreen(this);
     this.commandPanel = new CommandPanel(this);
+    this.bossBar = new BossBar(); // 末影龙血条（新建型：_disposeWorld 移除）
 
     // 联机模式初始化：host 端跑怪物自然生成（事件同步）、绑定方块同步钩子、注册网络回调、创建聊天框
     if (this.networkMode && this.net) {
@@ -412,6 +419,8 @@ export class Game {
     this.infoBar.show();
     this.lastTime = performance.now();
     this.loop();
+    // 末地开局生成末影龙（未击败时；联机由 host 生成广播）
+    this._ensureDragon();
     } catch (e) {
       console.error('游戏启动失败:', e);
       const loading = document.getElementById('loading');
@@ -721,6 +730,10 @@ export class Game {
       };
       this.mobManager.update(dt, this.player, this.sky);
     }
+    // Boss 血条（存活末影龙）
+    if (this.bossBar) {
+      this.bossBar.update(this.mobManager ? this.mobManager.mobs.find(m => m.typeName === 'dragon') : null);
+    }
     
     // 红石系统
     if (this.redstone) {
@@ -945,6 +958,7 @@ export class Game {
       if (this.player.creative) {
         if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
         if (def.name === 'chest') this._breakChest(hit.block, false);
+        if (def.name === 'end_crystal') this._breakCrystal(hit.block.x, hit.block.y, hit.block.z);
         this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
         removeConnectedPortals(this.world, hit.block.x, hit.block.y, hit.block.z);
         if (this.redstone) this.redstone.onBlockChange(hit.block.x, hit.block.y, hit.block.z);
@@ -966,6 +980,7 @@ export class Game {
         if (this.breakingProgress >= 1) {
           if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
           if (def.name === 'chest') this._breakChest(hit.block, true);
+          if (def.name === 'end_crystal') this._breakCrystal(hit.block.x, hit.block.y, hit.block.z);
           this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
           removeConnectedPortals(this.world, hit.block.x, hit.block.y, hit.block.z);
           if (this.redstone) this.redstone.onBlockChange(hit.block.x, hit.block.y, hit.block.z);
@@ -1245,6 +1260,46 @@ export class Game {
     if (this.chatBox) this.chatBox.add('出生点旁出现了一座回程门垫——踩上去返回主世界', '#a7f');
   }
 
+  // 末地开局生成末影龙（未击败时；单机/host 权威生成，联机经 mob_spawn 广播）
+  // 击败标记 M2 为会话态（world.dragonDefeated）；M3 接管为主岛返回门账本判定（服务器权威持久化）
+  _ensureDragon() {
+    if (!this.world || this.world.dimension !== 'end') return;
+    if (!this.mobManager) return;
+    if (this.networkMode && this.net && !this.net.isHost) return; // 联机非 host 等广播
+    if (this.world.dragonDefeated) return;
+    if (this.mobManager.mobs.some(m => m.typeName === 'dragon' && !m.dead)) return;
+    const mob = new Mob('dragon', this.world);
+    // 出生在柱环外缘上空（主岛中心偏移，盘旋半径与 DragonAI.CIRCLE_R 对齐）
+    mob.position.set(0.5, 88, 30.5);
+    if (this.networkMode && this.net) {
+      this.net.sendMobSpawn('dragon', mob.position.x, mob.position.y, mob.position.z);
+    } else {
+      this.mobManager.spawnMob(mob);
+    }
+    if (this.chatBox) this.chatBox.add('末影龙的咆哮在虚空回荡……', '#c5f');
+  }
+
+  // 末影龙被击败：置标记（M2）；M3 在此激活主岛返回门 + 生成折跃门
+  _onDragonDefeated(mob) {
+    if (!this.world) return;
+    this.world.dragonDefeated = true;
+    if (this.chatBox) this.chatBox.add('末影龙被击败了！', '#c5f');
+  }
+
+  // 末影水晶被击碎：范围爆炸（复用怪物爆炸破坏路径）+ 按距离衰减伤害
+  _breakCrystal(x, y, z) {
+    const px = x + 0.5, py = y + 0.5, pz = z + 0.5;
+    if (this.mobManager) {
+      this.mobManager.pendingExplosions.push({ x: px, y: py, z: pz, radius: 3 });
+    }
+    const d = this.player.position.distanceTo(new THREE.Vector3(px, py, pz));
+    if (d < 8) {
+      const dmg = Math.round(14 * (1 - d / 8));
+      if (dmg > 0) this.player.hurt(dmg, 'explosion', true);
+    }
+    if (this.chatBox) this.chatBox.add('末影水晶碎裂，爆发出紫色的冲击！', '#c8f');
+  }
+
   // 传送门落点立足面预解析：临时生成器 + 临时区块探测（纯函数，不碰当前世界）；
   // 无立足面返回 -1（到达后由 buildReturnPortal 按维度档案垫平台）
   _resolveArrivalY(dim, x, z) {
@@ -1410,6 +1465,7 @@ export class Game {
       cheatsEnabled: this.cheatsEnabled,
       dimension: dim,
       dimensionSpawn: !hasPos, // 传送门落点带坐标；否则忽略坐标落到目标维度出生点
+      dragonDefeated: !!this.world.dragonDefeated, // 击败标记跨维透传（换维重建不丢）
       player: playerData,
       inventory: this.inventory.serialize(),
       dimensionBlocks: dimBuckets,

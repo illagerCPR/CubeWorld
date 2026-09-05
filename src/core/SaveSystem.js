@@ -43,6 +43,7 @@ export class SaveSystem {
         inventory: game.inventory.serialize(),
         dimensionBlocks: serializeDimBuckets(game.world.dimensionBlocks),
         dimensionContainers: serializeDimBuckets(game.world.dimensionContainers),
+        dragonDefeated: !!game.world.dragonDefeated, // 末影龙击败标记（进末地是否再生成龙）
         redstone: game.redstone ? game.redstone.serialize() : null,
         sky: { time: game.sky.time || 0 }
       };

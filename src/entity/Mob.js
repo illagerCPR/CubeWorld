@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Entity } from './Entity.js';
 import { MobTypes } from './MobTextures.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
+import { updateDragonAI } from './DragonAI.js';
 
 export class Mob extends Entity {
   constructor(typeName, world) {
@@ -71,6 +72,14 @@ export class Mob extends Entity {
         this.health -= dt * 1.5;
         if (this.health <= 0) { this.dead = true; }
       }
+    }
+
+    if (this.typeName === 'dragon') {
+      // 末影龙：DragonAI 全接管（盘旋/俯冲/栖息回血），不走通用索敌链
+      updateDragonAI(this, dt, player);
+      physics.collide(this, dt);
+      if (this.position.y < -20) this.dead = true;
+      return;
     }
 
     if (this.type.passive) {

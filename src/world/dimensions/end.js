@@ -169,7 +169,8 @@ export class EndGenerator {
     const blocks = chunk.blocks;
     const ES = BlockRegistry.getId('end_stone');
     const OBS = BlockRegistry.getId('obsidian');
-    const GLOW = BlockRegistry.getId('glowstone');
+    const BED = BlockRegistry.getId('bedrock');
+    const CRYSTAL = BlockRegistry.getId('end_crystal');
     const ox = cx * CHUNK_SIZE, oz = cz * CHUNK_SIZE;
     const idx = (y, z, x) => (y * CHUNK_SIZE + z) * CHUNK_SIZE + x;
 
@@ -196,7 +197,11 @@ export class EndGenerator {
           const dx = ox + x - p.x, dz = oz + z - p.z;
           if (dx * dx + dz * dz > r2) continue;
           for (let y = 58; y <= p.top; y++) blocks[idx(y, z, x)] = OBS;
-          if (p.top + 1 < CHUNK_HEIGHT) blocks[idx(p.top + 1, z, x)] = GLOW; // 柱顶荧石
+          // 柱顶：基岩底座 + 末影水晶（原版龙战回血源；CrystalAlive 按此坐标查询）
+          if (p.top + 2 < CHUNK_HEIGHT) {
+            blocks[idx(p.top + 1, z, x)] = BED;
+            blocks[idx(p.top + 2, z, x)] = CRYSTAL;
+          }
         }
       }
     }

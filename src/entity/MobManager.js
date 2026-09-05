@@ -206,6 +206,9 @@ export class MobManager {
     // 亮度检查（简化：夜晚生成）
     if (!isNight && y > SEA_LEVEL + 5) return;
 
+    // 末地/天域不自然刷怪（末地唯一敌人是末影龙 Boss；天域为和平浮岛）
+    if (this.world.dimension !== 'overworld' && this.world.dimension !== 'nether') return;
+
     // 选择怪物类型：下界走下界表（烈焰人仅要塞平台层），主世界走昼夜表
     let typeName;
     if (this.world.dimension === 'nether') {
@@ -381,6 +384,7 @@ export class MobManager {
       // 远端攻击致死：死亡广播与掉落由攻击端负责，本端只播死亡动画
       mob.diedHandled = true;
       mob.remoteDeath = true;
+      this._fireDragonDefeated(mob);
     }
   }
 
@@ -391,6 +395,15 @@ export class MobManager {
     mob.dead = true;
     mob.diedHandled = true;
     mob.remoteDeath = true;
+    this._fireDragonDefeated(mob);
+  }
+
+  // 末影龙击败事件（本地死亡链 + 两个远端入口共用，幂等防重）
+  // 回调由 Game 注入：M2 默认置 world.dragonDefeated；M3 接管为激活返回门+生成折跃门
+  _fireDragonDefeated(mob) {
+    if (mob.typeName !== 'dragon' || mob.dragonDefeatedFired) return;
+    mob.dragonDefeatedFired = true;
+    if (this.onDragonDefeated) this.onDragonDefeated(mob);
   }
 
   spawnMob(mob) {
@@ -589,6 +602,7 @@ export class MobManager {
       // 死亡：击杀端产出掉落 + 广播；触发死亡动画（而非立刻移除）
       const dist = mob.position.distanceTo(player.position);
       if (mob.dead) {
+        this._fireDragonDefeated(mob);
         if (!mob.diedHandled) {
           mob.diedHandled = true; // 只处理一次（防多端重复广播/重复掉落）
           if (mob.netId != null && this.mobNet) this.mobNet.sendMobDied(mob.netId);

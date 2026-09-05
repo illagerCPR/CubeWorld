@@ -1065,6 +1065,30 @@ reg('netherrack', { hardness: 0.4, tool: 'pickaxe' }, { netherrack: blotchTex([1
 reg('end_stone', { hardness: 3, tool: 'pickaxe' }, { end_stone: blotchTex([219, 222, 167], 122, { dark: 0.86, light: 1.05, dProb: 0.3, lProb: 0.15 }) });
 reg('soul_sand', { hardness: 0.5, tool: 'shovel' }, { soul_sand: soulTex(123) });
 reg('magma_block', { displayName: '岩浆块', light: 6, hardness: 0.5, tool: 'pickaxe' }, { magma_block: magmaTex(124) });
+// 末影水晶：柱顶发光晶体（为龙回血；被击碎时爆炸，Game._breakCrystal 处理）
+reg('end_crystal', { displayName: '末影水晶', light: 15, hardness: 0.5 }, { end_crystal: (function () {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const diag = (x + y) % 7;
+    let c = 'rgb(96,44,146)';                                   // 深紫底
+    if (diag === 0 || diag === 1) c = 'rgb(176,116,236)';       // 晶面斜纹
+    if (hash2(x, y, 203) < 0.08) c = 'rgb(236,210,255)';        // 白高光
+    if (x === 0 || x === 15 || y === 0 || y === 15) c = 'rgb(62,26,98)'; // 晶棱
+    px[y * 16 + x] = c;
+  }
+  return pixelSvg(px); })()
+});
+// 龙蛋：末影龙击败掉落（装饰收藏方块）
+reg('dragon_egg', { displayName: '龙蛋', hardness: 3, tool: 'pickaxe' }, { dragon_egg: (function () {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const wave = Math.sin((x + y * 0.6) * 0.9) * 0.5 + 0.5;
+    let c = wave > 0.72 ? 'rgb(58,36,84)' : 'rgb(26,18,36)';    // 紫波纹鳞面
+    if (hash2(x, y, 207) < 0.06) c = 'rgb(140,96,196)';         // 亮斑
+    px[y * 16 + x] = c;
+  }
+  return pixelSvg(px); })()
+});
 
 // --- 红石相关 ---
 reg('redstone_lamp', { displayName: '红石灯', light: 15, hardness: 0.3 }, { redstone_lamp: redstoneLampTex(131) });
