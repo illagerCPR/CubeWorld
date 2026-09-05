@@ -126,14 +126,35 @@ export function findPortalNear(world, x, z, portalId, r = 24) {
   return best;
 }
 
-// 自动返程门：4 宽 × 5 高（内 2×3），沿 x 轴；找落点立地面，无地面则垫平台。
+// 下探穿悬挂体找可行走空腔立地面：连续 ≥3 格非固体非流体 + 底部实心 → 返回空气底格 y。
+// 流体打断空气段（熔岩海/水下列不立门，交由垫平台分支）。无立地面返回 -1。
+// 与 World.findGroundY（从 top 首个实心即停）不同：岩层内部启动扫描时不会被贴顶实心骗到。
+export function findOpenFloorY(world, x, z, top = CHUNK_HEIGHT - 2) {
+  const bx = Math.floor(x), bz = Math.floor(z);
+  let airRun = 0;
+  for (let y = Math.min(top, CHUNK_HEIGHT - 2) - 1; y >= 1; y--) {
+    const def = BlockRegistry.getById(world.getBlock(bx, y, bz));
+    if (def && def.solid) { airRun = 0; continue; }
+    if (def && def.fluid) { airRun = 0; continue; }
+    airRun++;
+    if (airRun >= 3) {
+      const below = BlockRegistry.getById(world.getBlock(bx, y - 1, bz));
+      if (below && below.solid) return y;
+    }
+  }
+  return -1;
+}
+
+// 自动返程门：4 宽 × 5 高（内 2×3），沿 x 轴；优先空腔立地面，无地面则垫平台。
+// 门厅（门体±1 圈 × 上方 6 层）一律清空气——垫平台落在实心岩内部时同样清出站立空间
+//（修复：下界首次到达门嵌进 netherrack，玩家被埋）。
 // 返回玩家站位（门内底格中心，进入即有冷却/武装门控保护）。
 export function buildReturnPortal(world, kind, bx, bz, { top = CHUNK_HEIGHT - 2, platform = null } = {}) {
   const frameId = BlockRegistry.getId(PORTAL_KINDS[kind].frame);
   const portalId = BlockRegistry.getId(PORTAL_KINDS[kind].portal);
-  let baseY = world.findGroundY(bx + 1, bz, top);
+  let baseY = findOpenFloorY(world, bx + 1, bz, top);
   if (baseY <= 0 || baseY + 6 >= top) {
-    // 无立足面（虚空/熔岩海/海面列）或贴近扫描顶：按维度档案垫 4×5 平台
+    // 无可行走空腔（全实心/虚空/熔岩海/海面列）或贴近扫描顶：按维度档案垫 4×5 平台
     const py = platform ? platform.y : 64;
     const platId = BlockRegistry.getId((platform && platform.block) || PORTAL_KINDS[kind].frame);
     for (let ix = -1; ix <= 4; ix++) {
@@ -141,16 +162,17 @@ export function buildReturnPortal(world, kind, bx, bz, { top = CHUNK_HEIGHT - 2,
     }
     baseY = py;
   }
+  // 门厅清空：先清后建（门体循环随后回填框/门方块）
+  for (let ix = -1; ix <= 4; ix++) {
+    for (let iz = -1; iz <= 1; iz++) {
+      for (let iy = 0; iy <= 5; iy++) world.setBlock(bx + ix, baseY + iy, bz + iz, 0);
+    }
+  }
   for (let ix = 0; ix < 4; ix++) {
     for (let iy = 0; iy < 5; iy++) {
       const border = ix === 0 || ix === 3 || iy === 0 || iy === 4;
       world.setBlock(bx + ix, baseY + iy, bz, border ? frameId : portalId);
     }
-  }
-  // 两侧清出站立空间（防门嵌进坡体时玩家被埋）
-  for (let iy = 1; iy <= 3; iy++) {
-    world.setBlock(bx - 1, baseY + iy, bz, 0);
-    world.setBlock(bx + 4, baseY + iy, bz, 0);
   }
   return { x: bx + 1.5, y: baseY + 1, z: bz + 0.5 };
 }

@@ -3,7 +3,7 @@ import { BlockRegistry } from '../src/core/BlockRegistry.js';
 import '../src/blocks/BlockDefs.js';
 import {
   detectPortalInterior, fillPortal, findPortalNear, buildReturnPortal, removeConnectedPortals,
-  detectEndRing, fillEndPortalCenter, buildEndReturnPad,
+  detectEndRing, fillEndPortalCenter, buildEndReturnPad, findOpenFloorY,
 } from '../src/core/Portals.js';
 import { matchRecipe } from '../src/core/Crafting.js';
 import '../src/items/ItemDefs.js';
@@ -186,6 +186,76 @@ const AP = BlockRegistry.getId('aether_portal');
   assert('⑪ 烈焰粉+末影珍珠合成末影之眼', !!p2 && p2.name === 'ender_eye' && p2.count === 1);
   const p3 = matchRecipe([['ender_pearl'], ['blaze_powder']]);
   assert('⑪ 顺序颠倒不匹配（shaped）', p3 === null);
+}
+
+// ── ⑫ 下界寻址：实心岩层内垫平台 + 门厅清空（修复"门嵌进 netherrack 玩家被埋"）──
+{
+  const w = fakeWorld();
+  const NR = BlockRegistry.getId('netherrack');
+  for (let y = 1; y <= 199; y++) for (let x = -3; x <= 8; x++) for (let z = -3; z <= 3; z++) w.setBlock(x, y, z, NR);
+  const pos = buildReturnPortal(w, 'nether', 0, 0, { top: 200, platform: { y: 40, block: 'obsidian' } });
+  assert('⑫ 岩层内垫 y40 平台', pos.y === 41 && w.getBlock(0, 39, 0) === BlockRegistry.getId('obsidian'));
+  // 门厅全开（除门框/门体位）：站位格非实心、门厅圈无 netherrack 残留
+  const solidAt = (x, y, z) => { const d = BlockRegistry.getById(w.getBlock(x, y, z)); return !!(d && d.solid); };
+  assert('⑫ 站位格与头部格非实心', !solidAt(1, 41, 0) && !solidAt(1, 42, 0));
+  let buried = 0;
+  for (let x = -1; x <= 4; x++) for (let z = -1; z <= 1; z++) {
+    for (let y = 40; y <= 45; y++) {
+      const id = w.getBlock(x, y, z);
+      if (id === NR) buried++;
+    }
+  }
+  assert('⑫ 门厅 6×7×3 无岩层残留', buried === 0);
+  assert('⑫ 门框立起（底行框+左柱）', w.getBlock(0, 40, 0) === OBS && w.getBlock(0, 41, 0) === OBS);
+}
+
+// ── ⑬ 下界寻址：空腔立地面（下探穿悬挂体，门贴空腔底）──
+{
+  const w = fakeWorld();
+  const NR = BlockRegistry.getId('netherrack');
+  for (let y = 50; y <= 199; y++) for (let x = -3; x <= 8; x++) for (let z = -3; z <= 3; z++) w.setBlock(x, y, z, NR); // 顶部悬挂岩（直达扫描顶）
+  for (let y = 20; y <= 39; y++) for (let x = -3; x <= 8; x++) for (let z = -3; z <= 3; z++) w.setBlock(x, y, z, NR); // 底部岩
+  for (let y = 40; y <= 49; y++) for (let x = -3; x <= 8; x++) for (let z = -3; z <= 3; z++) w.setBlock(x, y, z, 0);  // 空腔
+  const floor = findOpenFloorY(w, 1, 0, 200);
+  assert('⑬ findOpenFloorY 命中空腔底 y40', floor === 40);
+  const pos = buildReturnPortal(w, 'nether', 0, 0, { top: 200, platform: { y: 40, block: 'obsidian' } });
+  assert('⑬ 门贴空腔底', pos.y === 41 && w.getBlock(0, 40, 0) === OBS);
+  assert('⑬ 门内 portal 填充', w.getBlock(1, 41, 0) === NP && w.getBlock(2, 42, 0) === NP);
+}
+
+// ── ⑭ 下界寻址：熔岩海打断空气段 → 垫平台（门不立熔岩上）──
+{
+  const w = fakeWorld();
+  const LAVA = BlockRegistry.getId('lava');
+  const NR = BlockRegistry.getId('netherrack');
+  for (let y = 45; y <= 199; y++) for (let x = -3; x <= 8; x++) for (let z = -3; z <= 3; z++) w.setBlock(x, y, z, NR);
+  for (let y = 35; y <= 44; y++) for (let x = -3; x <= 8; x++) for (let z = -3; z <= 3; z++) w.setBlock(x, y, z, LAVA);
+  for (let y = 1; y <= 34; y++) for (let x = -3; x <= 8; x++) for (let z = -3; z <= 3; z++) w.setBlock(x, y, z, NR);
+  assert('⑭ 熔岩列无可立地面', findOpenFloorY(w, 1, 0, 200) === -1);
+  const pos = buildReturnPortal(w, 'nether', 0, 0, { top: 200, platform: { y: 40, block: 'obsidian' } });
+  const solidAt = (x, y, z) => { const d = BlockRegistry.getById(w.getBlock(x, y, z)); return !!(d && d.solid); };
+  assert('⑭ 熔岩海垫平台立门且门厅清空', pos.y === 41 && !solidAt(1, 41, 0) && w.getBlock(0, 40, 0) === OBS);
+}
+
+// ── ⑮ 真实下界生成器集成：首次到达建门不埋人（8 确定性落点，需 ensureChunk 后扫描）──
+{
+  const { World } = await import('../src/core/World.js');
+  const spots = [[50, 50], [-80, 120], [200, -40], [-150, -150], [8, 8], [-8, 8], [300, 300], [-200, 60]];
+  let ok = 0;
+  for (const [bx, bz] of spots) {
+    const world = new World(20250903, 'nether');
+    world.ensureChunk(Math.floor((bx + 1) / 16), Math.floor(bz / 16));
+    const pos = buildReturnPortal(world, 'nether', bx, bz, { top: 200, platform: { y: 40, block: 'obsidian' } });
+    const sx = Math.floor(pos.x), sy = Math.floor(pos.y), sz = Math.floor(pos.z);
+    const solidAt = (x, y, z) => { const d = BlockRegistry.getById(world.getBlock(x, y, z)); return !!(d && d.solid); };
+    const fluidAt = (x, y, z) => { const d = BlockRegistry.getById(world.getBlock(x, y, z)); return !!(d && d.fluid); };
+    const stand = !solidAt(sx, sy, sz) && !solidAt(sx, sy + 1, sz) && !fluidAt(sx, sy, sz);
+    const portalOk = world.getBlock(bx + 1, sy, sz) === NP || world.getBlock(bx + 1, sy - 1, sz) === NP;
+    let exits = 0;
+    for (const [dx, dz] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) if (!solidAt(sx + dx, sy, sz + dz)) exits++;
+    if (stand && portalOk && exits >= 1) ok++;
+  }
+  assert('⑮ 真实下界 8 落点：站位通行+portal 在场+门厅有开口', ok === spots.length);
 }
 
 console.log(fails ? `FAILED: ${fails}` : 'Portals 逻辑单测全部通过');
