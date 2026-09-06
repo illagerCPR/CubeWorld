@@ -1,7 +1,7 @@
 // VideoSettings.js -- 视频设置面板（ESC 暂停菜单与主菜单共用）
 // 原版 MC 选项页风格：整屏半透明遮罩 + 居中列按钮（点击循环取值），改动即存 localStorage 并实时生效。
 // 平滑光照开关切换时对所有区块 markAllDirty，网格在后续帧内分批重建。
-import { loadSettings, saveSettings, applySettings, brightnessToMinLight } from '../core/Settings.js';
+import { loadSettings, saveSettings, applySettings, brightnessToMinLight, GFX_ORDER, GFX_LABELS } from '../core/Settings.js';
 
 const PARTICLE_LABELS = { all: '全部', decreased: '减少', minimal: '最少' };
 const PARTICLE_ORDER = ['all', 'decreased', 'minimal'];
@@ -18,6 +18,7 @@ export class VideoSettings {
       align-items: center; justify-content: center; z-index: 60;
       background: rgba(0,0,0,0.65); color: #fff;
       font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      overflow-y: auto; padding: 16px 0;
     `;
     document.body.appendChild(this.el);
 
@@ -103,6 +104,22 @@ export class VideoSettings {
       s.sensitivity = s.sensitivity >= 200 ? 30 : s.sensitivity + 10;
       this._apply();
     });
+    // 光照增强（三档一键：关闭 / 基础=水面反射+云影 / 完整=再加后处理）
+    mkRow('gfx').addEventListener('click', () => {
+      const s = this.game.settings;
+      s.gfx = GFX_ORDER[(GFX_ORDER.indexOf(s.gfx) + 1) % GFX_ORDER.length];
+      this._apply();
+    });
+    // 泛光（完整档生效）
+    mkRow('gfxBloom').addEventListener('click', () => {
+      this.game.settings.gfxBloom = !this.game.settings.gfxBloom;
+      this._apply();
+    });
+    // 体积光（完整档生效）
+    mkRow('gfxGodRays').addEventListener('click', () => {
+      this.game.settings.gfxGodRays = !this.game.settings.gfxGodRays;
+      this._apply();
+    });
     // 全屏（不持久化，按浏览器当前状态显示）
     this.fullscreenBtn = document.createElement('button');
     this.fullscreenBtn.style.cssText = this._btnStyle() + 'margin-bottom:8px;';
@@ -144,6 +161,10 @@ export class VideoSettings {
     this.rows.smoothLighting.textContent = `平滑光照: ${s.smoothLighting ? '开' : '关'}`;
     this.rows.viewBobbing.textContent = `视角摇晃: ${s.viewBobbing ? '开' : '关'}`;
     this.rows.sensitivity.textContent = `鼠标灵敏度: ${s.sensitivity}%`;
+    this.rows.gfx.textContent = `光照增强: ${GFX_LABELS[s.gfx] || '关闭'}`;
+    const subHint = s.gfx === 'full' ? '' : '（完整档生效）';
+    this.rows.gfxBloom.textContent = `泛光: ${s.gfxBloom ? '开' : '关'}${subHint}`;
+    this.rows.gfxGodRays.textContent = `体积光: ${s.gfxGodRays ? '开' : '关'}${subHint}`;
     this.fullscreenBtn.textContent = `全屏: ${document.fullscreenElement ? '开（点击退出）' : '关（点击进入）'}`;
   }
 

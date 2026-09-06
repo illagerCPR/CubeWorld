@@ -2,34 +2,158 @@
 // 顶点属性 voxelLight = (skyL, blockL)，均归一化 0..1
 // 最终亮度 = max(uSunTint * skyL * uDayLight, uTorchTint * blockL)，再抬底 uMinLight
 // uniform 对象全局共享：每帧只改这里，所有区块材质同步生效，无需重建网格
+//
+// 光照视觉增强（视频设置「光照增强」档位，L1 批次）：
+// - 云影（基础/完整档）：solid/water 采样 Sky.cloudTex，云格下的天空光乘衰减
+//   （只衰减天空光分量，火把光不受影响）；映射与 Sky 云层 offset 同源：
+//   cuv = ((W.x + wind)/1536 + 0.5, W.z/1536 + 0.5)
+// - 水面反射（基础/完整档）：菲涅尔天空色混合 + 太阳/月亮镜面高光 +
+//   方块光暖色倒影（夜晚岸边火把/岩浆光斑）+ 两轴正弦波纹扰动
+// 全部效果由 uniform 开关（uCloudShadow/uWaterFx），着色器编译一次，切换设置零重建；
+// 关闭档 uniform 归零，画面与旧管线逐字节一致。
 import * as THREE from 'three';
 
 export const VoxelLightUniforms = {
   uDayLight: { value: 1.0 },                        // 天光昼夜系数（含夜晚月光底值）
   uSunTint: { value: new THREE.Color(1, 1, 1) },    // 天光染色（晨昏偏暖/夜晚偏冷）
   uMinLight: { value: 0.035 },                      // 最低环境亮度（纯黑洞穴留一点轮廓）
-  uTorchTint: { value: new THREE.Color(1.0, 0.82, 0.58) } // 方块光暖色
+  uTorchTint: { value: new THREE.Color(1.0, 0.82, 0.58) }, // 方块光暖色
+  // ---- 光照视觉增强（关闭档全部无效，保持现状画面） ----
+  uTime: { value: 0 },                                     // 秒（暂停即冻结，波纹静止）
+  uSunDir: { value: new THREE.Vector3(0.4, 0.8, 0.2) },    // 指向太阳（归一化，Sky.sunLight.position）
+  uSunColor: { value: new THREE.Color(1, 1, 1) },          // 太阳光色（晨昏暖/正午白，日落金光带）
+  uSkyColor: { value: new THREE.Color(0.45, 0.7, 1.0) },   // 菲涅尔天空反射色（雾色，Sky.update 同步）
+  uWind: { value: 0 },                                     // 云风偏移（Sky.wind，与云层纹理 offset 同源）
+  uCloudTex: { value: null },                              // 云纹理（Sky 构造时注入）
+  uCloudsY: { value: 140 },                                // 云层高度（高于此不吃云影，山巅/天域岛顶）
+  uCloudShadow: { value: 0 },                              // 云影开关 0/1（设置 ∧ 维度云显隐，Game 每帧写）
+  uWaterFx: { value: 0 }                                   // 水面反射开关 0/1
 };
 
+// 片元头：体素光 + 增强效果共用 uniform/varying 声明（未用到的会被编译器裁掉）
+const FRAG_HEADER = [
+  'varying vec2 vVoxelLight;',
+  'varying vec3 vWorldPos;',
+  'uniform float uDayLight;',
+  'uniform vec3 uSunTint;',
+  'uniform float uMinLight;',
+  'uniform vec3 uTorchTint;',
+  'uniform float uTime;',
+  'uniform vec3 uSunDir;',
+  'uniform vec3 uSunColor;',
+  'uniform vec3 uSkyColor;',
+  'uniform float uWind;',
+  'uniform sampler2D uCloudTex;',
+  'uniform float uCloudsY;',
+  'uniform float uCloudShadow;',
+  'uniform float uWaterFx;'
+].join('\n');
+
+// 云影：云格下天空光乘 0.72（与云纹理 alpha 阈值 0.60 对应，块状边界与可见云对齐）
+const CLOUD_SHADOW_GLSL = [
+  'float cloudShadowFactor() {',
+  '  if (uCloudShadow < 0.5 || vWorldPos.y >= uCloudsY) return 1.0;',
+  '  vec2 cuv = vec2((vWorldPos.x + uWind) / 1536.0 + 0.5, vWorldPos.z / 1536.0 + 0.5);',
+  '  float ca = texture2D(uCloudTex, cuv).a;',
+  '  return 1.0 - step(0.5, ca) * 0.28;',
+  '}'
+].join('\n');
+
+// 体素光调制（solid/water 共用基础路径）
+const VOXEL_LIGHT_GLSL = [
+  '#include <color_fragment>',
+  '{',
+  '  vec3 skyC = uSunTint * (vVoxelLight.x * uDayLight);',
+  '  skyC *= cloudShadowFactor();',
+  '  vec3 torchC = uTorchTint * vVoxelLight.y;',
+  '  vec3 lv = max(skyC, torchC);',
+  '  lv = uMinLight + (1.0 - uMinLight) * lv;',
+  '  diffuseColor.rgb *= lv;',
+  '}'
+].join('\n');
+
+// 公共 uniform 挂载
+function injectCommonUniforms(shader) {
+  shader.uniforms.uDayLight = VoxelLightUniforms.uDayLight;
+  shader.uniforms.uSunTint = VoxelLightUniforms.uSunTint;
+  shader.uniforms.uMinLight = VoxelLightUniforms.uMinLight;
+  shader.uniforms.uTorchTint = VoxelLightUniforms.uTorchTint;
+  shader.uniforms.uTime = VoxelLightUniforms.uTime;
+  shader.uniforms.uSunDir = VoxelLightUniforms.uSunDir;
+  shader.uniforms.uSunColor = VoxelLightUniforms.uSunColor;
+  shader.uniforms.uSkyColor = VoxelLightUniforms.uSkyColor;
+  shader.uniforms.uWind = VoxelLightUniforms.uWind;
+  shader.uniforms.uCloudTex = VoxelLightUniforms.uCloudTex;
+  shader.uniforms.uCloudsY = VoxelLightUniforms.uCloudsY;
+  shader.uniforms.uCloudShadow = VoxelLightUniforms.uCloudShadow;
+  shader.uniforms.uWaterFx = VoxelLightUniforms.uWaterFx;
+}
+
+// solid 材质：体素光 + 云影
 export function applyVoxelLight(material) {
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.uDayLight = VoxelLightUniforms.uDayLight;
-    shader.uniforms.uSunTint = VoxelLightUniforms.uSunTint;
-    shader.uniforms.uMinLight = VoxelLightUniforms.uMinLight;
-    shader.uniforms.uTorchTint = VoxelLightUniforms.uTorchTint;
+    injectCommonUniforms(shader);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec2 voxelLight;\nvarying vec2 vVoxelLight;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvVoxelLight = voxelLight;');
+      .replace('#include <common>', '#include <common>\nattribute vec2 voxelLight;\nvarying vec2 vVoxelLight;\nvarying vec3 vWorldPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvVoxelLight = voxelLight;\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vVoxelLight;\nuniform float uDayLight;\nuniform vec3 uSunTint;\nuniform float uMinLight;\nuniform vec3 uTorchTint;')
-      .replace('#include <color_fragment>', [
-        '#include <color_fragment>',
-        '{',
-        '  vec3 skyC = uSunTint * (vVoxelLight.x * uDayLight);',
-        '  vec3 torchC = uTorchTint * vVoxelLight.y;',
-        '  vec3 lv = max(skyC, torchC);',
-        '  lv = uMinLight + (1.0 - uMinLight) * lv;',
-        '  diffuseColor.rgb *= lv;',
+      .replace('#include <common>', '#include <common>\n' + FRAG_HEADER + '\n' + CLOUD_SHADOW_GLSL)
+      .replace('#include <color_fragment>', VOXEL_LIGHT_GLSL);
+  };
+}
+
+// water 材质：体素光 + 云影 + 水面反射（菲涅尔/太阳月亮高光/方块光倒影/波纹）
+// 注入点在 #include <opaque_fragment> 之后、tonemapping/colorspace/fog 之前——
+// 反射高光同样被雾衰减，深夜远景不会出现突兀亮点。
+export function applyVoxelLightWater(material) {
+  material.onBeforeCompile = (shader) => {
+    injectCommonUniforms(shader);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec2 voxelLight;\nvarying vec2 vVoxelLight;\nvarying vec3 vWorldPos;\nvarying vec3 vNrmW;')
+      .replace('#include <begin_vertex>', [
+        '#include <begin_vertex>',
+        'vVoxelLight = voxelLight;',
+        'vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;',
+        'vNrmW = normalize(mat3(modelMatrix) * normal);'
+      ].join('\n'));
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\n' + FRAG_HEADER + '\nvarying vec3 vNrmW;\n' + CLOUD_SHADOW_GLSL)
+      .replace('#include <color_fragment>', VOXEL_LIGHT_GLSL)
+      .replace('#include <opaque_fragment>', [
+        '#include <opaque_fragment>',
+        'if (uWaterFx > 0.5) {',
+        '  vec3 V = normalize(cameraPosition - vWorldPos);',
+        '  vec3 N0 = normalize(vNrmW);',
+        '  vec3 N = N0;',
+        '  if (N0.y > 0.5) {',
+        // 两轴正弦波纹扰动法线（uTime 暂停冻结；振幅 0.05 保持块状风格不碎）
+        '    vec2 rip = vec2(',
+        '      sin(vWorldPos.x * 1.9 + uTime * 1.7) + 0.6 * sin(vWorldPos.z * 3.1 - uTime * 2.3),',
+        '      cos(vWorldPos.z * 2.3 + uTime * 1.3) + 0.6 * cos(vWorldPos.x * 2.7 + uTime * 1.9)',
+        '    ) * 0.05;',
+        '    N = normalize(vec3(rip.x, 1.0, rip.y));',
+        '  }',
+        '  float ndv = max(dot(N0, V), 0.0);',
+        '  float fresnel = pow(1.0 - ndv, 3.0);',
+        // 菲涅尔天空反射：掠射角水面混入天空/雾色（夜晚雾色即夜空色，自动变暗）
+        '  gl_FragColor.rgb = mix(gl_FragColor.rgb, uSkyColor, fresnel * 0.55);',
+        // 太阳镜面高光（日照）+ 月亮镜面（夜，方向 = -uSunDir）
+        '  vec3 sunD = normalize(uSunDir);',
+        '  vec3 Hs = normalize(V + sunD);',
+        '  float specS = pow(max(dot(N, Hs), 0.0), 160.0);',
+        '  float sunVis = smoothstep(0.02, 0.10, sunD.y);',
+        '  vec3 Hm = normalize(V - sunD);',
+        '  float specM = pow(max(dot(N, Hm), 0.0), 220.0);',
+        '  float moonVis = smoothstep(0.02, 0.10, -sunD.y);',
+        // 方块光暖色倒影：vVoxelLight.y（顶点方块光）调制 glint，掠射角增强——
+        // 夜晚岸边火把/岩浆在水面拉出暖色光斑
+        '  vec3 Ht = normalize(V + vec3(0.15, 1.0, 0.1));',
+        '  float glint = pow(max(dot(N, Ht), 0.0), 45.0);',
+        '  float grazing = 0.35 + 0.65 * fresnel;',
+        '  vec3 torchSpec = uTorchTint * vVoxelLight.y * glint * grazing * 1.4;',
+        '  gl_FragColor.rgb += uSunColor * specS * sunVis * 1.1',
+        '    + vec3(0.70, 0.76, 0.95) * specM * moonVis * 0.30',
+        '    + torchSpec;',
         '}'
       ].join('\n'));
   };

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from '../core/Chunk.js';
 import { SVGTextures } from './SVGTextures.js';
-import { applyVoxelLight } from './VoxelLight.js';
+import { applyVoxelLight, applyVoxelLightWater } from './VoxelLight.js';
 
 // 6 个面的方向定义：[dx, dy, dz]
 const FACES = [
@@ -92,7 +92,8 @@ export class ChunkMeshBuilder {
       side: THREE.DoubleSide,
       depthWrite: false
     });
-    applyVoxelLight(this.waterMaterial);
+    // 水面用增强注入器：体素光基础上叠加菲涅尔/太阳月亮高光/方块光倒影/云影（uniform 开关）
+    applyVoxelLightWater(this.waterMaterial);
     this.lightMaterial = new THREE.MeshBasicMaterial({
       map: this.atlasTexture,
       side: THREE.FrontSide,

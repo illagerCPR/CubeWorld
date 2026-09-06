@@ -1,5 +1,6 @@
 // Sky.js -- 天空、太阳、月亮、云层、星空、雾
 import * as THREE from 'three';
+import { VoxelLightUniforms } from './VoxelLight.js';
 
 // 确定性整数 hash（云纹理网格噪声用，结果可复现）
 function hash2i(i, j) {
@@ -141,13 +142,16 @@ export class Sky {
     cloudTex.wrapS = cloudTex.wrapT = THREE.RepeatWrapping;
     cloudTex.magFilter = THREE.NearestFilter;
     this.cloudTex = cloudTex;
+    // 云纹理交给体素光注入器做云影采样（与下方云层 offset 同源映射）
+    VoxelLightUniforms.uCloudTex.value = cloudTex;
+
     const cloudGeo = new THREE.PlaneGeometry(1536, 1536);
     cloudGeo.rotateX(-Math.PI / 2);
     this.clouds = new THREE.Mesh(cloudGeo, new THREE.MeshBasicMaterial({
       map: cloudTex, transparent: true, opacity: 0.55, depthWrite: false, fog: false, side: THREE.DoubleSide
     }));
     this.clouds.frustumCulled = false; // 平面总以玩家为中心，包围盒剔除可能误裁
-    this._wind = 0;
+    this.wind = 0; // 云风偏移（体素光云影映射与纹理 offset 共用此值）
     scene.add(this.clouds);
 
     // 环境光（怪物/手持物仍用场景光；方块光照 L3 起由体素光接管）
@@ -265,10 +269,10 @@ export class Sky {
 
     // 云层：跟随玩家，纹理按世界坐标锚定（offset 抵消平面移动）+ 缓慢漂移；
     // 可见性 = 视频设置 ∧ 维度档案（下界/末地隐藏）
-    this._wind += dt * 2.0;
+    this.wind += dt * 2.0;
     this.clouds.position.set(playerPos.x, this._cloudsY, playerPos.z);
     this.clouds.visible = this._showClouds && this.cloudsEnabled;
-    this.cloudTex.offset.set((playerPos.x + this._wind) / 1536, playerPos.z / 1536);
+    this.cloudTex.offset.set((playerPos.x + this.wind) / 1536, playerPos.z / 1536);
 
     // 天空颜色插值（无天光维度用档案固定色，雾色同步）
     const c = this._fixedColor

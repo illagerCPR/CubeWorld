@@ -15,7 +15,13 @@ export const DEFAULT_SETTINGS = {
   smoothLighting: true,
   viewBobbing: true,
   sensitivity: 100,    // 30..200 (%)
+  gfx: 'off',          // off | basic | full 光照增强档位（基础=水面反射+云影，完整=再加后处理）
+  gfxBloom: true,      // 完整档子开关：泛光
+  gfxGodRays: true,    // 完整档子开关：体积光
 };
+
+export const GFX_ORDER = ['off', 'basic', 'full'];
+export const GFX_LABELS = { off: '关闭', basic: '基础', full: '完整' };
 
 const PARTICLE_SCALE = { all: 1, decreased: 0.5, minimal: 0.15 };
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -35,6 +41,9 @@ export function loadSettings() {
         if (saved.smoothLighting !== undefined) s.smoothLighting = !!saved.smoothLighting;
         if (saved.viewBobbing !== undefined) s.viewBobbing = !!saved.viewBobbing;
         if (saved.sensitivity !== undefined) s.sensitivity = clamp(Math.round(saved.sensitivity), 30, 200);
+        if (GFX_ORDER.includes(saved.gfx)) s.gfx = saved.gfx;
+        if (saved.gfxBloom !== undefined) s.gfxBloom = !!saved.gfxBloom;
+        if (saved.gfxGodRays !== undefined) s.gfxGodRays = !!saved.gfxGodRays;
       }
     }
   } catch { /* 损坏的设置按默认处理 */ }
@@ -86,6 +95,10 @@ export function applySettings(game) {
   const ds = PARTICLE_SCALE[s.particles] ?? 1;
   if (game.particles) game.particles.densityScale = ds;
   if (game.fireParticles) game.fireParticles.densityScale = ds;
+  // 光照增强（L1：水面反射 + 云影，uniform 开关零重建；L2 后处理在 Renderer 内接线）
+  const gfxOn = s.gfx === 'basic' || s.gfx === 'full';
+  VoxelLightUniforms.uWaterFx.value = gfxOn ? 1 : 0;
+  VoxelLightUniforms.uCloudShadow.value = gfxOn ? 1 : 0; // Game.update 每帧再与维度云显隐相与
 }
 
 // 雾距按渲染距离收口：far 取加载圈半径的 95%（雾 92%+ 才到边界，方形加载边界不可见），

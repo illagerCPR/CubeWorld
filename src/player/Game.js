@@ -703,6 +703,17 @@ export class Game {
       VoxelLightUniforms.uSunTint.value.copy(this.sky.sunTint);
     }
 
+    // 光照视觉增强（L1）：太阳方向/颜色、天空反射色、云影参数、波纹时钟——全部共享 uniform
+    VoxelLightUniforms.uTime.value += dt;
+    VoxelLightUniforms.uSunDir.value.copy(this.sky.sunLight.position);
+    VoxelLightUniforms.uSunColor.value.copy(this.sky.sunLight.color);
+    VoxelLightUniforms.uSkyColor.value.copy(this.sky.skyMesh.material.color);
+    VoxelLightUniforms.uWind.value = this.sky.wind;
+    VoxelLightUniforms.uCloudsY.value = this.sky._cloudsY || 140;
+    // 云影 = 设置档位 ∧ 维度云显隐（下界/末地云隐藏，clouds.visible 已含此判断）
+    const gfxOn = this.settings.gfx === 'basic' || this.settings.gfx === 'full';
+    VoxelLightUniforms.uCloudShadow.value = (gfxOn && this.sky.clouds.visible) ? 1 : 0;
+
     // 水下视野雾效（出水恢复的雾距与 applySettings 同源，随渲染距离收口 + 维度雾系数）
     const fog = this.renderer.scene.fog;
     if (fog) {
