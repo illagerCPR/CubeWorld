@@ -39,7 +39,7 @@ import { matchRecipe } from '../core/Crafting.js';
 import { SMELT_TIME, getSmeltingResult, getFuelTime } from '../core/Smelting.js';
 import { MobManager } from '../entity/MobManager.js';
 import { Mob } from '../entity/Mob.js';
-import { VoxelLightUniforms } from '../render/VoxelLight.js';
+import { VoxelLightUniforms, GfxState } from '../render/VoxelLight.js';
 import { RedstoneSystem } from '../core/RedstoneSystem.js';
 import { SaveSystem } from '../core/SaveSystem.js';
 import { getDimension } from '../core/dimensions.js';
@@ -713,6 +713,12 @@ export class Game {
     // 云影 = 设置档位 ∧ 维度云显隐（下界/末地云隐藏，clouds.visible 已含此判断）
     const gfxOn = this.settings.gfx === 'basic' || this.settings.gfx === 'full';
     VoxelLightUniforms.uCloudShadow.value = (gfxOn && this.sky.clouds.visible) ? 1 : 0;
+    // 完整档专属：云色按昼夜调制（云是无光照材质，夜里不调制会白亮并触发"夜空发光云"）、
+    // 光源块提亮 1.5 供泛光取源；其余档保持原值（关闭/基础档画面逐字节现状）
+    const full = this.settings.gfx === 'full';
+    if (this.sky.clouds) this.sky.clouds.material.color.setScalar(full ? 0.35 + 0.50 * this.sky.getLightLevel() : 1);
+    GfxState.lightBoost = full ? 1.5 : 1.0;
+    if (this.chunkBuilder) this.chunkBuilder.lightMaterial.color.setScalar(GfxState.lightBoost);
 
     // 水下视野雾效（出水恢复的雾距与 applySettings 同源，随渲染距离收口 + 维度雾系数）
     const fog = this.renderer.scene.fog;

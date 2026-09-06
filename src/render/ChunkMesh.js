@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from '../core/Chunk.js';
 import { SVGTextures } from './SVGTextures.js';
-import { applyVoxelLight, applyVoxelLightWater } from './VoxelLight.js';
+import { applyVoxelLight, applyVoxelLightWater, GfxState } from './VoxelLight.js';
 
 // 6 个面的方向定义：[dx, dy, dz]
 const FACES = [
@@ -99,6 +99,8 @@ export class ChunkMeshBuilder {
       side: THREE.FrontSide,
       alphaTest: 0.1,
     });
+    // 光源块按档位提亮（GfxState.lightBoost：完整档 1.5 供泛光取源，其余档 1.0 现状）
+    this.lightMaterial.color.setScalar(GfxState.lightBoost);
 
     // 局部方块缓存 scratch（跨构建复用，避免每帧分配 83KB）
     this._cache = new Uint8Array(PAD * CHUNK_HEIGHT * PAD);

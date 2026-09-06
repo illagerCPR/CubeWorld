@@ -95,10 +95,18 @@ export function applySettings(game) {
   const ds = PARTICLE_SCALE[s.particles] ?? 1;
   if (game.particles) game.particles.densityScale = ds;
   if (game.fireParticles) game.fireParticles.densityScale = ds;
-  // 光照增强（L1：水面反射 + 云影，uniform 开关零重建；L2 后处理在 Renderer 内接线）
+  // 光照增强（L1：水面反射 + 云影，uniform 开关零重建；L2：完整档后处理链在 Renderer 内接线）
   const gfxOn = s.gfx === 'basic' || s.gfx === 'full';
   VoxelLightUniforms.uWaterFx.value = gfxOn ? 1 : 0;
   VoxelLightUniforms.uCloudShadow.value = gfxOn ? 1 : 0; // Game.update 每帧再与维度云显隐相与
+  // L2 后处理：完整档 EffectComposer（泛光/体积光子开关透传），失败自动回退直渲
+  if (game.renderer && game.renderer.setGraphicsMode) {
+    game.renderer.setGraphicsMode(s.gfx);
+    if (game.renderer.postfx) {
+      game.renderer.postfx.setBloom(s.gfxBloom);
+      game.renderer.postfx.setGodRays(s.gfxGodRays);
+    }
+  }
 }
 
 // 雾距按渲染距离收口：far 取加载圈半径的 95%（雾 92%+ 才到边界，方形加载边界不可见），
