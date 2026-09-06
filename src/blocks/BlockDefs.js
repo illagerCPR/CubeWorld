@@ -1054,6 +1054,30 @@ reg('lapis_block', { hardness: 3, tool: 'pickaxe' }, { lapis_block: mineralBlock
 reg('coal_block', { hardness: 5, tool: 'pickaxe' }, { coal_block: noiseTex([28, 28, 28], 107, { dark: 0.8, light: 1.35, dProb: 0.3, lProb: 0.12 }) });
 
 // --- 植物 ---
+// 睡莲纹理：圆形绿叶 + 朝北 V 形缺口 + 放射叶脉（确定性像素画，无 Math.random）
+function lilyPadTex(seed) {
+  const px = makeTex();
+  const leaf = [92, 148, 56], vein = [70, 118, 40], rim = [64, 110, 38], spot = [122, 172, 82];
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const dx = x - 7.5, dy = y - 7.5;
+      const r = Math.sqrt(dx * dx + dy * dy);
+      if (r > 7.4) continue; // 圆外透明
+      // V 形缺口：从圆心向北（-y）张开的楔形
+      if (dy < 0 && Math.abs(dx) < -dy * 0.5) continue;
+      let c = leaf;
+      if (r > 6.6) c = rim; // 边缘深色一圈
+      else if (Math.abs(Math.abs(dx) - Math.abs(dy) * 1.4) < 0.9 && dy > -0.5) c = vein; // 放射叶脉
+      else if (r < 2.2) c = spot; // 中心浅斑
+      if (hash2(x, y, seed) > 0.86) c = vein; // 零散深点
+      setPx(px, x, y, rgb(c));
+    }
+  }
+  return pixelSvg(px);
+}
+
+reg('lily_pad', { displayName: '睡莲', transparent: true, solid: false, hardness: 0, renderType: 'flat' },
+  { lily_pad: lilyPadTex(115) });
 reg('cactus', { transparent: true, solid: true, hardness: 0.4 }, { cactus: cactusTex(111) });
 reg('pumpkin', { textures: { top: 'pumpkin_top', side: 'pumpkin_side', bottom: 'pumpkin_top' }, hardness: 1 },
   { pumpkin_top: pumpkinTopTex(112), pumpkin_side: pumpkinSideTex(113) });

@@ -242,11 +242,19 @@ export class ChunkMeshBuilder {
             continue;
           }
           if (def.renderType === 'cross') {
-            this.addCross(positions, normals, uvs, colors, indices, x, y, z, def, idx, voxLight);
-            idx += 4;
+            // addCross 画 2 交叉面共 8 顶点并返回推进后索引——调用处必须接收返回值，
+            // 否则 cross 之后所有方块的顶点索引整体错位 4（曾真出，见 AGENTS.md 渲染批次备忘）。
+            idx = this.addCross(positions, normals, uvs, colors, indices, x, y, z, def, idx, voxLight);
             if (def.light >= 13) {
-              this.addCross(lightPos, lightNorm, lightUv, lightCol, lightIdx, x, y, z, def, lIdx, null);
-              lIdx += 4;
+              lIdx = this.addCross(lightPos, lightNorm, lightUv, lightCol, lightIdx, x, y, z, def, lIdx, null);
+            }
+            continue;
+          }
+          if (def.renderType === 'flat') {
+            // 水平薄板（睡莲）：单顶面微抬于格顶，正反双面索引（水下仰视可见）
+            idx = this.addFlat(positions, normals, uvs, colors, indices, x, y, z, def, idx, voxLight);
+            if (def.light >= 13) {
+              lIdx = this.addFlat(lightPos, lightNorm, lightUv, lightCol, lightIdx, x, y, z, def, lIdx, null);
             }
             continue;
           }
@@ -526,7 +534,8 @@ export class ChunkMeshBuilder {
     return idx;
   }
 
-  // 十字形渲染（火把/花）；voxLight 非空时写入自身格光照（发光体 light mesh 传 null 跳过）
+  // 十字形渲染（火把/花）；voxLight 非空时写入自身格光照（发光体 light mesh 传 null 跳过）。
+  // 返回推进后的顶点索引（2 交叉面共 8 顶点）。
   addCross(positions, normals, uvs, colors, indices, x, y, z, def, idx, voxLight) {
     const texName = def.side;
     const uv = this.atlasUV.get(texName) || { u0: 0, v0: 0, u1: 1, v1: 1 };
@@ -547,5 +556,28 @@ export class ChunkMeshBuilder {
       indices.push(idx, idx + 1, idx + 2, idx + 2, idx + 1, idx + 3);
       idx += 4;
     }
+    return idx;
+  }
+
+  // 水平薄板渲染（睡莲）：顶面抬升 0.002 防与水面 z-fighting，正反双面索引；返回推进后索引（4 顶点）。
+  addFlat(positions, normals, uvs, colors, indices, x, y, z, def, idx, voxLight) {
+    const texName = def.side;
+    const uv = this.atlasUV.get(texName) || { u0: 0, v0: 0, u1: 1, v1: 1 };
+    const skyL = voxLight ? this._skyAt(x, y, z) / 15 : 0;
+    const blkL = voxLight ? this._blockLAt(x, y, z) / 15 : 0;
+    const yTop = y + 1.002;
+    const corners = [
+      [x + 0, yTop, z + 0], [x + 0, yTop, z + 1], [x + 1, yTop, z + 0], [x + 1, yTop, z + 1]
+    ];
+    for (const [cx, cy, cz] of corners) {
+      positions.push(cx, cy, cz);
+      normals.push(0, 1, 0);
+      colors.push(1, 1, 1);
+      if (voxLight) voxLight.push(skyL, blkL);
+    }
+    uvs.push(uv.u0, uv.v0, uv.u0, uv.v1, uv.u1, uv.v0, uv.u1, uv.v1);
+    indices.push(idx, idx + 1, idx + 2, idx + 2, idx + 1, idx + 3); // 正面（上方可见）
+    indices.push(idx, idx + 2, idx + 1, idx + 2, idx + 3, idx + 1); // 反面（下方仰视可见）
+    return idx + 4;
   }
 }
