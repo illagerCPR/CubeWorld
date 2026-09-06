@@ -34,6 +34,15 @@ else
     exit 1
 fi
 
+# 主世界群系回归（纯 node：确定性/在场占比/高山海拔锚点/相邻列连续性）
+echo "=== biome-determinism ==="
+if node tests/biome-determinism.mjs; then
+    echo "biome-determinism: OK"
+else
+    echo "biome-determinism: FAILED"
+    exit 1
+fi
+
 # 维度地形生成回归（纯 node：下界等已实现维度的确定性/顺序无关/出生点安全）
 echo "=== dimension-determinism ==="
 if node tests/dimension-determinism.mjs; then

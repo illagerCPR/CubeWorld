@@ -2,6 +2,9 @@
 import { SimplexNoise } from './noise.js';
 import { Biomes, BiomeConfig } from './biomes.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
+
+// 高山判定阈值：mountainNoise.fbm2D 超过此值 → 高山群系（优先级高于温湿判定）
+const MOUNTAIN_T = 0.45;
 import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from '../core/Chunk.js';
 import { StructureManager } from './structures/StructureManager.js';
 import './structures/catalog.js';
@@ -45,40 +48,51 @@ export class TerrainGenerator {
     this.caveNoiseA = new SimplexNoise(seed + 6); // 洞穴双通道（意面）+ 奶酪
     this.caveNoiseB = new SimplexNoise(seed + 7);
     this.caveNoiseC = new SimplexNoise(seed + 8);
+    this.mountainNoise = new SimplexNoise(seed + 9); // 山地场（seed+9 空闲，维度系列用 seed*31/37/41）
     this.structureManager = new StructureManager(this, seed);
   }
 
-  // 取群系
+  // 取群系（纯函数 of (seed, 坐标)，跨端/跨区块顺序一致）
   getBiome(wx, wz) {
-    const temp = this.tempNoise.fbm2D(wx * 0.004, wz * 0.004, 3);
-    const humid = this.humidNoise.fbm2D(wx * 0.005, wz * 0.005, 3);
     const river = this.riverNoise.ridge2D(wx * 0.003, wz * 0.003, 3);
-    
+
     // 河流：ridge 噪声接近 0 时
     if (river < 0.06) return Biomes.RIVER;
-    
+
+    // 高山：独立山地噪声成片，可出现在任何温区
+    if (this.mountainNoise.fbm2D(wx * 0.0035, wz * 0.0035, 3) > MOUNTAIN_T) return Biomes.MOUNTAINS;
+
+    const temp = this.tempNoise.fbm2D(wx * 0.004, wz * 0.004, 3);
+    const humid = this.humidNoise.fbm2D(wx * 0.005, wz * 0.005, 3);
+
     if (temp > 0.3 && humid < 0) return Biomes.DESERT;
-    if (temp < -0.3 && humid > 0) return Biomes.SNOWY_TAIGA;
+    if (temp < -0.3) return humid > 0 ? Biomes.SNOWY_TAIGA : Biomes.TAIGA;
+    // 温和带：中湿 = 桦木森林（更湿区留给后续沼泽，更干 = 平原）
+    if (humid > 0.05 && humid < 0.25) return Biomes.BIRCH_FOREST;
     return Biomes.PLAINS;
   }
 
-  // 基础高度（不含河流下切）
+  // 基础高度（不含河流下切）：群系调制全部查 BiomeConfig（heightScale/heightOffset/peakBoost）
   getBaseHeight(wx, wz) {
+    const biome = this.getBiome(wx, wz);
+    const cfg = BiomeConfig[biome];
     const n = this.noise.fbm2D(wx * 0.008, wz * 0.008, 5, 0.5, 2);
     const detail = this.detailNoise.fbm2D(wx * 0.03, wz * 0.03, 3, 0.5, 2);
-    let h = SEA_LEVEL + n * 20 + detail * 4;
-    
-    const biome = this.getBiome(wx, wz);
-    if (biome === Biomes.SNOWY_TAIGA) h += 8;
-    if (biome === Biomes.DESERT) h -= 2;
-    
+    let h = SEA_LEVEL + n * 20 * (cfg.heightScale || 1) + detail * 4 + (cfg.heightOffset || 0);
+
+    // 高山：山脊越"核心"越高（超出判定阈值的余量加成），形成陡峭峰顶
+    if (cfg.peakBoost) {
+      const m = this.mountainNoise.fbm2D(wx * 0.0035, wz * 0.0035, 3);
+      if (m > MOUNTAIN_T) h += (m - MOUNTAIN_T) * cfg.peakBoost;
+    }
+
     // 河流下切
     const river = this.riverNoise.ridge2D(wx * 0.003, wz * 0.003, 3);
     if (river < 0.08) {
       const riverDepth = (0.08 - river) / 0.08;
       h = Math.min(h, SEA_LEVEL - riverDepth * 6);
     }
-    
+
     return Math.max(1, Math.min(CHUNK_HEIGHT - 1, Math.round(h)));
   }
 
@@ -121,10 +135,17 @@ export class TerrainGenerator {
             blockId = BlockRegistry.getId(cfg.subsurfaceBlock);
           } else if (y < height) {
             blockId = BlockRegistry.getId(cfg.surfaceBlock);
-            // 水下列（列顶在海平面下）：表面铺泥土（草方块不该出现在水下）
             if (y < SEA_LEVEL) {
+              // 水下列（列顶在海平面下）：表面铺泥土（草方块不该出现在水下）
               const surfName = BlockRegistry.getById(BlockRegistry.getId(cfg.surfaceBlock))?.name;
               if (surfName === 'grass_block' || surfName === 'snow_block') blockId = DIRT();
+            } else if (cfg.gravelPatch &&
+                       this.detailNoise.noise2D(wx * 0.09, wz * 0.09) > 0.55) {
+              // 高山砾石斑块：按噪声成片置换表面层（挖开仍是石头）
+              blockId = GRAVEL();
+            } else if (cfg.snowLine && height >= cfg.snowLine) {
+              // 高山雪线以上：表面铺雪块
+              blockId = SNOW_BLOCK();
             }
             // 河流区域水位以下
             if (biome === Biomes.RIVER && y < SEA_LEVEL) {
@@ -146,8 +167,9 @@ export class TerrainGenerator {
           }
         }
 
-        // 雪层
-        if (cfg.snowLayer && height < CHUNK_HEIGHT && height > SEA_LEVEL) {
+        // 雪层（积雪针叶林全域 / 高山雪线以上）
+        const snowTop = cfg.snowLayer || (cfg.snowLine && height >= cfg.snowLine);
+        if (snowTop && height < CHUNK_HEIGHT && height > SEA_LEVEL) {
           const above = chunk.get(x, height, z);
           if (above === 0) {
             chunk.set(x, height, z, SNOW_LAYER());
@@ -284,9 +306,15 @@ export class TerrainGenerator {
   }
 
   placeTree(chunk, x, y, z, type, rand) {
-    const height = type === 'spruce' ? 5 + Math.floor(rand() * 3) : 4 + Math.floor(rand() * 2);
-    const logName = type === 'spruce' ? 'spruce_log' : 'oak_log';
-    const leavesName = type === 'spruce' ? 'spruce_leaves' : 'oak_leaves';
+    const height = type === 'spruce' ? 5 + Math.floor(rand() * 3)
+      : type === 'birch' ? 6 + Math.floor(rand() * 3) // 桦木：细高树干
+      : 4 + Math.floor(rand() * 2);
+    const logName = type === 'spruce' ? 'spruce_log'
+      : type === 'birch' ? 'birch_log'
+      : 'oak_log';
+    const leavesName = type === 'spruce' ? 'spruce_leaves'
+      : type === 'birch' ? 'birch_leaves'
+      : 'oak_leaves';
     const logId = BlockRegistry.getId(logName);
     const leavesId = BlockRegistry.getId(leavesName);
     
