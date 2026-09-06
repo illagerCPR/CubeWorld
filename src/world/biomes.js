@@ -12,7 +12,8 @@ export const Biomes = {
   RIVER: 3,
   MOUNTAINS: 4,
   BIRCH_FOREST: 5,
-  TAIGA: 6
+  TAIGA: 6,
+  SWAMP: 7
 };
 
 export const BiomeNames = {
@@ -22,7 +23,8 @@ export const BiomeNames = {
   [Biomes.RIVER]: '河流',
   [Biomes.MOUNTAINS]: '高山',
   [Biomes.BIRCH_FOREST]: '桦木森林',
-  [Biomes.TAIGA]: '针叶林'
+  [Biomes.TAIGA]: '针叶林',
+  [Biomes.SWAMP]: '沼泽'
 };
 
 // 群系配置
@@ -111,5 +113,18 @@ export const BiomeConfig = {
     treeType: 'spruce',
     heightScale: 1.0,
     heightOffset: 3
+  },
+  [Biomes.SWAMP]: {
+    name: '沼泽',
+    surfaceBlock: 'grass_block',
+    subsurfaceBlock: 'dirt',
+    undergroundBlock: 'stone',
+    topHeight: 2,
+    treeChance: 0.02,
+    treeType: 'oak',
+    heightScale: 0.2,   // 压平：n 仅 ±4
+    heightOffset: 1,    // 地表贴海平面上沿
+    pondClay: true,     // 水下列表面铺粘土
+    lilyPadChance: 0.06 // 水面睡莲概率
   }
 };

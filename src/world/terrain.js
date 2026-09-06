@@ -49,6 +49,7 @@ export class TerrainGenerator {
     this.caveNoiseB = new SimplexNoise(seed + 7);
     this.caveNoiseC = new SimplexNoise(seed + 8);
     this.mountainNoise = new SimplexNoise(seed + 9); // 山地场（seed+9 空闲，维度系列用 seed*31/37/41）
+    this.swampNoise = new SimplexNoise(seed + 10);   // 沼泽水洼场（零散水塘分布）
     this.structureManager = new StructureManager(this, seed);
   }
 
@@ -65,9 +66,12 @@ export class TerrainGenerator {
     const temp = this.tempNoise.fbm2D(wx * 0.004, wz * 0.004, 3);
     const humid = this.humidNoise.fbm2D(wx * 0.005, wz * 0.005, 3);
 
+    // 沼泽：温和带高湿（紧随高山，抢占平原的高湿区）
+    if (temp > -0.1 && temp < 0.35 && humid >= 0.25) return Biomes.SWAMP;
+
     if (temp > 0.3 && humid < 0) return Biomes.DESERT;
     if (temp < -0.3) return humid > 0 ? Biomes.SNOWY_TAIGA : Biomes.TAIGA;
-    // 温和带：中湿 = 桦木森林（更湿区留给后续沼泽，更干 = 平原）
+    // 温和带：中湿 = 桦木森林（更湿区已被沼泽取走，更干 = 平原）
     if (humid > 0.05 && humid < 0.25) return Biomes.BIRCH_FOREST;
     return Biomes.PLAINS;
   }
@@ -84,6 +88,12 @@ export class TerrainGenerator {
     if (cfg.peakBoost) {
       const m = this.mountainNoise.fbm2D(wx * 0.0035, wz * 0.0035, 3);
       if (m > MOUNTAIN_T) h += (m - MOUNTAIN_T) * cfg.peakBoost;
+    }
+
+    // 沼泽水洼：局部噪声把列顶压到海平面下 1 格，形成零散浅水塘
+    // （水下方块表面由 pondClay 铺粘土；洞穴水面保护壳自动覆盖这些列防倒灌）
+    if (biome === Biomes.SWAMP && this.swampNoise.noise2D(wx * 0.06, wz * 0.06) > 0.55) {
+      h = Math.min(h, SEA_LEVEL - 1);
     }
 
     // 河流下切
@@ -139,6 +149,8 @@ export class TerrainGenerator {
               // 水下列（列顶在海平面下）：表面铺泥土（草方块不该出现在水下）
               const surfName = BlockRegistry.getById(BlockRegistry.getId(cfg.surfaceBlock))?.name;
               if (surfName === 'grass_block' || surfName === 'snow_block') blockId = DIRT();
+              // 沼泽水塘底铺粘土（pondClay；水洼列与流经沼泽的河底一致）
+              if (cfg.pondClay) blockId = CLAY();
             } else if (cfg.gravelPatch &&
                        this.detailNoise.noise2D(wx * 0.09, wz * 0.09) > 0.55) {
               // 高山砾石斑块：按噪声成片置换表面层（挖开仍是石头）
@@ -296,6 +308,12 @@ export class TerrainGenerator {
             surfaceName === 'sand' &&
             chunk.get(x, surfaceY + 1, z) !== WATER()) {
           chunk.set(x, surfaceY + 1, z, BlockRegistry.getId('spruce_log'));
+        }
+        // 睡莲：沼泽水洼水面——放在顶层水格（SEA_LEVEL，勿用 surfaceY+1：水洼深 2 格时会沉底）
+        if (cfg.lilyPadChance && rand() < cfg.lilyPadChance &&
+            (surfaceName === 'clay' || surfaceName === 'dirt') &&
+            chunk.get(x, SEA_LEVEL, z) === WATER()) {
+          chunk.set(x, SEA_LEVEL, z, BlockRegistry.getId('lily_pad'));
         }
         // 草丛
         if (cfg.grassChance && rand() < cfg.grassChance && surfaceName === 'grass_block') {
