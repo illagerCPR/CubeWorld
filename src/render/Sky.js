@@ -110,10 +110,12 @@ export class Sky {
     scene.add(this.skyMesh);
 
     // 太阳（方形贴图面片，MC 风格，billboard 正对玩家）
+    // 天体移到 layer 1：体积光预通道只渲 layer 1 取亮源掩码（主相机需 enable(1)）
     this.sun = new THREE.Mesh(
       new THREE.PlaneGeometry(34, 34),
       new THREE.MeshBasicMaterial({ map: makeSunTexture(), transparent: true, fog: false, depthWrite: false })
     );
+    this.sun.layers.set(1);
     scene.add(this.sun);
     this.sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
     scene.add(this.sunLight);
@@ -123,6 +125,7 @@ export class Sky {
       new THREE.PlaneGeometry(24, 24),
       new THREE.MeshBasicMaterial({ map: makeMoonTexture(), transparent: true, fog: false, depthWrite: false })
     );
+    this.moon.layers.set(1);
     scene.add(this.moon);
 
     // 日出/日落光晕（加法混合 sprite，跟太阳走，贴近地平线才亮）
@@ -131,6 +134,7 @@ export class Sky {
       blending: THREE.AdditiveBlending, fog: false, depthWrite: false, opacity: 0
     }));
     this.sunGlow.scale.set(160, 160, 1);
+    this.sunGlow.layers.set(1);
     scene.add(this.sunGlow);
 
     // 星空（Points，挂在随太阳同角旋转的天球上，夜晚淡入）

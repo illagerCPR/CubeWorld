@@ -64,13 +64,56 @@ const BlueMaskedHighPassFragment = [
   '}'
 ].join('\n');
 
+// 体积光合成：以 tDiffuse 为底，向太阳屏幕位置径向模糊采样 tSun（亮源掩码）并叠加。
+// 掩码里地形为纯黑、天体为亮色——被山体遮挡的太阳在掩码中不存在，光柱天然穿不透山。
+const GodRaysShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    tSun: { value: null },
+    uSunPos: { value: new THREE.Vector2(0.5, 0.5) },
+    uIntensity: { value: 0.0 }
+  },
+  vertexShader: [
+    'varying vec2 vUv;',
+    'void main() {',
+    '  vUv = uv;',
+    '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+    '}'
+  ].join('\n'),
+  fragmentShader: [
+    'uniform sampler2D tDiffuse;',
+    'uniform sampler2D tSun;',
+    'uniform vec2 uSunPos;',
+    'uniform float uIntensity;',
+    'varying vec2 vUv;',
+    'void main() {',
+    '  vec4 base = texture2D(tDiffuse, vUv);',
+    '  vec2 delta = (uSunPos - vUv) / 24.0 * 0.55;',
+    '  vec2 uv = vUv;',
+    '  float decay = 1.0;',
+    '  vec3 acc = vec3(0.0);',
+    '  for (int i = 0; i < 24; i++) {',
+    '    uv += delta;',
+    '    acc += texture2D(tSun, clamp(uv, 0.0, 1.0)).rgb * decay;',
+    '    decay *= 0.93;',
+    '  }',
+    '  acc /= 24.0;',
+    '  gl_FragColor = vec4(base.rgb + acc * uIntensity, base.a);',
+    '}'
+  ].join('\n')
+};
+
 export class PostFX {
   constructor(renderer) {
     this.renderer = renderer;          // 底层 THREE.WebGLRenderer
     this.enabled = false;
     this.composer = null;
     this.bloomPass = null;
-    this.godRaysPass = null;           // L3 挂载点
+    this.godRaysPass = null;           // 体积光合成 pass（composer 链内）
+    this.godRaysEnabled = false;       // 设置子开关
+    this._godRaysBuilt = false;
+    this.sunRT = null;                 // 亮源掩码 RT（256²，含地形遮挡深度）
+    this._blackMat = null;             // 遮挡通道覆盖材质
     this._failed = false;              // 创建失败后不再重试
   }
 
@@ -94,6 +137,13 @@ export class PostFX {
       this.bloomPass.materialHighPassFilter.fragmentShader = BlueMaskedHighPassFragment;
       this.bloomPass.materialHighPassFilter.needsUpdate = true;
       this.composer.addPass(this.bloomPass);
+      // 体积光合成 pass：置于泛光之后、色彩分级之前（光柱同样被分级/色调映射统一处理）
+      this.godRaysPass = new ShaderPass(GodRaysShader);
+      this.godRaysPass.enabled = false;
+      this.composer.addPass(this.godRaysPass);
+      this._godRaysBuilt = true;
+      this.sunRT = new THREE.WebGLRenderTarget(256, 256);
+      this._blackMat = new THREE.MeshBasicMaterial({ color: 0x000000, fog: false });
       this.composer.addPass(new ShaderPass(ColorGradeShader));
       this.composer.addPass(new OutputPass());
     } catch (e) {
@@ -127,7 +177,64 @@ export class PostFX {
   }
 
   setGodRays(on) {
-    if (this.godRaysPass) this.godRaysPass.enabled = !!on;
+    this.godRaysEnabled = !!on;
+    if (this.godRaysPass) this.godRaysPass.enabled = false; // 实际启停在 updateGodRays 逐帧判定
+  }
+
+  // 体积光逐帧状态：源选择（白天太阳/夜晚月亮）、屏幕投影、强度（低角度更强）。
+  // 维度无天体（下界/末地 celestials=false）时 sky.sun.visible=false 自动关闭。
+  updateGodRays(sky, camera) {
+    if (!this._godRaysBuilt || !this.godRaysPass) return;
+    const active = this.enabled && this.godRaysEnabled && sky && sky.sun && sky.sun.visible;
+    if (!active) {
+      this.godRaysPass.enabled = false;
+      return;
+    }
+    const useMoon = sky.sunLight.position.y <= 0;
+    const obj = useMoon ? sky.moon : sky.sun;
+    const v = obj.position.clone().project(camera);
+    // 太阳/月亮不在视锥内（含少量出屏余量）则不产生光柱
+    if (v.z > 1 || Math.abs(v.x) > 1.3 || Math.abs(v.y) > 1.3) {
+      this.godRaysPass.enabled = false;
+      return;
+    }
+    this.godRaysPass.uniforms.uSunPos.value.set((v.x + 1) / 2, (v.y + 1) / 2);
+    const elev = Math.min(1, Math.abs(sky.sunLight.position.y) * 1.3);
+    const strength = useMoon ? 0.12 : 0.35 * (1.15 - elev * 0.75);
+    this.godRaysPass.uniforms.uIntensity.value = Math.max(0.08, strength);
+    this.godRaysPass.enabled = true;
+  }
+
+  // 亮源掩码预渲染：256² 小 RT，先以黑色覆盖材质渲全部不透明几何（写入深度+黑底），
+  // 再关自动清除只渲 layer 1 天体（深度测试保留遮挡关系）——太阳被山体挡住时掩码无亮源。
+  _renderSunMask(scene, camera) {
+    const r = this.renderer;
+    if (!this._sunMaskCameraMask) this._sunMaskCameraMask = 0;
+    const oldMask = camera.layers.mask;
+    const oldOverride = scene.overrideMaterial;
+    const oldRT = r.getRenderTarget();
+    const oldAutoClear = r.autoClear;
+    const oldClearColor = new THREE.Color();
+    r.getClearColor(oldClearColor);
+    const oldClearAlpha = r.getClearAlpha();
+    try {
+      camera.layers.set(0);
+      scene.overrideMaterial = this._blackMat;
+      r.setRenderTarget(this.sunRT);
+      r.setClearColor(0x000000, 1);
+      r.clear();
+      r.render(scene, camera);
+      scene.overrideMaterial = null;
+      camera.layers.set(1);
+      r.autoClear = false;
+      r.render(scene, camera);
+    } finally {
+      scene.overrideMaterial = oldOverride;
+      camera.layers.mask = oldMask;
+      r.autoClear = oldAutoClear;
+      r.setClearColor(oldClearColor, oldClearAlpha);
+      r.setRenderTarget(oldRT);
+    }
   }
 
   setSize(width, height) {
@@ -142,6 +249,10 @@ export class PostFX {
     if (!this.enabled || !this.composer) {
       this.renderer.render(scene, camera);
       return;
+    }
+    if (this.godRaysPass && this.godRaysPass.enabled && this.sunRT) {
+      this.godRaysPass.uniforms.tSun.value = this.sunRT.texture;
+      this._renderSunMask(scene, camera);
     }
     this.composer.render();
   }

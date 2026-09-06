@@ -719,6 +719,8 @@ export class Game {
     if (this.sky.clouds) this.sky.clouds.material.color.setScalar(full ? 0.35 + 0.50 * this.sky.getLightLevel() : 1);
     GfxState.lightBoost = full ? 1.5 : 1.0;
     if (this.chunkBuilder) this.chunkBuilder.lightMaterial.color.setScalar(GfxState.lightBoost);
+    // 体积光逐帧状态：白天太阳/夜晚月亮取源、屏幕投影与强度（下界/末地无天体自动关）
+    if (this.renderer.postfx) this.renderer.postfx.updateGodRays(this.sky, this.renderer.camera);
 
     // 水下视野雾效（出水恢复的雾距与 applySettings 同源，随渲染距离收口 + 维度雾系数）
     const fog = this.renderer.scene.fog;
