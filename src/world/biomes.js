@@ -13,7 +13,9 @@ export const Biomes = {
   MOUNTAINS: 4,
   BIRCH_FOREST: 5,
   TAIGA: 6,
-  SWAMP: 7
+  SWAMP: 7,
+  SUNFLOWER_PLAINS: 8,
+  MUSHROOM_FIELDS: 9
 };
 
 export const BiomeNames = {
@@ -24,7 +26,9 @@ export const BiomeNames = {
   [Biomes.MOUNTAINS]: '高山',
   [Biomes.BIRCH_FOREST]: '桦木森林',
   [Biomes.TAIGA]: '针叶林',
-  [Biomes.SWAMP]: '沼泽'
+  [Biomes.SWAMP]: '沼泽',
+  [Biomes.SUNFLOWER_PLAINS]: '向日葵平原',
+  [Biomes.MUSHROOM_FIELDS]: '蘑菇岛'
 };
 
 // 群系配置
@@ -126,5 +130,29 @@ export const BiomeConfig = {
     heightOffset: 1,    // 地表贴海平面上沿
     pondClay: true,     // 水下列表面铺粘土
     lilyPadChance: 0.06 // 水面睡莲概率
+  },
+  [Biomes.SUNFLOWER_PLAINS]: {
+    name: '向日葵平原',
+    surfaceBlock: 'grass_block',
+    subsurfaceBlock: 'dirt',
+    undergroundBlock: 'stone',
+    topHeight: 4,
+    treeChance: 0.01,
+    treeType: 'oak',
+    heightScale: 1.0,
+    heightOffset: 0,
+    sunflowerChance: 0.04 // 向日葵密植（群系辨识核心）
+  },
+  [Biomes.MUSHROOM_FIELDS]: {
+    name: '蘑菇岛',
+    surfaceBlock: 'mycelium',
+    subsurfaceBlock: 'dirt',
+    undergroundBlock: 'stone',
+    topHeight: 3,
+    treeChance: 0,        // 无普通树（原版语义）
+    heightScale: 0.6,     // 平缓丘陵
+    heightOffset: 2,
+    hugeMushroomChance: 0.03,   // 巨型蘑菇概率（类似树）
+    smallMushroomChance: 0.05   // 地面小蘑菇
   }
 };

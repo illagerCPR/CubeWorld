@@ -82,6 +82,8 @@ const EXPECT = [
   [Biomes.DESERT, 1, 25],
   [Biomes.SNOWY_TAIGA, 0.5, 25],
   [Biomes.SWAMP, 2, 20],
+  [Biomes.SUNFLOWER_PLAINS, 0.3, 8],
+  [Biomes.MUSHROOM_FIELDS, 0.3, 8],
 ];
 for (const [b, lo, hi] of EXPECT) {
   const p = pct(b);
@@ -129,6 +131,40 @@ for (const [b, lo, hi] of EXPECT) {
   ok(`睡莲在场（${lilyCount} 格 / ${chunksMade} 区块，扫 ${blocksScanned} 非空方块）`);
   if (!BiomeNames[Biomes.SWAMP]) fail('SWAMP 缺少中文名');
   ok(`群系名表完备（${BiomeNames[Biomes.SWAMP]}）`);
+}
+
+// ③d B3 区块生成健全性：菌丝体地表 + 巨型蘑菇 + 向日葵花海
+{
+  const g = new TerrainGenerator('42');
+  const findChunks = (biome, limit) => {
+    const out = [];
+    for (let cx = -10; cx <= 10 && out.length < limit; cx++) {
+      for (let cz = -10; cz <= 10 && out.length < limit; cz++) {
+        if (g.getBiome(cx * 16 + 8, cz * 16 + 8) === biome) out.push([cx, cz]);
+      }
+    }
+    return out;
+  };
+  const scan = (chunks) => {
+    const names = {};
+    for (const [cx, cz] of chunks) {
+      const chunk = new Chunk(cx, cz);
+      g.generateChunk(chunk);
+      for (const id of chunk.blocks) {
+        if (!id) continue;
+        const n = BlockRegistry.getById(id)?.name;
+        if (n) names[n] = (names[n] || 0) + 1;
+      }
+    }
+    return names;
+  };
+  const mush = scan(findChunks(Biomes.MUSHROOM_FIELDS, 8));
+  if (!mush['mycelium']) fail('蘑菇岛区块未生成菌丝体地表');
+  if (!mush['mushroom_stem'] || !mush['mushroom_cap_red'] && !mush['mushroom_cap_brown']) fail('蘑菇岛区块未生成巨型蘑菇');
+  ok(`蘑菇岛健全：菌丝体 ${mush['mycelium']}、菌柄 ${mush['mushroom_stem']}、红盖 ${mush['mushroom_cap_red'] || 0}、棕盖 ${mush['mushroom_cap_brown'] || 0}、小蘑菇 ${(mush['red_mushroom'] || 0) + (mush['brown_mushroom'] || 0)}`);
+  const sf = scan(findChunks(Biomes.SUNFLOWER_PLAINS, 6));
+  if (!sf['sunflower']) fail('向日葵平原区块未生成向日葵');
+  ok(`向日葵平原健全：向日葵 ${sf['sunflower']} 格`);
 }
 
 // ④ 高山海拔锚点

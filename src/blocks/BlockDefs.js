@@ -760,6 +760,25 @@ reg('air', { id: 0, displayName: '空气', solid: false, transparent: true, hard
 reg('stone', { hardness: 1.5, tool: 'pickaxe' }, { stone: stoneTex(1) });
 reg('grass_block', { textures: { top: 'grass_top', side: 'grass_side', bottom: 'dirt' }, hardness: 0.6 },
   { grass_top: grassTopTex(7), grass_side: grassSideTex(8), dirt: noiseTex([134, 96, 67], 9) });
+// 菌丝体：紫灰顶 + 带紫缘的土侧 + dirt 底（蘑菇岛地表）
+function myceliumSideTex(seed) {
+  const px = makeTex();
+  const soil = [134, 96, 67], mold = [125, 100, 130];
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const edge = y < 3 + (hash2(x, 0, seed) > 0.5 ? 1 : 0); // 紫缘参差下沿
+      const f = 1 + (hash2(x, y, seed + 1) - 0.5) * 0.12;
+      setPx(px, x, y, rgb(edge ? mold : soil, f));
+      if (edge && hash2(x, y, seed + 2) > 0.8) setPx(px, x, y, rgb([150, 118, 152], f));
+    }
+  }
+  return pixelSvg(px);
+}
+reg('mycelium', { displayName: '菌丝体', textures: { top: 'mycelium_top', side: 'mycelium_side', bottom: 'dirt' }, hardness: 0.6 },
+  {
+    mycelium_top: noiseTex([125, 100, 130], 116, { dark: 0.84, light: 1.16, dProb: 0.26, lProb: 0.14 }),
+    mycelium_side: myceliumSideTex(117)
+  });
 reg('dirt', { hardness: 0.5 }, { dirt: noiseTex([134, 96, 67], 9) });
 reg('coarse_dirt', { hardness: 0.5 }, { coarse_dirt: noiseTex([122, 90, 60], 10, { dProb: 0.24 }) });
 reg('sand', { hardness: 0.5 }, { sand: noiseTex([219, 207, 163], 11, { dark: 0.93, light: 1.06 }) });
@@ -1078,6 +1097,60 @@ function lilyPadTex(seed) {
 
 reg('lily_pad', { displayName: '睡莲', transparent: true, solid: false, hardness: 0, renderType: 'flat' },
   { lily_pad: lilyPadTex(115) });
+// 向日葵：绿茎双叶 + 黄瓣棕心花盘（cross 全高纹理，确定性像素画）
+function sunflowerTex(seed) {
+  const px = makeTex();
+  const stem = [66, 122, 48], leaf = [88, 148, 60], petal = [232, 190, 40], core = [96, 66, 30];
+  for (let y = 6; y < 16; y++) { setPx(px, 7, y, rgb(stem)); setPx(px, 8, y, rgb(stem)); }
+  for (const [lx, ly] of [[4, 10], [5, 10], [5, 11], [10, 12], [11, 12], [11, 13]]) setPx(px, lx, ly, rgb(leaf));
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) {
+    const dx = x - 7.5, dy = y - 3.5, r = Math.sqrt(dx * dx + dy * dy);
+    if (r <= 4.4) setPx(px, x, y, rgb(r <= 1.9 ? core : petal, 1 + (hash2(x, y, seed) - 0.5) * 0.12));
+  }
+  return pixelSvg(px);
+}
+// 小蘑菇：白柄 + 圆帽（red 带白点），cross 纹理
+function smallMushroomTex(seed, capColor, dots) {
+  const px = makeTex();
+  const stem = [224, 218, 205];
+  for (let y = 9; y < 16; y++) { setPx(px, 7, y, rgb(stem)); setPx(px, 8, y, rgb(stem)); }
+  for (let y = 5; y < 9; y++) for (let x = 3; x < 13; x++) {
+    const dx = x - 7.5, dy = (y - 8.6) * 1.8, r = Math.sqrt(dx * dx + dy * dy);
+    if (r <= 5.2) setPx(px, x, y, rgb(capColor, 1 + (hash2(x, y, seed) - 0.5) * 0.1));
+  }
+  if (dots) for (const [dx2, dy2] of [[5, 6], [9, 6], [7, 5], [4, 8], [10, 8]]) setPx(px, dx2, dy2, rgb([236, 232, 226]));
+  return pixelSvg(px);
+}
+// 巨型蘑菇部件：白灰竖纹菌柄 / 红底白点菌盖 / 棕色菌盖
+function mushroomStemTex(seed) {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const stripe = hash2(Math.floor(x / 2), Math.floor(y / 4), seed) > 0.72 ? 0.9 : 1;
+    setPx(px, x, y, rgb([222, 216, 202], stripe * (1 + (hash2(x, y, seed + 1) - 0.5) * 0.06)));
+  }
+  return pixelSvg(px);
+}
+function mushroomCapRedTex(seed) {
+  const px = makeTex();
+  const base = [198, 44, 40];
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    setPx(px, x, y, rgb(base, 1 + (hash2(x, y, seed) - 0.5) * 0.14));
+    if (hash2(Math.floor(x / 3), Math.floor(y / 3), seed + 1) > 0.82) setPx(px, x, y, rgb([238, 234, 228]));
+  }
+  return pixelSvg(px);
+}
+reg('sunflower', { displayName: '向日葵', transparent: true, solid: false, hardness: 0, renderType: 'cross' },
+  { sunflower: sunflowerTex(118) });
+reg('red_mushroom', { displayName: '红色蘑菇', transparent: true, solid: false, hardness: 0, renderType: 'cross' },
+  { red_mushroom: smallMushroomTex(119, [204, 42, 38], true) });
+reg('brown_mushroom', { displayName: '棕色蘑菇', transparent: true, solid: false, hardness: 0, renderType: 'cross' },
+  { brown_mushroom: smallMushroomTex(120, [148, 104, 62], false) });
+reg('mushroom_stem', { displayName: '蘑菇柄', hardness: 0.3 },
+  { mushroom_stem: mushroomStemTex(121) });
+reg('mushroom_cap_red', { displayName: '红色蘑菇盖', hardness: 0.3 },
+  { mushroom_cap_red: mushroomCapRedTex(122) });
+reg('mushroom_cap_brown', { displayName: '棕色蘑菇盖', hardness: 0.3 },
+  { mushroom_cap_brown: noiseTex([148, 104, 62], 123, { dark: 0.88, light: 1.1, dProb: 0.2, lProb: 0.14 }) });
 reg('cactus', { transparent: true, solid: true, hardness: 0.4 }, { cactus: cactusTex(111) });
 reg('pumpkin', { textures: { top: 'pumpkin_top', side: 'pumpkin_side', bottom: 'pumpkin_top' }, hardness: 1 },
   { pumpkin_top: pumpkinTopTex(112), pumpkin_side: pumpkinSideTex(113) });

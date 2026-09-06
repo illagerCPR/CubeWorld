@@ -5,6 +5,10 @@ import { BlockRegistry } from '../core/BlockRegistry.js';
 
 // 高山判定阈值：mountainNoise.fbm2D 超过此值 → 高山群系（优先级高于温湿判定）
 const MOUNTAIN_T = 0.45;
+// 蘑菇岛判定阈值：罕见独立区（fbm2D 2 oct）
+const MUSHROOM_T = 0.62;
+// 向日葵平原变体阈值（在平原带内成片花海）
+const SUNFLOWER_T = 0.55;
 import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from '../core/Chunk.js';
 import { StructureManager } from './structures/StructureManager.js';
 import './structures/catalog.js';
@@ -50,6 +54,8 @@ export class TerrainGenerator {
     this.caveNoiseC = new SimplexNoise(seed + 8);
     this.mountainNoise = new SimplexNoise(seed + 9); // 山地场（seed+9 空闲，维度系列用 seed*31/37/41）
     this.swampNoise = new SimplexNoise(seed + 10);   // 沼泽水洼场（零散水塘分布）
+    this.sunflowerNoise = new SimplexNoise(seed + 11); // 向日葵平原变体场
+    this.mushroomNoise = new SimplexNoise(seed + 12);  // 蘑菇岛罕见独立区
     this.structureManager = new StructureManager(this, seed);
   }
 
@@ -66,11 +72,17 @@ export class TerrainGenerator {
     const temp = this.tempNoise.fbm2D(wx * 0.004, wz * 0.004, 3);
     const humid = this.humidNoise.fbm2D(wx * 0.005, wz * 0.005, 3);
 
-    // 沼泽：温和带高湿（紧随高山，抢占平原的高湿区）
+    // 蘑菇岛：罕见独立区（与温湿无关，紧随高山）
+    if (this.mushroomNoise.fbm2D(wx * 0.004, wz * 0.004, 2) > MUSHROOM_T) return Biomes.MUSHROOM_FIELDS;
+
+    // 沼泽：温和带高湿（抢占平原的高湿区）
     if (temp > -0.1 && temp < 0.35 && humid >= 0.25) return Biomes.SWAMP;
 
     if (temp > 0.3 && humid < 0) return Biomes.DESERT;
     if (temp < -0.3) return humid > 0 ? Biomes.SNOWY_TAIGA : Biomes.TAIGA;
+    // 向日葵平原：平原带变体（低湿温和区 + 变体噪声）
+    if (temp > -0.3 && temp < 0.35 && humid < 0.05 &&
+        this.sunflowerNoise.fbm2D(wx * 0.006, wz * 0.006, 2) > SUNFLOWER_T) return Biomes.SUNFLOWER_PLAINS;
     // 温和带：中湿 = 桦木森林（更湿区已被沼泽取走，更干 = 平原）
     if (humid > 0.05 && humid < 0.25) return Biomes.BIRCH_FOREST;
     return Biomes.PLAINS;
@@ -296,6 +308,24 @@ export class TerrainGenerator {
             chunk.get(x, surfaceY + 1, z) !== WATER()) {
           this.placeTree(chunk, x, surfaceY + 1, z, cfg.treeType, rand);
         }
+        // 巨型蘑菇：菌柄柱 + 顶层 3×3 伞盖（蘑菇岛专属，类似树）
+        if (cfg.hugeMushroomChance && rand() < cfg.hugeMushroomChance &&
+            surfaceName === cfg.surfaceBlock &&
+            surfaceY + 7 < CHUNK_HEIGHT) {
+          this.placeMushroom(chunk, x, surfaceY + 1, z, rand);
+        }
+        // 向日葵（cross 花海）
+        if (cfg.sunflowerChance && rand() < cfg.sunflowerChance &&
+            surfaceName === cfg.surfaceBlock &&
+            chunk.get(x, surfaceY + 1, z) === 0) {
+          chunk.set(x, surfaceY + 1, z, BlockRegistry.getId('sunflower'));
+        }
+        // 地面小蘑菇（蘑菇岛菌丝上）
+        if (cfg.smallMushroomChance && rand() < cfg.smallMushroomChance &&
+            surfaceName === cfg.surfaceBlock &&
+            chunk.get(x, surfaceY + 1, z) === 0) {
+          chunk.set(x, surfaceY + 1, z, BlockRegistry.getId(rand() < 0.5 ? 'red_mushroom' : 'brown_mushroom'));
+        }
         // 仙人掌
         if (cfg.cactusChance && rand() < cfg.cactusChance &&
             surfaceName === 'sand' &&
@@ -323,8 +353,23 @@ export class TerrainGenerator {
     }
   }
 
-  placeTree(chunk, x, y, z, type, rand) {
-    const height = type === 'spruce' ? 5 + Math.floor(rand() * 3)
+  // 巨型蘑菇：2-4 格菌柄柱 + 顶层 3×3 伞盖（红/棕由 per-block 哈希定，确定性）
+  placeMushroom(chunk, x, y, z, rand) {
+    const stemId = BlockRegistry.getId('mushroom_stem');
+    const capId = BlockRegistry.getId((x * 31 + z * 17) % 2 === 0 ? 'mushroom_cap_red' : 'mushroom_cap_brown');
+    const h = 2 + Math.floor(rand() * 3);
+    for (let i = 0; i < h; i++) chunk.set(x, y + i, z, stemId);
+    const top = y + h;
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        const bx = x + dx, bz = z + dz;
+        if (bx < 0 || bx >= CHUNK_SIZE || bz < 0 || bz >= CHUNK_SIZE) continue;
+        if (chunk.get(bx, top, bz) === 0) chunk.set(bx, top, bz, capId);
+      }
+    }
+  }
+
+  placeTree(chunk, x, y, z, type, rand) {    const height = type === 'spruce' ? 5 + Math.floor(rand() * 3)
       : type === 'birch' ? 6 + Math.floor(rand() * 3) // 桦木：细高树干
       : 4 + Math.floor(rand() * 2);
     const logName = type === 'spruce' ? 'spruce_log'
