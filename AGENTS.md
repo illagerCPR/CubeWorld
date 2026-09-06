@@ -397,3 +397,11 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **布局**：右缘竖条（搜索 + 左收藏夹列 + 右全物品网格，fixed right:6px，z-index 35）；配方详情弹窗在竖条左侧（`popEl`，right:214px），显示条件 `current && _shown`，✕ 关闭；点物品/配方材料格继续导航，右键=用途，A 收藏（localStorage `cubeworld-jei-favorites` 全局持久）。
 - **冒烟注意**：eval 内 show/toggle 后面板 DOM 状态下一帧才被 updateFrame 刷新，同步断言会假阴性——sleep ≥0.3s 再断言；物品名在 `title` 属性不在 innerText。
 - **布局已二次重构（围绕物品栏，勿回退为右缘竖条）**：三块常驻 fixed 面板按**当前容器 panel 的 getBoundingClientRect 动态定位**——收藏夹（加宽 1-3 列 40px 格）贴 panel 左侧、全物品列表（加宽 3-9 列 40px 格，顶部搜索框）贴 panel 右侧、配方弹窗（z-index 36）居中覆盖 panel 之上；`_layout()` 在 updateFrame 内每帧 dirty-check（rect+视口+弹窗开关为 key，无变化不写 style 防 reflow），列数按 panel 两侧剩余空间自适应。`_visiblePanel()` 与 containerVisible 检测同源——**新增容器 UI 两处都要加**。弹窗显隐在 renderRecipe 内、定位在 _layout（key 含 popOn，弹窗开关会触发重排）。
+
+### 群系扩展批次备忘（防回退）—— B1 基建/高山/桦木森林/针叶林（B2 沼泽、B3 向日葵平原+蘑菇岛待做）
+
+- **BiomeConfig 参数化高度（勿回退硬编码）**：`getBaseHeight` 群系调制全部查配置——`heightScale`（fbm 振幅）/`heightOffset`（固定抬升，原雪原+8/沙漠-2 已迁入）/`peakBoost`（高山超出 MOUNTAIN_T 的余量加成，山脊越核心越高）/`snowLine`（≥ 此高度表面铺雪块+顶部雪层）/`gravelPatch`（detailNoise>0.55 成片置换表面为砾石）。新增群系先填这些字段，勿在 terrain.js 加 if 分支。
+- **判定链优先级（getBiome）**：河流(ridge<0.06) → 高山(mountainNoise.fbm2D 0.0035 > 0.45，可出现在任何温区) → 沙漠 → `temp<-0.3` 按 humid 分积雪针叶林(>0)/针叶林(≤0) → 温和带 humid∈(0.05,0.25)=桦木森林 → 平原兜底。**B2 沼泽插在高山区之后、沙漠之前（temp 温和带 && humid>0.25）；B3 蘑菇岛用独立罕见噪声插在最前（河/高山之后）；向日葵平原 = 平原带 variant 噪声**。mountainNoise 用 seed+9（terrain.js 现占 0-8；维度系列用 seed*31/37/41 乘法系不冲突，新增继续取空闲加法偏移）。
+- **字符串 seed 拼接陷阱（冒烟必知）**：菜单传入的 seed 是**字符串**（如 '42'），TerrainGenerator 内 `seed+N` 是字符串拼接（'42'+9='429'）→ 游戏内噪声场 = node 里 `new TerrainGenerator('42')`（字符串），与 `new TerrainGenerator(42)`（数字）**完全不同场**。node 找冒烟坐标必须用字符串 seed；联机两端 seed 类型须经协议保持一致（既有行为，两端一致即确定性成立）。主世界 getBiome/getBaseHeight 每列被 getBaseHeight 与 generateChunk 重复求值属既有模式，新增噪声同样直接复算即可。
+- **测试**：`tests/biome-determinism.mjs`（同 seed 双次一致 / 顺序无关 / 七群系占比区间（**河流细线状基线 ~0.3%，区间下限勿设 1%**） / 高山峰顶>100+均高>平原+15 / 相邻列连续性（非山≤12、高山≤30 陡峭属预期） / 耗时）已接入 run-all-tests.sh；改判定/阈值先跑它再冒烟。
+- **冒烟锚点（seed '42'）**：高山 (-2000,928) 峰 106 雪顶 / 桦木森林 (-2000,-1984) / 针叶林 (-2000,-1976)；高山冒烟先传 y=130 等落地（getHeightAt 对未生成区返回错误值），断言 InfoBar 群系名+地表方块名+周围 log 统计。
