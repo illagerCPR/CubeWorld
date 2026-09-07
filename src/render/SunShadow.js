@@ -28,6 +28,8 @@ export class SunShadow {
     this._recvOn = null;       // receiveShadow 批量切换缓存（null=未知）
     this._dir = new THREE.Vector3();
     this._target = new THREE.Vector3();
+    this._right = new THREE.Vector3();
+    this._upv = new THREE.Vector3();
   }
 
   // Game.start 注入：配置 sunLight 阴影参数并把 target 挂进场景
@@ -54,19 +56,33 @@ export class SunShadow {
     }
     const light = this.light;
     const dir = this._dir.copy(light.position);   // Sky.update 刚写入的单位太阳方向
-    // shadow 相机 = 退距处看玩家；target 量化到 texel 网格防游移
+    // shadow 相机 = 退距处看玩家；target 做 light-space snap：在垂直太阳方向的平面内
+    // 量化到 texel 网格——玩家连续移动时 target 跳格对齐，影子边缘不游移闪烁
+    //（批次②：批次①的世界 XZ 量化在太阳斜照时仍有半 texel 误差）。
+    // 太阳近天顶时 up×dir 退化，跳过量化（正午影子最短，游移不可见）。
     const range = Math.max(96, renderDistance * 16) + 8;
     const texel = (2 * range) / MAP_SIZE;
-    const tx = Math.round(playerPos.x / texel) * texel;
-    const tz = Math.round(playerPos.z / texel) * texel;
-    this._target.set(tx, playerPos.y, tz);
+    this._target.copy(playerPos);
+    const r = this._right.set(0, 1, 0).cross(dir);
+    if (r.lengthSq() > 1e-6) {
+      r.normalize();
+      const u = this._upv.copy(dir).cross(r).normalize();
+      const qx = Math.round(this._target.dot(r) / texel) * texel;
+      const qy = Math.round(this._target.dot(u) / texel) * texel;
+      const qd = this._target.dot(dir);
+      this._target.set(0, 0, 0)
+        .addScaledVector(r, qx)
+        .addScaledVector(u, qy)
+        .addScaledVector(dir, qd);   // 保留沿光分量：横向对齐量化，depth 窗口贴合场景
+    }
     light.target.position.copy(this._target);
     light.position.copy(this._target).addScaledVector(dir, SHADOW_DIST);
     const cam = light.shadow.camera;
     cam.left = -range; cam.right = range; cam.top = range; cam.bottom = -range;
     cam.updateProjectionMatrix();
-    // 节流 shadow pass（renderer.shadowMap.autoUpdate=false，needsUpdate 单帧生效后自动复位）
-    this.renderer.shadowMap.needsUpdate = (this._frame++ % 8 === 0);
+    // 节流 shadow pass（renderer.shadowMap.autoUpdate=false，needsUpdate 单帧生效后自动复位）；
+    // ready 之前每帧都请求（start 时序里 needsUpdate 可能落在 shadowMap.enabled 置位前被跳过）
+    this.renderer.shadowMap.needsUpdate = !this.ready || (this._frame++ % 8 === 0);
 
     // 同步手工挂载的 lights shadow uniforms（three 不为 Basic 材质做这件事）
     const sh = light.shadow;
