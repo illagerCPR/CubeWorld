@@ -80,9 +80,11 @@ export class SunShadow {
     const cam = light.shadow.camera;
     cam.left = -range; cam.right = range; cam.top = range; cam.bottom = -range;
     cam.updateProjectionMatrix();
-    // 节流 shadow pass（renderer.shadowMap.autoUpdate=false，needsUpdate 单帧生效后自动复位）；
-    // ready 之前每帧都请求（start 时序里 needsUpdate 可能落在 shadowMap.enabled 置位前被跳过）
-    this.renderer.shadowMap.needsUpdate = !this.ready || (this._frame++ % 8 === 0);
+    // shadow pass 每帧更新：8 帧节流曾致影子阶梯式跳变（用户实测"频繁闪动"，已否决）——
+    // map 与 shadow 相机/matrix 必须同帧一致，节流期间影子冻结、更新帧跳格。真机 GPU 上
+    // depth-only pass 便宜（MC 影子 mod 同款做法）；autoUpdate=false 保持逐帧显式请求。
+    this.renderer.shadowMap.needsUpdate = true;
+    this._frame++;
 
     // 同步手工挂载的 lights shadow uniforms（three 不为 Basic 材质做这件事）
     const sh = light.shadow;

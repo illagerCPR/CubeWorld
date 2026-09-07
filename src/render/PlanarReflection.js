@@ -40,8 +40,12 @@ export class PlanarReflection {
     const h = Math.max(2, Math.floor(this._size.y / 2));
     if (!this._rt) {
       this._rt = new THREE.WebGLRenderTarget(w, h, {
-        minFilter: THREE.LinearFilter,
+        // mipmap：水面（尤其掠射区/远处）采样半分辨率 RT 时每像素覆盖多个反射纹素，
+        // 无 mip 会产生逐像素高频噪点闪烁（用户实测"倒影频繁闪动"）——开 mip 后按 UV
+        // 梯度自动选层平滑；renderer.render 到 RT 后自动生成（generateMipmaps 默认链路）
+        minFilter: THREE.LinearMipmapLinearFilter,
         magFilter: THREE.LinearFilter,
+        generateMipmaps: true,
         depthBuffer: true,
         stencilBuffer: false
       });
