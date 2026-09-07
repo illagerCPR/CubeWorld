@@ -16,10 +16,12 @@ export class Renderer {
     container.appendChild(this.renderer.domElement);
 
     // 后处理链（惰性构建；"完整"档才启用）。场景/相机在构造末尾注入。
-    // 相机启用 layer 1：太阳/月亮/日晕在其上，体积光掩码预通道依赖此分层
+    // 相机启用 layer 1：太阳/月亮/日晕在其上，体积光掩码预通道依赖此分层；
+    // 启用 layer 2：水面 mesh 双挂（0+2），L4-A 反射相机按 mask 排除水面防自反射递归
     this.postfx = new PostFX(this.renderer);
     this.postfx.setSceneCamera(this.scene, this.camera);
     this.camera.layers.enable(1);
+    this.camera.layers.enable(2);
 
     window.addEventListener('resize', () => this.onResize());
   }

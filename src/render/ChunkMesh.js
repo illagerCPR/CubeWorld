@@ -422,6 +422,8 @@ export class ChunkMeshBuilder {
       geo.setIndex(waterIndices);
       meshes.water = new THREE.Mesh(geo, this.waterMaterial);
       meshes.water.position.set(chunk.cx * CHUNK_SIZE, 0, chunk.cz * CHUNK_SIZE);
+      // 双挂 layer 0+2：主相机可见；L4-A 反射相机 mask 排除 2 → 水面不入反射（防自反射递归）
+      meshes.water.layers.enable(2);
     }
     if (lightPos.length) {
       const geo = new THREE.BufferGeometry();

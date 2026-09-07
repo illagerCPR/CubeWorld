@@ -120,6 +120,11 @@ export class VideoSettings {
       this.game.settings.gfxGodRays = !this.game.settings.gfxGodRays;
       this._apply();
     });
+    // 平面真反射（完整档生效；镜像相机二次渲染，低端机可关）
+    mkRow('gfxWaterReflection').addEventListener('click', () => {
+      this.game.settings.gfxWaterReflection = !this.game.settings.gfxWaterReflection;
+      this._apply();
+    });
     // 全屏（不持久化，按浏览器当前状态显示）
     this.fullscreenBtn = document.createElement('button');
     this.fullscreenBtn.style.cssText = this._btnStyle() + 'margin-bottom:8px;';
@@ -165,6 +170,7 @@ export class VideoSettings {
     const subHint = s.gfx === 'full' ? '' : '（完整档生效）';
     this.rows.gfxBloom.textContent = `泛光: ${s.gfxBloom ? '开' : '关'}${subHint}`;
     this.rows.gfxGodRays.textContent = `体积光: ${s.gfxGodRays ? '开' : '关'}${subHint}`;
+    this.rows.gfxWaterReflection.textContent = `水面真反射: ${s.gfxWaterReflection !== false ? '开' : '关'}${subHint}`;
     this.fullscreenBtn.textContent = `全屏: ${document.fullscreenElement ? '开（点击退出）' : '关（点击进入）'}`;
   }
 

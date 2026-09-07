@@ -726,6 +726,14 @@ export class Game {
     if (this.sky.sunGlow) this.sky.sunGlow.visible = !full && this.sky.sun.visible;
     // 体积光逐帧状态：白天太阳/夜晚月亮取源、屏幕投影与强度（下界/末地无天体自动关）
     if (this.renderer.postfx) this.renderer.postfx.updateGodRays(this.sky, this.renderer.camera);
+    // L4-A 平面真反射门控：完整档 ∧ 设置子开关 ∧ 主世界（其余维度无水体）∧ 眼睛未入水；
+    // 入水即时关断（RT 跳渲 + uReflOn 归零走 L1 天空色回退），出水恢复零重建
+    if (this.renderer.postfx) {
+      this.renderer.postfx.reflectionEnabled = full
+        && this.settings.gfxWaterReflection !== false
+        && this.world.dimDef.id === 'overworld'
+        && !this.player.inWater;
+    }
 
     // 水下视野雾效（出水恢复的雾距与 applySettings 同源，随渲染距离收口 + 维度雾系数）
     const fog = this.renderer.scene.fog;

@@ -9,7 +9,9 @@
 //   cuv = ((W.x + wind)/1536 + 0.5, W.z/1536 + 0.5)
 // - 水面反射（基础/完整档）：菲涅尔天空色混合 + 太阳/月亮镜面高光 +
 //   方块光暖色倒影（夜晚岸边火把/岩浆光斑）+ 两轴正弦波纹扰动
-// 全部效果由 uniform 开关（uCloudShadow/uWaterFx），着色器编译一次，切换设置零重建；
+// - 平面真反射（完整档子开关，L4-A）：PlanarReflection 渲镜像场景到 RT 后，
+//   顶面反射项升级为真场景倒影采样（uReflOn=0 时自动回退上述天空色路径）
+// 全部效果由 uniform 开关（uCloudShadow/uWaterFx/uReflOn），着色器编译一次，切换设置零重建；
 // 关闭档 uniform 归零，画面与旧管线逐字节一致。
 import * as THREE from 'three';
 
@@ -31,7 +33,11 @@ export const VoxelLightUniforms = {  uDayLight: { value: 1.0 },                 
   uCloudTex: { value: null },                              // 云纹理（Sky 构造时注入）
   uCloudsY: { value: 140 },                                // 云层高度（高于此不吃云影，山巅/天域岛顶）
   uCloudShadow: { value: 0 },                              // 云影开关 0/1（设置 ∧ 维度云显隐，Game 每帧写）
-  uWaterFx: { value: 0 }                                   // 水面反射开关 0/1
+  uWaterFx: { value: 0 },                                  // 水面反射开关 0/1
+  // ---- L4-A 平面真反射（完整档子开关，PlanarReflection 每帧写） ----
+  uReflOn: { value: 0 },                                   // 反射 RT 就绪开关 0/1（0 = 走 L1 天空色回退）
+  uReflMap: { value: null },                               // 反射场景 RT（半分辨率）
+  uTexMatrix: { value: new THREE.Matrix4() }               // 世界坐标 → 反射 RT UV 投影
 };
 
 // 片元头：体素光 + 增强效果共用 uniform/varying 声明（未用到的会被编译器裁掉）
@@ -91,6 +97,9 @@ function injectCommonUniforms(shader) {
   shader.uniforms.uCloudsY = VoxelLightUniforms.uCloudsY;
   shader.uniforms.uCloudShadow = VoxelLightUniforms.uCloudShadow;
   shader.uniforms.uWaterFx = VoxelLightUniforms.uWaterFx;
+  shader.uniforms.uReflOn = VoxelLightUniforms.uReflOn;
+  shader.uniforms.uReflMap = VoxelLightUniforms.uReflMap;
+  shader.uniforms.uTexMatrix = VoxelLightUniforms.uTexMatrix;
 }
 
 // solid 材质：体素光 + 云影
@@ -113,34 +122,51 @@ export function applyVoxelLightWater(material) {
   material.onBeforeCompile = (shader) => {
     injectCommonUniforms(shader);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec2 voxelLight;\nvarying vec2 vVoxelLight;\nvarying vec3 vWorldPos;\nvarying vec3 vNrmW;')
+      .replace('#include <common>', [
+        '#include <common>',
+        'attribute vec2 voxelLight;',
+        'varying vec2 vVoxelLight;',
+        'varying vec3 vWorldPos;',
+        'varying vec3 vNrmW;',
+        'uniform mat4 uTexMatrix;',
+        'varying vec4 vReflUv;'
+      ].join('\n'))
       .replace('#include <begin_vertex>', [
         '#include <begin_vertex>',
         'vVoxelLight = voxelLight;',
         'vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;',
-        'vNrmW = normalize(mat3(modelMatrix) * normal);'
+        'vNrmW = normalize(mat3(modelMatrix) * normal);',
+        'vReflUv = uTexMatrix * vec4(vWorldPos, 1.0);'
       ].join('\n'));
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + FRAG_HEADER + '\nvarying vec3 vNrmW;\n' + CLOUD_SHADOW_GLSL)
+      .replace('#include <common>', '#include <common>\n' + FRAG_HEADER + '\nvarying vec3 vNrmW;\nuniform sampler2D uReflMap;\nuniform float uReflOn;\nvarying vec4 vReflUv;\n' + CLOUD_SHADOW_GLSL)
       .replace('#include <color_fragment>', VOXEL_LIGHT_GLSL)
       .replace('#include <opaque_fragment>', [
         '#include <opaque_fragment>',
         'if (uWaterFx > 0.5) {',
         '  vec3 V = normalize(cameraPosition - vWorldPos);',
         '  vec3 N0 = normalize(vNrmW);',
-        '  vec3 N = N0;',
-        '  if (N0.y > 0.5) {',
+        '  float isTop = step(0.5, N0.y);',
         // 两轴正弦波纹扰动法线（uTime 暂停冻结；振幅 0.05 保持块状风格不碎）
-        '    vec2 rip = vec2(',
-        '      sin(vWorldPos.x * 1.9 + uTime * 1.7) + 0.6 * sin(vWorldPos.z * 3.1 - uTime * 2.3),',
-        '      cos(vWorldPos.z * 2.3 + uTime * 1.3) + 0.6 * cos(vWorldPos.x * 2.7 + uTime * 1.9)',
-        '    ) * 0.05;',
-        '    N = normalize(vec3(rip.x, 1.0, rip.y));',
-        '  }',
+        '  vec2 rip = vec2(',
+        '    sin(vWorldPos.x * 1.9 + uTime * 1.7) + 0.6 * sin(vWorldPos.z * 3.1 - uTime * 2.3),',
+        '    cos(vWorldPos.z * 2.3 + uTime * 1.3) + 0.6 * cos(vWorldPos.x * 2.7 + uTime * 1.9)',
+        '  ) * 0.05;',
+        '  vec3 N = mix(N0, normalize(vec3(rip.x, 1.0, rip.y)), isTop);',
         '  float ndv = max(dot(N0, V), 0.0);',
         '  float fresnel = pow(1.0 - ndv, 3.0);',
-        // 菲涅尔天空反射：掠射角水面混入天空/雾色（夜晚雾色即夜空色，自动变暗）
-        '  gl_FragColor.rgb = mix(gl_FragColor.rgb, uSkyColor, fresnel * 0.55);',
+        // 反射色：L4-A 有反射 RT 时顶面用真场景倒影（波纹扰动采样 + 越界回退天空色），
+        // 其余（关闭/基础档、水中、侧面）维持 L1 菲涅尔天空色
+        '  vec3 reflC = uSkyColor;',
+        '  if (uReflOn > 0.5 && isTop > 0.5) {',
+        '    vec2 ruv = vReflUv.xy / max(vReflUv.w, 0.0001);',
+        '    vec2 oob = max(abs(ruv) - vec2(1.0), vec2(0.0));',
+        '    float fade = 1.0 - smoothstep(0.0, 0.06, oob.x + oob.y);',
+        '    vec2 suv = clamp(ruv + rip * 0.02, vec2(0.0), vec2(1.0));',
+        '    reflC = mix(uSkyColor, texture2D(uReflMap, suv).rgb, fade);',
+        '  }',
+        // 菲涅尔混合：掠射角水面混入反射色（夜晚雾色即夜空色，自动变暗）
+        '  gl_FragColor.rgb = mix(gl_FragColor.rgb, reflC, fresnel * 0.55);',
         // 太阳镜面高光（日照）+ 月亮镜面（夜，方向 = -uSunDir）
         '  vec3 sunD = normalize(uSunDir);',
         '  vec3 Hs = normalize(V + sunD);',

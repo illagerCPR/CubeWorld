@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS = {
   gfx: 'off',          // off | basic | full 光照增强档位（基础=水面反射+云影，完整=再加后处理）
   gfxBloom: true,      // 完整档子开关：泛光
   gfxGodRays: true,    // 完整档子开关：体积光
+  gfxWaterReflection: true, // 完整档子开关：平面真反射（L4-A，镜像相机二次渲染场景）
 };
 
 export const GFX_ORDER = ['off', 'basic', 'full'];
@@ -44,6 +45,7 @@ export function loadSettings() {
         if (GFX_ORDER.includes(saved.gfx)) s.gfx = saved.gfx;
         if (saved.gfxBloom !== undefined) s.gfxBloom = !!saved.gfxBloom;
         if (saved.gfxGodRays !== undefined) s.gfxGodRays = !!saved.gfxGodRays;
+        if (saved.gfxWaterReflection !== undefined) s.gfxWaterReflection = !!saved.gfxWaterReflection;
       }
     }
   } catch { /* 损坏的设置按默认处理 */ }

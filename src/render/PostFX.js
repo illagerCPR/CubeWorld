@@ -10,6 +10,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { PlanarReflection } from './PlanarReflection.js';
 
 // 轻量色彩分级：饱和度轻微上抬 + 边缘暗角（电影感，强度克制避免夜景死黑）
 const ColorGradeShader = {
@@ -115,6 +116,10 @@ export class PostFX {
     this.sunRT = null;                 // 亮源掩码 RT（256²，含地形遮挡深度）
     this._blackMat = null;             // 遮挡通道覆盖材质
     this._failed = false;              // 创建失败后不再重试
+    // L4-A 平面真反射：独立于 composer 链（镜像相机渲半分辨率 RT，水面 shader 采样）；
+    // reflectionEnabled 由 Game 逐帧写（设置子开关 ∧ 完整档 ∧ 未入水 ∧ 主世界）
+    this.reflection = new PlanarReflection(renderer);
+    this.reflectionEnabled = false;
   }
 
   // 惰性构建 composer（首次启用"完整"档才付出构建成本）
@@ -248,8 +253,18 @@ export class PostFX {
 
   render(scene, camera) {
     if (!this.enabled || !this.composer) {
+      // 直渲路径（非完整档）不开真反射——uReflOn 归零走天空色回退
+      if (this.reflection) {
+        this.reflection.enabled = false;
+        this.reflection.render(scene, camera);
+      }
       this.renderer.render(scene, camera);
       return;
+    }
+    // L4-A 反射 RT 先行（水面材质本帧主渲染时采样）
+    if (this.reflection) {
+      this.reflection.enabled = this.reflectionEnabled;
+      this.reflection.render(scene, camera);
     }
     if (this.godRaysPass && this.godRaysPass.enabled && this.sunRT) {
       this.godRaysPass.uniforms.tSun.value = this.sunRT.texture;
