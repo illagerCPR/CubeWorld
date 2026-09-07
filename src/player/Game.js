@@ -719,6 +719,10 @@ export class Game {
     if (this.sky.clouds) this.sky.clouds.material.color.setScalar(full ? 0.35 + 0.50 * this.sky.getLightLevel() : 1);
     GfxState.lightBoost = full ? 1.5 : 1.0;
     if (this.chunkBuilder) this.chunkBuilder.lightMaterial.color.setScalar(GfxState.lightBoost);
+    // 完整档衰减日落日晕：sunGlow 是 43° 加法混合 sprite，透明度随太阳近地平线爬到 0.9，
+    // 泛光高亮提取(0.65)会把整片过阈区域糊成全屏白晕、体积光掩码再叠一层光幕（t 0.71-0.75
+    // 白化曾真出）——乘 0.3 后 halo 收敛回太阳周围；基础/关闭档不衰减保持现状
+    if (full && this.sky.sunGlow) this.sky.sunGlow.material.opacity *= 0.3;
     // 体积光逐帧状态：白天太阳/夜晚月亮取源、屏幕投影与强度（下界/末地无天体自动关）
     if (this.renderer.postfx) this.renderer.postfx.updateGodRays(this.sky, this.renderer.camera);
 
