@@ -411,6 +411,10 @@ export class ChunkMeshBuilder {
       geo.setIndex(indices);
       meshes.solid = new THREE.Mesh(geo, this.solidMaterial);
       meshes.solid.position.set(chunk.cx * CHUNK_SIZE, 0, chunk.cz * CHUNK_SIZE);
+      // L4-B 太阳阴影：cast 恒定（关闭档 shadowMap.enabled=false 时 shadow pass 不跑，零成本）；
+      // receive 按档位初值（GfxState.shadowReceive，开关切换由 SunShadow.setReceive 批量同步）
+      meshes.solid.castShadow = true;
+      meshes.solid.receiveShadow = GfxState.shadowReceive;
     }
     if (waterPositions.length) {
       const geo = new THREE.BufferGeometry();

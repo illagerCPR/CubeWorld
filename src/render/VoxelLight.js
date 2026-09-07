@@ -17,7 +17,20 @@ import * as THREE from 'three';
 
 // 光照增强档位状态（供材质构造期读取；切档由 applySettings/Game.update 同步既有材质）
 export const GfxState = {
-  lightBoost: 1.0 // 光源块提亮系数：仅"完整"档 1.9（泛光取源增益，需提过 0.72 阈），其余档 1.0 保持现状
+  lightBoost: 1.0,        // 光源块提亮系数：仅"完整"档 1.9（泛光取源增益，需提过 0.72 阈），其余档 1.0 保持现状
+  shadowReceive: false    // solid mesh receiveShadow 初值（完整档+太阳阴影子开关开时 true，SunShadow 批量切换）
+};
+
+// L4-B 太阳阴影（完整档子开关 gfxShadows）：three 0.160 的 materialNeedsLights()
+// 不认 MeshBasicMaterial，lights shadow uniforms 不会被挂载（探针实证 directionalShadowMatrix
+// 恒 0 矩阵）——三件套在 onBeforeCompile 手工挂载（共享引用），SunShadow.update 每帧从
+// sunLight.shadow 同步值。uShadowMap 数组元素在 shadow pass 首帧后才就绪（ready 门控）。
+export const ShadowUniforms = {
+  uShadowOn: { value: 0 },        // 影子总开关 0/1（enabled ∧ ready，Game 每帧写）
+  uShadowStrength: { value: 0.5 },// 影子最大压暗比例（批次②调校）
+  uShadowMap: { value: [] },      // sampler2D[]（sunLight.shadow.map.texture）
+  uShadowMatrix: { value: [ new THREE.Matrix4() ] },                       // shadow 光源投影矩阵
+  uShadowPar: { value: [ { shadowBias: 0, shadowNormalBias: 0, shadowRadius: 1, shadowMapSize: new THREE.Vector2(2048, 2048) } ] }
 };
 
 export const VoxelLightUniforms = {  uDayLight: { value: 1.0 },                        // 天光昼夜系数（含夜晚月光底值）
@@ -83,8 +96,7 @@ const VOXEL_LIGHT_GLSL = [
 ].join('\n');
 
 // 公共 uniform 挂载
-function injectCommonUniforms(shader) {
-  shader.uniforms.uDayLight = VoxelLightUniforms.uDayLight;
+function injectCommonUniforms(shader) {  shader.uniforms.uDayLight = VoxelLightUniforms.uDayLight;
   shader.uniforms.uSunTint = VoxelLightUniforms.uSunTint;
   shader.uniforms.uMinLight = VoxelLightUniforms.uMinLight;
   shader.uniforms.uTorchTint = VoxelLightUniforms.uTorchTint;
@@ -100,18 +112,56 @@ function injectCommonUniforms(shader) {
   shader.uniforms.uReflOn = VoxelLightUniforms.uReflOn;
   shader.uniforms.uReflMap = VoxelLightUniforms.uReflMap;
   shader.uniforms.uTexMatrix = VoxelLightUniforms.uTexMatrix;
+  // L4-B 阴影三件套（uShadowMap/uShadowMatrix/uShadowPar）+ 开关（未用到的被编译器裁掉）
+  shader.uniforms.uShadowOn = ShadowUniforms.uShadowOn;
+  shader.uniforms.uShadowStrength = ShadowUniforms.uShadowStrength;
+  shader.uniforms.directionalShadowMap = ShadowUniforms.uShadowMap;
+  shader.uniforms.directionalShadowMatrix = ShadowUniforms.uShadowMatrix;
+  shader.uniforms.directionalLightShadows = ShadowUniforms.uShadowPar;
 }
 
-// solid 材质：体素光 + 云影
+// solid 材质的体素光融合 + L4-B 太阳阴影（影子=太阳直射差：权重随天光 skyL 衰减，
+// 树冠下天光低 → 影子弱，防"体素天光压暗 + 阴影再压"双重变暗；洞穴 skyL≈0 自动无影。
+// 整块包 #ifdef USE_SHADOWMAP——基础/关闭档无此 define（shadowMap.enabled=false）时代码
+// 被 整体裁掉，逐字节现状；方向光阴影 uniform 数组固定 [0]（场景唯一 castShadow 灯 = sunLight））
+const VOXEL_LIGHT_SOLID_GLSL = [
+  '#include <color_fragment>',
+  '{',
+  '  vec3 skyC = uSunTint * (vVoxelLight.x * uDayLight);',
+  '  skyC *= cloudShadowFactor();',
+  '  vec3 torchC = uTorchTint * vVoxelLight.y;',
+  '  vec3 lv = max(skyC, torchC);',
+  '  lv = uMinLight + (1.0 - uMinLight) * lv;',
+  '  #ifdef USE_SHADOWMAP',
+  '  if (uShadowOn > 0.5 && receiveShadow && vVoxelLight.x > 0.01) {',
+  '    float sraw = getShadow(directionalShadowMap[ 0 ], directionalLightShadows[ 0 ].shadowMapSize, directionalLightShadows[ 0 ].shadowBias, directionalLightShadows[ 0 ].shadowRadius, vDirectionalShadowCoord[ 0 ]);',
+  '    lv *= 1.0 - (1.0 - sraw) * vVoxelLight.x * uShadowStrength;',
+  '  }',
+  '  #endif',
+  '  diffuseColor.rgb *= lv;',
+  '}'
+].join('\n');
+
+// solid 材质：体素光 + 云影 + 太阳阴影（L4-B）
+// 阴影 vertex 侧：shadowmap_pars_vertex/shadowmap_vertex 是 three 原生 chunk（自带
+// USE_SHADOWMAP 防护）；Basic 无 beginnormal/defaultnormal，手工补 objectNormal/
+// transformedNormal（shadowmap_vertex 用 transformedNormal 计算 shadowNormalBias 偏移）。
 export function applyVoxelLight(material) {
   material.onBeforeCompile = (shader) => {
     injectCommonUniforms(shader);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec2 voxelLight;\nvarying vec2 vVoxelLight;\nvarying vec3 vWorldPos;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvVoxelLight = voxelLight;\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      .replace('#include <common>', '#include <common>\nattribute vec2 voxelLight;\nvarying vec2 vVoxelLight;\nvarying vec3 vWorldPos;\n#include <shadowmap_pars_vertex>')
+      .replace('#include <begin_vertex>', [
+        '#include <begin_vertex>',
+        'vVoxelLight = voxelLight;',
+        'vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;',
+        'vec3 objectNormal = vec3( normal );',
+        'vec3 transformedNormal = normalMatrix * objectNormal;'
+      ].join('\n'))
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n#include <shadowmap_vertex>');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + FRAG_HEADER + '\n' + CLOUD_SHADOW_GLSL)
-      .replace('#include <color_fragment>', VOXEL_LIGHT_GLSL);
+      .replace('#include <common>', '#include <common>\n' + FRAG_HEADER + '\n' + CLOUD_SHADOW_GLSL + '\nuniform float uShadowOn;\nuniform float uShadowStrength;\n#include <packing>\nuniform bool receiveShadow;\n#include <shadowmap_pars_fragment>')
+      .replace('#include <color_fragment>', VOXEL_LIGHT_SOLID_GLSL);
   };
 }
 

@@ -3,6 +3,7 @@
 // 其余档位直渲（现状行为）。主菜单全景自持渲染循环直接用底层 renderer，不经此封装。
 import * as THREE from 'three';
 import { PostFX } from './PostFX.js';
+import { SunShadow } from './SunShadow.js';
 
 export class Renderer {
   constructor(container) {
@@ -22,6 +23,8 @@ export class Renderer {
     this.postfx.setSceneCamera(this.scene, this.camera);
     this.camera.layers.enable(1);
     this.camera.layers.enable(2);
+    // L4-B 太阳阴影：shadow pass 节流由 SunShadow.update 驱动（autoUpdate=false）
+    this.sunShadow = new SunShadow(this.renderer);
 
     window.addEventListener('resize', () => this.onResize());
   }
@@ -34,11 +37,14 @@ export class Renderer {
     this.postfx.setPixelRatio(this.renderer.getPixelRatio());
   }
 
-  // 光照增强档位接线：仅"完整"档启用后处理 + ACESFilmic 色调映射（直渲路径必须保持 NoToneMapping）
+  // 光照增强档位接线：仅"完整"档启用后处理 + ACESFilmic 色调映射 + shadowMap（直渲路径
+  // 必须保持 NoToneMapping + shadowMap 关——USE_SHADOWMAP define 由场景 shadow 状态驱动，
+  // 关闭时所有材质的阴影注入代码被整体裁掉 = 现状着色器）
   setGraphicsMode(mode) {
     const full = mode === 'full';
     this.renderer.toneMapping = full ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
     this.renderer.toneMappingExposure = 1.0;
+    this.renderer.shadowMap.enabled = full;
     this.postfx.setSceneCamera(this.scene, this.camera);
     this.postfx.setEnabled(full);
   }

@@ -39,7 +39,7 @@ import { matchRecipe } from '../core/Crafting.js';
 import { SMELT_TIME, getSmeltingResult, getFuelTime } from '../core/Smelting.js';
 import { MobManager } from '../entity/MobManager.js';
 import { Mob } from '../entity/Mob.js';
-import { VoxelLightUniforms, GfxState } from '../render/VoxelLight.js';
+import { VoxelLightUniforms, GfxState, ShadowUniforms } from '../render/VoxelLight.js';
 import { RedstoneSystem } from '../core/RedstoneSystem.js';
 import { SaveSystem } from '../core/SaveSystem.js';
 import { getDimension } from '../core/dimensions.js';
@@ -229,6 +229,8 @@ export class Game {
     this.world = new World(seed, dimension);
     this.world.dragonDefeated = !!(loadData && loadData.dragonDefeated); // 末影龙击败标记（存档恢复）
     if (this.sky) this.sky.applyDimensionProfile(this.world.dimDef);
+    // L4-B 太阳阴影：shadow 相机挂在 sunLight 上（Sky 跨存档共享，幂等），target 需入场景
+    if (this.renderer.sunShadow) this.renderer.sunShadow.init(this.sky.sunLight, this.renderer.scene);
     this.physics.world = this.world;
     // M4：网络方块钩子必须趁早绑定——start 的异步加载窗口（图集构建/区块加载/
     // 换维等待）内 world 已可用，此时本地放置方块也要上报服务器（曾因绑定过晚
@@ -733,6 +735,20 @@ export class Game {
         && this.settings.gfxWaterReflection !== false
         && this.world.dimDef.id === 'overworld'
         && !this.player.inWater;
+    }
+    // L4-B 太阳阴影门控：完整档 ∧ 设置子开关 ∧ 天体可见（下界/末地自动关）∧ 白天
+    // （sunLight.position 此刻仍是 Sky.update 写入的单位方向；夜晚月光阴影直接关）。
+    // update 在喂块后跑：摆 shadow 相机（含 snap-to-texel）+ 节流 shadow pass + 同步
+    // 手工挂载的 lights shadow uniforms；receiveShadow 批量切换仅在实际变化时遍历。
+    if (this.renderer.sunShadow) {
+      const ss = this.renderer.sunShadow;
+      const shadowOn = full && this.settings.gfxShadows !== false
+        && this.sky.sun.visible && this.sky.sunLight.position.y > 0;
+      ss.enabled = shadowOn;
+      ss.update(this.player.position, this.settings.renderDistance);
+      ss.setReceive(shadowOn, this.world);
+      GfxState.shadowReceive = shadowOn;
+      ShadowUniforms.uShadowOn.value = (shadowOn && ss.ready) ? 1 : 0;
     }
 
     // 水下视野雾效（出水恢复的雾距与 applySettings 同源，随渲染距离收口 + 维度雾系数）

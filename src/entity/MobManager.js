@@ -484,6 +484,9 @@ export class MobManager {
     // 每只怪独享一份 material（emissive 是 per-mob 状态，clone 即可）
     const matInst = mat.clone();
     mob.mesh = new THREE.Mesh(geo, matInst);
+    // L4-B：怪入 shadow pass 并接收影子（Lambert 原生支持 receiveShadow，零注入）
+    mob.mesh.castShadow = true;
+    mob.mesh.receiveShadow = true;
     this.scene.add(mob.mesh);
 
     // 头顶血条 sprite（默认隐藏）
