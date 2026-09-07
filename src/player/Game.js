@@ -716,11 +716,15 @@ export class Game {
     const gfxOn = this.settings.gfx === 'basic' || this.settings.gfx === 'full';
     VoxelLightUniforms.uCloudShadow.value = (gfxOn && this.sky.clouds.visible) ? 1 : 0;
     // 完整档专属：云色按昼夜调制（云是无光照材质，夜里不调制会白亮并触发"夜空发光云"）、
-    // 光源块提亮 1.5 供泛光取源；其余档保持原值（关闭/基础档画面逐字节现状）
+    // 光源块提亮 HDR 供泛光取源（2.2：荧石/岩浆纹 ×2.2 > 泛光阈 1.05；雪面 0.98 不再过阈——
+    // 阈 0.72 时代雪原整个被 bloom 当光源发光，用户实测白天反光刺眼）；其余档保持原值
     const full = this.settings.gfx === 'full';
     if (this.sky.clouds) this.sky.clouds.material.color.setScalar(full ? 0.35 + 0.50 * this.sky.getLightLevel() : 1);
-    GfxState.lightBoost = full ? 1.9 : 1.0;
+    GfxState.lightBoost = full ? 2.2 : 1.0;
     if (this.chunkBuilder) this.chunkBuilder.lightMaterial.color.setScalar(GfxState.lightBoost);
+    // 太阳盘同样 HDR 提亮（1.25）：泛光阈上移到 1.05 后靠它保持日冕光晕；
+    // 非 full 档回 1.0（直渲输出 clamp 到 1，画面与旧版一致）
+    if (this.sky.sun) this.sky.sun.material.color.setScalar(full ? 1.25 : 1);
     // 完整档隐藏日落/日出日晕 sprite（基础/关闭档保持可见=现状）：sunGlow 是 43° 加法混合
     // sprite，晨昏时 opacity 爬到 0.9，与"晨昏天空亮度扫描区间(0.62-0.66)骑在泛光阈值上"叠加
     // → 全屏白化（t 0.27/0.71-0.76 曾真出）。太阳圆盘自身的泛光 halo 就是更好的日晕；

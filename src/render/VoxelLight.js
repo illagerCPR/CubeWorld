@@ -213,7 +213,7 @@ export function applyVoxelLightWater(material) {
         '    vec2 oob = max(abs(ruv) - vec2(1.0), vec2(0.0));',
         '    float fade = 1.0 - smoothstep(0.0, 0.06, oob.x + oob.y);',
         '    vec2 suv = clamp(ruv + rip * 0.02, vec2(0.0), vec2(1.0));',
-        '    reflC = mix(uSkyColor, texture2D(uReflMap, suv).rgb, fade);',
+        '    reflC = mix(uSkyColor, min(texture2D(uReflMap, suv).rgb, vec3(1.0)), fade);',
         '  }',
         // 菲涅尔混合：掠射角水面混入反射色（夜晚雾色即夜空色，自动变暗）
         '  gl_FragColor.rgb = mix(gl_FragColor.rgb, reflC, fresnel * 0.55);',
