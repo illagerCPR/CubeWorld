@@ -41,8 +41,14 @@ export class SunShadow {
     sh.camera.near = 1;
     sh.camera.far = SHADOW_DIST + 320;   // 覆盖退距 + 最高地形/建筑
     sh.bias = -0.0004;
-    sh.normalBias = 0.03;                // 1m 立方/cross 薄片的 acne 抑制起点，批次②细调
+    sh.normalBias = 0.15;                // ≈1.5 texel：偏小会让斜面自阴影在边界振荡（边缘抖动）
     sh.camera.updateProjectionMatrix();
+    // 阴影参数是静态值（init 一次性同步；矩阵/贴图见 update 的引用式同步）
+    const p = ShadowUniforms.uShadowPar.value[0];
+    p.shadowBias = sh.bias;
+    p.shadowNormalBias = sh.normalBias;
+    p.shadowRadius = sh.radius;
+    p.shadowMapSize.set(MAP_SIZE, MAP_SIZE);
     if (!sunLight.target.parent) scene.add(sunLight.target);
     this.renderer.shadowMap.autoUpdate = false;  // 由 update() 节流置 needsUpdate
   }
@@ -69,7 +75,9 @@ export class SunShadow {
       const u = this._upv.copy(dir).cross(r).normalize();
       const qx = Math.round(this._target.dot(r) / texel) * texel;
       const qy = Math.round(this._target.dot(u) / texel) * texel;
-      const qd = this._target.dot(dir);
+      // 沿光分量也量化（0.25 格）：玩家站坡上的物理微动若直接进 shadow 相机，
+      // 深度比较值逐帧偏移 → 影子边缘 lit/shadow 振荡（边缘抖动的另一来源）
+      const qd = Math.round(this._target.dot(dir) / 0.25) * 0.25;
       this._target.set(0, 0, 0)
         .addScaledVector(r, qx)
         .addScaledVector(u, qy)
@@ -86,18 +94,20 @@ export class SunShadow {
     this.renderer.shadowMap.needsUpdate = true;
     this._frame++;
 
-    // 同步手工挂载的 lights shadow uniforms（three 不为 Basic 材质做这件事）
+    // 同步手工挂载的 lights shadow uniforms（three 不为 Basic 材质做这件事）。
+    // **关键（勿回退成每帧 copy）**：uShadowMatrix 引用 LightShadow.matrix 持久实例——
+    // shadow pass 在渲染阶段才 updateMatrices，若这里每帧 copy 旧值，map 与 matrix 错位 1 帧，
+    // 玩家/太阳任何移动都会让影子边缘每帧错位抖动（用户实测）。引用实例后同帧读到最新值。
     const sh = light.shadow;
     if (sh.map) {
-      ShadowUniforms.uShadowMap.value = [sh.map.texture];
+      if (ShadowUniforms.uShadowMap.value[0] !== sh.map.texture) {
+        ShadowUniforms.uShadowMap.value = [sh.map.texture];
+      }
+      if (ShadowUniforms.uShadowMatrix.value[0] !== sh.matrix) {
+        ShadowUniforms.uShadowMatrix.value = [sh.matrix];
+      }
       this.ready = true;
     }
-    ShadowUniforms.uShadowMatrix.value[0].copy(sh.matrix);
-    const p = ShadowUniforms.uShadowPar.value[0];
-    p.shadowBias = sh.bias;
-    p.shadowNormalBias = sh.normalBias;
-    p.shadowRadius = sh.radius;
-    p.shadowMapSize.set(MAP_SIZE, MAP_SIZE);
   }
 
   // 接收影子批量切换（仅在开关状态变化时遍历；新建 chunk 由 GfxState.shadowReceive 取初值）

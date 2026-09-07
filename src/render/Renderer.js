@@ -23,7 +23,10 @@ export class Renderer {
     this.postfx.setSceneCamera(this.scene, this.camera);
     this.camera.layers.enable(1);
     this.camera.layers.enable(2);
-    // L4-B 太阳阴影：shadow pass 节流由 SunShadow.update 驱动（autoUpdate=false）
+    // L4-B 太阳阴影：shadow pass 节流由 SunShadow.update 驱动（autoUpdate=false）；
+    // PCFSoft 3x3 柔化影子边缘——默认 PCF 是 1px 硬边缘，lit/shadow 边界逐像素振荡
+    // 产生可感知的边缘抖动（用户实测）
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.sunShadow = new SunShadow(this.renderer);
 
     window.addEventListener('resize', () => this.onResize());
