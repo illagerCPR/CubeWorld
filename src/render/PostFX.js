@@ -128,12 +128,13 @@ export class PostFX {
       }
       this.composer = new EffectComposer(this.renderer, rt);
       this.composer.addPass(new RenderPass(this._scene, this._camera));
-      // 泛光：内部半分辨率。阈值 0.65（RT 线性亮度）+ 蓝天掩除高亮提取——
-      // 正午/上午蓝天(b 通道显著高于 r/g)与黄昏天空(0.62)均不过阈不洗白；
-      // 太阳盘(~1.0)与光源块(lightMaterial 提亮 1.5 后 ~0.72)稳定发光。
+      // 泛光：内部半分辨率。阈值 0.72——**必须高于晨昏天空亮度扫描区间上限(~0.66)**：
+      // 晨昏天空色(r/g 占优)不被蓝天掩除，亮度 0.62-0.66 一旦过阈整片天泛光白化
+      // （t 0.27/0.71-0.76 曾真出）；正午/上午蓝天(0.664-0.665)另有蓝天掩除双保险。
+      // 太阳盘(~0.95)与光源块(lightMaterial 提亮 1.9 后 ~0.9)稳定发光。
       // 实测 strength<0.8 时增量低于视觉差分阈（形同未开），取 0.9。
       const res = new THREE.Vector2(size.x / 2, size.y / 2);
-      this.bloomPass = new UnrealBloomPass(res, 0.9, 0.5, 0.65);
+      this.bloomPass = new UnrealBloomPass(res, 0.9, 0.5, 0.72);
       this.bloomPass.materialHighPassFilter.fragmentShader = BlueMaskedHighPassFragment;
       this.bloomPass.materialHighPassFilter.needsUpdate = true;
       this.composer.addPass(this.bloomPass);

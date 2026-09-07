@@ -717,12 +717,13 @@ export class Game {
     // 光源块提亮 1.5 供泛光取源；其余档保持原值（关闭/基础档画面逐字节现状）
     const full = this.settings.gfx === 'full';
     if (this.sky.clouds) this.sky.clouds.material.color.setScalar(full ? 0.35 + 0.50 * this.sky.getLightLevel() : 1);
-    GfxState.lightBoost = full ? 1.5 : 1.0;
+    GfxState.lightBoost = full ? 1.9 : 1.0;
     if (this.chunkBuilder) this.chunkBuilder.lightMaterial.color.setScalar(GfxState.lightBoost);
-    // 完整档衰减日落日晕：sunGlow 是 43° 加法混合 sprite，透明度随太阳近地平线爬到 0.9，
-    // 泛光高亮提取(0.65)会把整片过阈区域糊成全屏白晕、体积光掩码再叠一层光幕（t 0.71-0.75
-    // 白化曾真出）——乘 0.3 后 halo 收敛回太阳周围；基础/关闭档不衰减保持现状
-    if (full && this.sky.sunGlow) this.sky.sunGlow.material.opacity *= 0.3;
+    // 完整档隐藏日落/日出日晕 sprite（基础/关闭档保持可见=现状）：sunGlow 是 43° 加法混合
+    // sprite，晨昏时 opacity 爬到 0.9，与"晨昏天空亮度扫描区间(0.62-0.66)骑在泛光阈值上"叠加
+    // → 全屏白化（t 0.27/0.71-0.76 曾真出）。太阳圆盘自身的泛光 halo 就是更好的日晕；
+    // 可见性门 = 档位 ∧ 维度天体显隐（sunGlow 与 sun 同进退）
+    if (this.sky.sunGlow) this.sky.sunGlow.visible = !full && this.sky.sun.visible;
     // 体积光逐帧状态：白天太阳/夜晚月亮取源、屏幕投影与强度（下界/末地无天体自动关）
     if (this.renderer.postfx) this.renderer.postfx.updateGodRays(this.sky, this.renderer.camera);
 

@@ -99,7 +99,7 @@ export class ChunkMeshBuilder {
       side: THREE.FrontSide,
       alphaTest: 0.1,
     });
-    // 光源块按档位提亮（GfxState.lightBoost：完整档 1.5 供泛光取源，其余档 1.0 现状）
+    // 光源块按档位提亮（GfxState.lightBoost：完整档 1.9 供泛光取源，其余档 1.0 现状）
     this.lightMaterial.color.setScalar(GfxState.lightBoost);
 
     // 局部方块缓存 scratch（跨构建复用，避免每帧分配 83KB）

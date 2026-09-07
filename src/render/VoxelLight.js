@@ -15,7 +15,7 @@ import * as THREE from 'three';
 
 // 光照增强档位状态（供材质构造期读取；切档由 applySettings/Game.update 同步既有材质）
 export const GfxState = {
-  lightBoost: 1.0 // 光源块提亮系数：仅"完整"档 1.5（泛光取源增益，实测源亮度 ~0.48 需提过 0.65 阈），其余档 1.0 保持现状
+  lightBoost: 1.0 // 光源块提亮系数：仅"完整"档 1.9（泛光取源增益，需提过 0.72 阈），其余档 1.0 保持现状
 };
 
 export const VoxelLightUniforms = {  uDayLight: { value: 1.0 },                        // 天光昼夜系数（含夜晚月光底值）
