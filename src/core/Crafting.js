@@ -113,6 +113,8 @@ addShaped('cookie', 8, ['wheat','wheat','wheat', null, null, null, null, null, n
 
 // 功能
 addShaped('torch', 4, [['coal'],['stick']]);
+// 打火石（原版式）：铁锭 + 燧石（燧石来源=砾石 10% 掉落 / 下界要塞箱）
+addShapeless('flint_and_steel', 1, ['iron_ingot', 'flint']);
 // 末地传送门链（迭代 M3）：烈焰棒→2 烈焰粉；烈焰粉+末影珍珠→末影之眼
 addShaped('blaze_powder', 2, [['blaze_rod']]);
 addShaped('ender_eye', 1, [['blaze_powder'],['ender_pearl']]);

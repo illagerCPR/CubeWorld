@@ -308,6 +308,16 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **末影之眼获取链**：`blaze_rod→2 blaze_powder`、`blaze_powder+ender_pearl→ender_eye`（shaped，顺序敏感）；pearl/rod 进要塞三箱表 + village_big（powder 也进 village_big）。期望每要塞预填 2-4 眼、需补 ~8-10 眼 ≈ 三要塞+村庄箱子可持续供给。
 - **冒烟陷阱**：单机无 `game.chatBox`（联机才建）；菜单浮层盖 canvas 需 DOM 隐藏后 `click 'canvas[data-engine]'` 抓指针锁；MP 换维重建窗口 10-20s——轮询断言要给足时间（曾三次误判"未触发"实为窗口中）。
 
+### P0 进度链批次备忘（防回退）—— 燧石/打火石/岩浆缘黑曜石（下界门生存闭环）
+
+- **生存获取链全景**：砾石挖掉 10% 掉燧石（`Game._blockDropName`，`Math.random` 允许——掉落非世界账本，无确定性约束）→ 铁锭+燧石 shapeless 合成打火石 → 黑曜石自然生成于深层岩浆池缘 → 点火下界门。**新特殊方块掉落一律加在 `_blockDropName` 分支，勿在调用点散写**。
+- **岩浆缘黑曜石（terrain.js）**：实心格 6 邻域存在岩浆腔 + `hash32(wx,y,wz,OBSIDIAN_SALT)%1000 < OBSIDIAN_P*1000` 置换（盐 7717/概率 0.07，改动会移动全服黑曜石——两端同版本）。先 hash 后邻域省 93% `_isCave` 开销。
+- **`_lavaNeighbor` 竖向两向必须带门**（探针实测 badAdj 曾 6-8）：`y-1 ≥ CAVE_MIN_Y`（之下不 carve）且 `y+1 ≤ CAVE_LAVA_LEVEL`（之上 carve 是空气不是岩浆）——只查"carve 即岩浆"的深度带。height 传哨兵 999 合法：`_isCave` 的 height 仅用于水面壳门，深带（列高恒 >16）天然不触发，跨列邻居无需重算列高。
+- **`_buildCaveField` 网格域已扩为 7 点（[x0-4, x0+20]）**：邻域判定含越出区块 1 格的邻居，5 点域在边界会插值错段；网格点世界对齐纯函数——扩域只增点不改原值，内部区块判定逐字节不变（cave/structure/dimension 确定性测试均绿）。
+- **黑曜石 hardness 50→12**：当前挖掘速度无工具加成（`dt/hardness`），50s 不可玩；P1 工具速度系统落地后可回调。
+- **flint 曾是"幽灵物品"**：fortress 战利品表一直引用 flint 但从未注册（箱子渲染空图标本 bug）——现已在 ItemDefs 注册（stack 64/燧石），表条目自动生效。
+- **验证锚点**：seed42 6×6 区块 obs≈160/badAdj=0（seed7 obs≈200）；cave-determinism 11MB 字节一致、structure 71MB 正逆序一致、dimension 4 维×2 seeds 全绿；单区块生成 5.7-6.8ms（锚点内）。
+
 
 ### 下界优化批次备忘（防回退）—— 灵魂沙峡谷 / 下界要塞 / 下界怪物 / 面板布局
 

@@ -244,7 +244,7 @@ const ItemCN = {
   book: '书', enchanted_book: '附魔书', map: '地图', compass: '指南针', clock: '钟',
   bucket: '桶', water_bucket: '水桶', lava_bucket: '岩浆桶',
   saddle: '鞍', name_tag: '命名牌', minecart: '矿车', boat: '船',
-  flint_and_steel: '打火石', fishing_rod: '钓鱼竿', shears: '剪刀',
+  flint: '燧石', flint_and_steel: '打火石', fishing_rod: '钓鱼竿', shears: '剪刀',
   experience_bottle: '附魔之瓶',
   redstone_torch_item: '红石火把', repeater: '红石中继器', comparator: '红石比较器',
   lever: '拉杆', stone_button: '石按钮',
@@ -704,6 +704,14 @@ reg('boat', { stack: 1 }, art(g => {
   g.hl(10, 5, 10, 'rgb(96,62,26)');
   g.s(2, 5, 'rgb(150,104,52)'); g.s(13, 5, 'rgb(150,104,52)');
   g.vl(2, 5, 6, 'rgb(176,128,64)'); g.vl(13, 5, 6, 'rgb(176,128,64)');
+}));
+reg('flint', { stack: 64 }, art(g => {
+  g.d(8, 9, 3, 2, 'rgb(84,78,74)');
+  g.d(9, 8, 2, 2, 'rgb(110,102,96)');
+  g.s(7, 7, 'rgb(60,55,52)'); g.s(8, 8, 'rgb(60,55,52)');
+  g.s(11, 8, 'rgb(60,55,52)'); g.s(6, 10, 'rgb(46,42,40)');
+  g.s(10, 10, 'rgb(46,42,40)'); g.s(8, 11, 'rgb(60,55,52)');
+  g.spi(5, 6, 6, 6, 'rgb(38,35,33)', 33, 0.18);
 }));
 reg('flint_and_steel', { stack: 1 }, art(g => {
   g.hl(3, 8, 12, 'rgb(200,200,200)');

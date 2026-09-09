@@ -793,7 +793,7 @@ reg('packed_ice', { hardness: 0.5 }, { packed_ice: iceTex(19, [138, 172, 222]) }
 reg('blue_ice', { hardness: 0.5 }, { blue_ice: iceTex(20, [110, 150, 222]) });
 reg('snow_block', { hardness: 0.2 }, { snow_block: noiseTex([246, 250, 252], 21, { dark: 0.97, light: 1.03, dProb: 0.1, lProb: 0.1 }) });
 reg('snow_layer', { transparent: true, hardness: 0.1 }, { snow_layer: noiseTex([246, 250, 252], 22, { dark: 0.97, light: 1.03, dProb: 0.1, lProb: 0.1 }) });
-reg('obsidian', { hardness: 50, tool: 'pickaxe' }, { obsidian: obsidianTex(23) });
+reg('obsidian', { hardness: 12, tool: 'pickaxe' }, { obsidian: obsidianTex(23) });
 
 // --- 矿石 ---
 reg('coal_ore', { hardness: 3, tool: 'pickaxe' }, { coal_ore: oreTex([125, 125, 125], [42, 42, 42], 31) });

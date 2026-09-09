@@ -10,7 +10,7 @@ const MUSHROOM_T = 0.62;
 // 向日葵平原变体阈值（在平原带内成片花海）
 const SUNFLOWER_T = 0.55;
 import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from '../core/Chunk.js';
-import { StructureManager } from './structures/StructureManager.js';
+import { StructureManager, hash32 } from './structures/StructureManager.js';
 import './structures/catalog.js';
 
 const STONE = () => BlockRegistry.getId('stone');
@@ -24,6 +24,7 @@ const BEDROCK = () => BlockRegistry.getId('bedrock');
 const CLAY = () => BlockRegistry.getId('clay');
 const GRAVEL = () => BlockRegistry.getId('gravel');
 const LAVA = () => BlockRegistry.getId('lava');
+const OBSIDIAN = () => BlockRegistry.getId('obsidian');
 
 // ── 洞穴参数（W3）────────────────────────────────────────────────────────
 // 意面通道：两个独立 3D 噪声 a/b 同时接近 0（a²+b²<t）→ 管道腔；y 频率 ×2 压扁通道
@@ -38,6 +39,10 @@ const CAVE_CELL = 4;
 const CAVE_MIN_Y = 4;            // 基岩+保护层，不挖
 const CAVE_WATER_SHELL = 6;      // 水面列（height < SEA_LEVEL+2）水下保留壳厚，防倒灌
 const CAVE_LAVA_LEVEL = 10;      // 挖空处 y ≤ 此值填岩浆（MC 风格深层岩浆湖）
+// 深层岩浆池缘黑曜石壳（生存端黑曜石唯一自然来源）：实心格 6 邻域存在岩浆腔时
+// 按 per-block 哈希概率置换——盐值/概率改动会移动全服黑曜石，联机两端必须同版本
+const OBSIDIAN_SALT = 7717;
+const OBSIDIAN_P = 0.07;
 
 export class TerrainGenerator {
   constructor(seed) {
@@ -186,6 +191,14 @@ export class TerrainGenerator {
             blockId = y <= CAVE_LAVA_LEVEL ? LAVA() : 0;
           }
 
+          // 深层岩浆池缘黑曜石壳（先 hash 后邻域判定省 93% 的 _isCave 开销）
+          if (field && y >= CAVE_MIN_Y && y <= CAVE_LAVA_LEVEL &&
+              blockId !== 0 && blockId !== BEDROCK() && blockId !== WATER() && blockId !== LAVA() &&
+              hash32(wx, y, wz, OBSIDIAN_SALT) % 1000 < OBSIDIAN_P * 1000 &&
+              this._lavaNeighbor(field, wx, y, wz)) {
+            blockId = OBSIDIAN();
+          }
+
           if (blockId !== 0) {
             chunk.set(x, y, z, blockId);
           }
@@ -215,18 +228,21 @@ export class TerrainGenerator {
   _buildCaveField(cx, cz, maxHeight) {
     const yTop = Math.min(CHUNK_HEIGHT, maxHeight + 2);
     if (yTop <= CAVE_MIN_Y + CAVE_CELL) return null;
-    const nx = CHUNK_SIZE / CAVE_CELL + 1; // 5：含 x=0..16（16 为邻区块边界点）
+    // 网格域 = 区块 ±1 采样格（7 点，[x0-4, x0+20]）：岩浆缘黑曜石判定要对实心格的
+    // 6 邻域做 _isCave（含越出区块 1 格的邻居），5 点域在边界会插值错段。
+    // 网格点是世界对齐纯函数——扩域只增采样点，原有点值不变，内部区块判定逐字节不变。
+    const nx = CHUNK_SIZE / CAVE_CELL + 3; // 7：含 x=-4..20
     const nz = nx;
     const ny = Math.ceil(yTop / CAVE_CELL) + 1;
     const aG = new Float32Array(nx * nz * ny);
     const bG = new Float32Array(nx * nz * ny);
     const cG = new Float32Array(nx * nz * ny);
-    const x0 = cx * CHUNK_SIZE, z0 = cz * CHUNK_SIZE;
+    const bx0 = (cx * CHUNK_SIZE) - CAVE_CELL, bz0 = (cz * CHUNK_SIZE) - CAVE_CELL;
     const fy = 2; // y 频率倍增：通道竖向压扁（MC 意面洞穴观感）
     for (let ix = 0; ix < nx; ix++) {
       for (let iz = 0; iz < nz; iz++) {
-        const wx = x0 + ix * CAVE_CELL;
-        const wz = z0 + iz * CAVE_CELL;
+        const wx = bx0 + ix * CAVE_CELL;
+        const wz = bz0 + iz * CAVE_CELL;
         for (let iy = 0; iy < ny; iy++) {
           const wy = iy * CAVE_CELL;
           const i = (ix * nz + iz) * ny + iy;
@@ -236,7 +252,7 @@ export class TerrainGenerator {
         }
       }
     }
-    return { aG, bG, cG, nx, nz, ny, x0, z0 };
+    return { aG, bG, cG, nx, nz, ny, x0: bx0, z0: bz0 };
   }
 
   // 采样插值判定：三通道三线性插值 → 意面 a²+b²<t 或 奶酪 c>t；含水面列保护壳。
@@ -260,6 +276,18 @@ export class TerrainGenerator {
     const a = tri(f.aG), b = tri(f.bG), c = tri(f.cG);
     if (a * a + b * b < CAVE_NOODLE_T) return true;
     return c > CAVE_CHEESE_T;
+  }
+
+  // 岩浆缘判定：6 邻域任一为岩浆腔。只有岩浆带 [CAVE_MIN_Y, CAVE_LAVA_LEVEL] 内的
+  // carve 才是岩浆——y-1<CAVE_MIN_Y 不会被挖、y+1>CAVE_LAVA_LEVEL 的 carve 是空气，
+  // 竖向两向必须带门，否则会把"气腔地板/岩浆层下基岩"误判成缘（探针实测 badAdj）。
+  // height 传哨兵值 999：_isCave 内 height 仅用于水面列保护壳门，深带天然不触发，
+  // 因此跨列/跨区块邻居无需重算列高——判定仍是 (seed, 坐标) 的纯函数。
+  _lavaNeighbor(f, wx, y, wz) {
+    if (y - 1 >= CAVE_MIN_Y && this._isCave(f, wx, y - 1, wz, 999)) return true;
+    if (y + 1 <= CAVE_LAVA_LEVEL && this._isCave(f, wx, y + 1, wz, 999)) return true;
+    return this._isCave(f, wx - 1, y, wz, 999) || this._isCave(f, wx + 1, y, wz, 999) ||
+           this._isCave(f, wx, y, wz - 1, 999) || this._isCave(f, wx, y, wz + 1, 999);
   }
 
   // 矿石分布（链式窄带：各矿占比=首中即停的带宽分位差×深度带占比，总矿率 ~2%（旧版 38%）；

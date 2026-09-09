@@ -1172,12 +1172,13 @@ export class Game {
           this.breakingProgress = 0;
           this.breakMesh.visible = false;
           this.controls.mouseLeft = false;
+          const dropName = this._blockDropName(def);
           if (this.networkMode && this.net) {
             // 联机：生成物理掉落物（服务器广播 drop_spawn，各端看到同一个），谁都能拾取
-            this.net.sendDropSpawn(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5, def.name, 1);
+            this.net.sendDropSpawn(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5, dropName, 1);
           } else {
             // 单机：简化直接进入背包
-            this.inventory.add(def.name, 1);
+            this.inventory.add(dropName, 1);
             this.hotbar.update();
           }
         }
@@ -1554,6 +1555,13 @@ export class Game {
       buildGatewayPad(this.world, place.outer.x, place.outer.z, { top: 140, platformY: 64 });
     }
     if (this.chatBox) this.chatBox.add('主岛边缘升起了数座折跃门——它们通向外岛', '#a7f');
+  }
+
+  // 方块破坏掉落映射（默认掉自身；特殊掉落统一加分支，勿在调用点散写——
+  // 联机 drop_spawn 的 name 由破坏端决定上报，无确定性约束，但两端须同版本）
+  _blockDropName(def) {
+    if (def.name === 'gravel') return Math.random() < 0.1 ? 'flint' : 'gravel'; // 原版式 10% 燧石
+    return def.name;
   }
 
   // 末影水晶被击碎：范围爆炸（复用怪物爆炸破坏路径）+ 按距离衰减伤害
