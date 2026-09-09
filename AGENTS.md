@@ -350,6 +350,14 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **桶**：Raycast.cast 加第 4 参 `includeFluid`（空桶手持时 updateRaycast 传入 → 准星可命中水/岩浆；其他物品准星仍穿透流体——勿全局开）。空桶对流体=舀取（setBlock 0 + 槽换满桶）；满桶对面=倒出邻格（必须空气，非空气静默拒）+ 槽换空桶。**槽位替换直接写 `inventory.slots[hotbarSelected]`**（不是 remove+add，防落到别的槽）。本作水体静态无流动模拟——舀水留洞/倒水不成流属设计边界。岩浆倒出经 LightEngine 自动给光 15。创造模式：世界可编辑但槽位不变。
 - **弓**：右键射箭（消耗 arrow×1，`removeItems`；创造不耗）；箭 = 本地投射物 `{mesh,pos,vel(28m/s),life:8,stuck}`，重力 -12；命中怪=整段位移作射线走 `findMobByRay`→`attackMob(…,6)`（击退/掉落/XP 全链复用）；命中实体块=钉住至寿命尽。几何/材质**模块级共享不 dispose**（`Game._arrowGeo/_arrowMat` 惰性单例），despawn 只 scene.remove。`arrows` 数组在 start() **无条件初始化**（曾漏——首启 undefined 在 update 里 `this.arrows.length` 直接炸循环）。
 - **右键分支顺序**：villager→furnace→床→crafting→红石→frame→(hit 内)桶/打火石/末影眼框→放置 `if (sel && hit)`→(hit 外)弓→掷眼。弓/掷眼分支不依赖命中（对空可用）。
+### P3 批次备忘（防回退）—— 被动动物 / 末影人（可再生掉落源）
+
+- **四类新生物**：牛（beef+leather）、羊（white_wool）、鸡（feather+raw_chicken）——`passive: true` 走村民系 AI 分支，白天草地成群（2-3 只）生成，独立上限 `MAX_PASSIVE=12`（不含村民，不挤 MAX_MOBS 敌对名额）；末影人（ender_pearl 0-1）——`neutral: true` 受击激怒 + **受击 60% 瞬移**（`_teleportMob`：±16 格下扫首个"实心+2 格净空"，8 次失败原地不动），夜晚主世界表 10% 混入 + 末地主产。
+- **trySpawn 结构**：被动动物分支插在"亮度门**之前**"（白天可生成）；`_spawnAt(typeName,wx,wy,wz)` 是 trySpawn 尾部提取的共用入口（群生成也走它，联机自动经 mobNet 广播）。末地原先 `return` 改为末影人 50% 生成。
+- **⚠ 命中球改身体中点（攻击几何变更）**：attackMob/findMobByRay 的球心从**脚底**改为**身体中点**（oc.y -= height*0.5）、半径 `max(width,height)*0.5`——旧脚底球对高个怪（末影人/凋零骷髅）球顶只到 height/2，平射/平砍被切顶（disc≈-8e-15 浮点负零实测）几乎无法命中。改后平射可命中高个怪；矮怪（蜘蛛等）横向覆盖同步变准。
+- **掉落是"世界实体"不是直进背包**：mob 掉落经 `dropLoot→spawnDrop→droppedItems`（pickupDelay 1s + 走近拾取）——验证掉落要数 `mm.droppedItems` 而非 inventory；挖矿/砾石掉落才是直进背包（Game._blockDropName 路径）。
+- **agent-browser 生成验证**：trySpawn 有 SPAWN_INTERVAL=2.5s 节流——直连循环 `mm.trySpawn(playerPos, isNight)` 绕过节流；**敌对名额满员会让末影人挤不进**（清场必须驱动 update 让 dyingAnim 走完 splice，光标 dead=true 不够）；桩随机需用**循环值序列**（恒值会把生成落点也固定死在无效格）。
+
 - **agent-browser 打怪验证**：怪会走位导致脱靶——`m0.speed = 0` 冻结 AI 再射；箭矢伤害断言读 `hpBefore-hpAfter`（=6），勿断言必杀（20 血怪一箭不死是正确行为）。
 
 - **agent-browser 验证手法**：右键交互用 `controls.mouseRight = true + update(1/60) 步进`（真实处理器路径）；掷眼碎裂桩用 `random => 0.9`（**≥0.8 才碎**，0.1 是落回分支——桩方向勿写反）；床重生断言 respawn() 直调 + 位置比对床顶。

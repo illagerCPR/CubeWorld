@@ -10,6 +10,7 @@ import { CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from '../core/Chunk.js';
 import { villagerTradeSeed } from '../world/loot.js';
 
 const MAX_MOBS = 20;
+const MAX_PASSIVE = 12; // 被动动物上限（不含村民——村庄系统单独管理）
 const SPAWN_INTERVAL = 2.5;
 const DESPAWN_DISTANCE = 80;
 
@@ -213,11 +214,27 @@ export class MobManager {
     const headId = this.world.getBlock(x, y + 1, z);
     if (headId !== 0) return;
 
+    // 被动动物（牛/羊/鸡）：白天草地成群生成，不挤敌对名额（独立上限）
+    if (this.world.dimension === 'overworld' && !isNight &&
+        this.world.getBlock(x, y - 1, z) === BlockRegistry.getId('grass_block') &&
+        this._passiveCount() < MAX_PASSIVE && Math.random() < 0.5) {
+      const group = ['cow', 'sheep', 'chicken'][Math.floor(Math.random() * 3)];
+      this._spawnAt(group, x + 0.5, y, z + 0.5);
+      const n = 2 + Math.floor(Math.random() * 2); // 2-3 只小群
+      for (let i = 1; i < n; i++) {
+        this._spawnAt(group, x + 0.5 + (Math.random() * 6 - 3), y, z + 0.5 + (Math.random() * 6 - 3));
+      }
+      return;
+    }
+
     // 亮度检查（简化：夜晚生成）；天域永昼不受白天海拔门限制（岛面 y 恒高于海平面）
     if (!isNight && y > SEA_LEVEL + 5 && this.world.dimension !== 'aether') return;
 
-    // 末地不自然刷怪（末影龙 Boss 战场）；天域走永昼表（风灵/天域守卫）
-    if (this.world.dimension === 'end') return;
+    // 末地：末影人盘踞（主岛/外岛立地面均可）
+    if (this.world.dimension === 'end') {
+      if (Math.random() < 0.5) this._spawnAt('enderman', x + 0.5, y, z + 0.5);
+      return;
+    }
 
     // 选择怪物类型：下界走下界表（烈焰人仅要塞平台层），天域走永昼表，主世界走昼夜表
     let typeName;
@@ -233,19 +250,52 @@ export class MobManager {
       typeName = pickAetherSpawn(biome, !!this._aetherTempleAt(x, z), Math.random);
     } else {
       const choices = isNight
-        ? ['zombie', 'zombie', 'skeleton', 'creeper', 'spider']
+        ? (Math.random() < 0.1 ? ['enderman'] : ['zombie', 'zombie', 'skeleton', 'creeper', 'spider'])
         : ['spider', 'zombie'];
       typeName = choices[Math.floor(Math.random() * choices.length)];
     }
 
+    this._spawnAt(typeName, x + 0.5, y, z + 0.5);
+  }
+
+  // 在指定坐标生成（trySpawn 尾部 + 被动动物群生成共用；联机走 mobNet 广播惯例）
+  _spawnAt(typeName, wx, wy, wz) {
     const mob = new Mob(typeName, this.world);
-    mob.position.set(x + 0.5, y, z + 0.5);
+    mob.position.set(wx, wy, wz);
     if (this.mobNet) {
       // 联机：host 端生成 → 广播 mob_spawn，实体由广播回执创建（各端同 id 一致）
       this.mobNet.sendMobSpawn(typeName, mob.position.x, mob.position.y, mob.position.z);
     } else {
       this.spawnMob(mob);
     }
+  }
+
+  // 被动动物计数（不含村民——村民由村庄生成系统单独管理）
+  _passiveCount() {
+    let n = 0;
+    for (const m of this.mobs) {
+      if (m.type && m.type.passive && m.typeName !== 'villager' && !m.dead) n++;
+    }
+    return n;
+  }
+
+  // 末影人受击瞬移：±16 格随机落点，向下扫首个"实心+2 格净空"；8 次尝试失败原地不动
+  _teleportMob(mob) {
+    for (let t = 0; t < 8; t++) {
+      const x = Math.floor(mob.position.x) + Math.floor(Math.random() * 33 - 16);
+      const z = Math.floor(mob.position.z) + Math.floor(Math.random() * 33 - 16);
+      for (let y = Math.min(CHUNK_HEIGHT - 3, Math.floor(mob.position.y) + 12); y >= 1; y--) {
+        const id = this.world.getBlock(x, y, z);
+        const def = id ? BlockRegistry.getById(id) : null;
+        if (def && def.solid &&
+            this.world.getBlock(x, y + 1, z) === 0 && this.world.getBlock(x, y + 2, z) === 0) {
+          mob.position.set(x + 0.5, y + 1, z + 0.5);
+          mob.velocity.set(0, 0, 0);
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   // 位置所在下界要塞记录（bbox 判定；烈焰人生成门控/单测共用）。
@@ -961,8 +1011,9 @@ export class MobManager {
       if (mob.dead || mob.dyingAnim) continue;
       // 球体射线检测
       const oc = new THREE.Vector3().subVectors(rayOrigin, mob.position);
+      oc.y -= mob.height * 0.5; // 球心=身体中点（高个怪可被平射命中）
       const b = oc.dot(rayDir);
-      const c = oc.dot(oc) - (mob.height * 0.5) ** 2;
+      const c = oc.dot(oc) - (Math.max(mob.width, mob.height) * 0.5) ** 2;
       const disc = b * b - c;
       if (disc < 0) continue;
       const t = -b - Math.sqrt(disc);
@@ -978,6 +1029,8 @@ export class MobManager {
         closest.health = 0;
         closest.dead = true;
       }
+      // 末影人受击瞬移（60% 概率，原版风味）
+      if (closest.typeName === 'enderman' && Math.random() < 0.6) this._teleportMob(closest);
       // 中立生物被激怒：激怒 25s + 16 格内同族共同激怒（僵尸猪灵群怒，原版行为）
       if (closest.type && closest.type.neutral) {
         closest.aggro = true;
@@ -1018,8 +1071,9 @@ export class MobManager {
     for (const mob of this.mobs) {
       if (mob.dead || mob.dyingAnim) continue;
       const oc = new THREE.Vector3().subVectors(rayOrigin, mob.position);
+      oc.y -= mob.height * 0.5; // 球心=身体中点（高个怪可被平射命中）
       const b = oc.dot(rayDir);
-      const c = oc.dot(oc) - (mob.height * 0.5) ** 2;
+      const c = oc.dot(oc) - (Math.max(mob.width, mob.height) * 0.5) ** 2;
       const disc = b * b - c;
       if (disc < 0) continue;
       const t = -b - Math.sqrt(disc);

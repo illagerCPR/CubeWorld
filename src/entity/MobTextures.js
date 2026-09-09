@@ -153,6 +153,14 @@ const C = {
   // 天域守卫：白铠金饰 + 青蓝眼 + 淡蓝翼膜
   gArmor: [226, 230, 240], gArmorD: [176, 184, 205], gArmorHi: [244, 246, 252],
   gTrim: [226, 184, 92], gEye: [86, 158, 255], gWing: [204, 222, 248], gWingD: [158, 182, 220],
+  // 牛:棕底白斑 + 粉吻
+  cowBrown: [122, 86, 62], cowBrownD: [94, 64, 46], cowWhite: [232, 228, 220], cowMuzzle: [222, 178, 168], cowHorn: [226, 218, 198],
+  // 羊:蓬松白毛 + 粉褐脸
+  wool: [234, 232, 226], woolD: [206, 202, 194], sheepFace: [214, 186, 168], sheepHoof: [120, 108, 98],
+  // 鸡:白羽 + 黄喙红髯
+  chWhite: [240, 238, 230], chWhiteD: [214, 210, 200], chBeak: [232, 176, 60], chWattle: [206, 62, 52], chLeg: [216, 158, 78],
+  // 末影人:纯黑 + 品红眼带
+  eBlack: [16, 12, 20], eBlackD: [10, 8, 14], eBlackHi: [28, 22, 34], eEye: [198, 132, 250],
 };
 
 // === 各怪皮肤 SVG 生成（原版风） ===
@@ -775,6 +783,113 @@ function aetherGuardSkinSVG() {
   return buildSkinSVG(cells);
 }
 
+// ── 被动动物 + 末影人（P3-2）────────────────────────────────────────
+// 牛：四足，头前伸、白斑棕底
+const COW_PARTS = [
+  { name: 'head',  row: 0, box: [-0.25, 0.95, 0.45,  0.25, 1.35, 0.90] },
+  { name: 'body',  row: 1, box: [-0.35, 0.60, -0.70,  0.35, 1.15, 0.55] },
+  { name: 'legFL', row: 2, box: [ 0.15, 0.00, 0.35,  0.33, 0.62, 0.53] },
+  { name: 'legFR', row: 2, box: [-0.33, 0.00, 0.35, -0.15, 0.62, 0.53] },
+  { name: 'legBL', row: 3, box: [ 0.15, 0.00, -0.53, 0.33, 0.62, -0.35] },
+  { name: 'legBR', row: 3, box: [-0.33, 0.00, -0.53, -0.15, 0.62, -0.35] },
+];
+// 羊：更蓬松的躯干
+const SHEEP_PARTS = [
+  { name: 'head',  row: 0, box: [-0.22, 0.90, 0.40,  0.22, 1.30, 0.85] },
+  { name: 'body',  row: 1, box: [-0.40, 0.55, -0.70,  0.40, 1.10, 0.50] },
+  { name: 'legFL', row: 2, box: [ 0.15, 0.00, 0.30,  0.30, 0.57, 0.45] },
+  { name: 'legFR', row: 2, box: [-0.30, 0.00, 0.30, -0.15, 0.57, 0.45] },
+  { name: 'legBL', row: 3, box: [ 0.15, 0.00, -0.45, 0.30, 0.57, -0.30] },
+  { name: 'legBR', row: 3, box: [-0.30, 0.00, -0.45, -0.15, 0.57, -0.30] },
+];
+// 鸡：小体型，双翅双细腿
+const CHICKEN_PARTS = [
+  { name: 'head',  row: 0, box: [-0.13, 0.48, 0.02,  0.13, 0.76, 0.28] },
+  { name: 'body',  row: 1, box: [-0.16, 0.22, -0.20,  0.16, 0.52, 0.18] },
+  { name: 'wingR', row: 2, box: [ 0.14, 0.28, -0.14,  0.20, 0.48, 0.12] },
+  { name: 'wingL', row: 2, box: [-0.20, 0.28, -0.14, -0.14, 0.48, 0.12] },
+  { name: 'legR',  row: 3, box: [ 0.05, 0.00, -0.04,  0.13, 0.24, 0.06] },
+  { name: 'legL',  row: 3, box: [-0.13, 0.00, -0.04, -0.05, 0.24, 0.06] },
+];
+// 末影人：拉长人形，长臂长腿
+const ENDERMAN_PARTS = [
+  { name: 'head', row: 0, box: [-0.20, 2.50, -0.20,  0.20, 2.90, 0.20] },
+  { name: 'body', row: 1, box: [-0.16, 1.40, -0.14,  0.16, 2.50, 0.14] },
+  { name: 'armR', row: 2, box: [-0.42, 1.40, -0.10, -0.26, 2.50, 0.10] },
+  { name: 'armL', row: 2, box: [ 0.26, 1.40, -0.10,  0.42, 2.50, 0.10] },
+  { name: 'legR', row: 3, box: [-0.15, 0.00, -0.10,  0.00, 1.40, 0.10] },
+  { name: 'legL', row: 3, box: [ 0.00, 0.00, -0.10,  0.15, 1.40, 0.10] },
+];
+
+function cowSkinSVG() {
+  const hide = (x, y) => (hash01(x, y, 403) < 0.20 ? C.cowWhite : (hash01(x, y, 401) < 0.5 ? C.cowBrown : C.cowBrownD));
+  const face = (x, y) => {
+    if (y >= 7 && y <= 9 && ((x >= 2 && x <= 5) || (x >= 10 && x <= 13))) return C.black;
+    if (y >= 11 && x >= 4 && x <= 11) return C.cowMuzzle;
+    return null;
+  };
+  const horn = (x, y) => (hash01(x, y, 404) < 0.15 ? C.cowHorn : null);
+  const legB = noisy(C.cowBrownD, 8, 402);
+  const cells = [
+    ...partCells(0, hide, { front: face, top: horn, bot: () => C.cowMuzzle }),
+    ...partCells(1, hide, { bot: () => C.cowWhite }),
+    ...partCells(2, legB),
+    ...partCells(3, legB),
+  ];
+  return buildSkinSVG(cells);
+}
+
+function sheepSkinSVG() {
+  const woolB = (x, y) => (hash01(x, y, 411) < 0.3 ? C.woolD : C.wool);
+  const face = (x, y) => {
+    if (y >= 8 && y <= 9 && ((x >= 3 && x <= 5) || (x >= 10 && x <= 12))) return C.black;
+    if (x >= 4 && x <= 11 && y >= 10) return C.sheepFace;
+    return null;
+  };
+  const legB = (x, y) => (y >= 13 ? C.sheepHoof : C.wool);
+  const cells = [
+    ...partCells(0, (x, y) => C.sheepFace, { front: face, top: () => C.woolD, bot: () => C.sheepFace }),
+    ...partCells(1, woolB, { bot: () => C.sheepFace }),
+    ...partCells(2, legB),
+    ...partCells(3, legB),
+  ];
+  return buildSkinSVG(cells);
+}
+
+function chickenSkinSVG() {
+  const whiteB = (x, y) => (hash01(x, y, 421) < 0.25 ? C.chWhiteD : C.chWhite);
+  const face = (x, y) => {
+    if (y >= 7 && y <= 9 && ((x >= 4 && x <= 6) || (x >= 9 && x <= 11))) return C.black;
+    if (y >= 11 && y <= 12 && x >= 5 && x <= 10) return C.chBeak;
+    if (y >= 13 && x >= 6 && x <= 9) return C.chWattle;
+    return null;
+  };
+  const comb = (x, y) => (x >= 5 && x <= 10 && y >= 1 && y <= 3 ? C.chWattle : null);
+  const cells = [
+    ...partCells(0, whiteB, { front: face, top: comb }),
+    ...partCells(1, whiteB),
+    ...partCells(2, whiteB),
+    ...partCells(3, (x, y) => C.chLeg),
+  ];
+  return buildSkinSVG(cells);
+}
+
+function endermanSkinSVG() {
+  const blackB = (x, y) => (hash01(x, y, 431) < 0.2 ? C.eBlackHi : C.eBlack);
+  const face = (x, y) => {
+    if (y >= 6 && y <= 8 && x >= 1 && x <= 14) return C.eEye;
+    if (y === 7 && ((x >= 3 && x <= 5) || (x >= 10 && x <= 12))) return C.eBlack;
+    return null;
+  };
+  const cells = [
+    ...partCells(0, blackB, { front: face }),
+    ...partCells(1, blackB),
+    ...partCells(2, blackB),
+    ...partCells(3, blackB),
+  ];
+  return buildSkinSVG(cells);
+}
+
 // === 入口：返回各 type 的 skin SVG + parts ===
 export function generateMobSkinSVGs() {
   return {
@@ -790,6 +905,10 @@ export function generateMobSkinSVGs() {
     shulker:           shulkerSkinSVG(),
     wisp:              wispSkinSVG(),
     aether_guard:      aetherGuardSkinSVG(),
+    cow:               cowSkinSVG(),
+    sheep:             sheepSkinSVG(),
+    chicken:           chickenSkinSVG(),
+    enderman:          endermanSkinSVG(),
   };
 }
 
@@ -1020,6 +1139,80 @@ export const MobTypes = {
     drops: [
       { name: 'glowstone', min: 0, max: 2, chance: 0.7 },
       { name: 'gold_ingot', min: 0, max: 1, chance: 0.35 },
+    ],
+  },
+  cow: {
+    name: 'cow',
+    displayName: '牛',
+    width: 0.9,
+    height: 1.4,
+    health: 10,
+    damage: 0,
+    speed: 1.1,
+    attackRange: 0,
+    detectionRange: 0,
+    burningInDay: false,
+    passive: true,       // Mob.js passive AI 分支（游荡/逃离）
+    xp: 2,
+    model: { parts: COW_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'beef', min: 1, max: 2 },
+      { name: 'leather', min: 0, max: 2 },
+    ],
+  },
+  sheep: {
+    name: 'sheep',
+    displayName: '羊',
+    width: 0.9,
+    height: 1.3,
+    health: 8,
+    damage: 0,
+    speed: 1.1,
+    attackRange: 0,
+    detectionRange: 0,
+    burningInDay: false,
+    passive: true,
+    xp: 2,
+    model: { parts: SHEEP_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'white_wool', min: 1, max: 2 },
+    ],
+  },
+  chicken: {
+    name: 'chicken',
+    displayName: '鸡',
+    width: 0.4,
+    height: 0.8,
+    health: 4,
+    damage: 0,
+    speed: 1.0,
+    attackRange: 0,
+    detectionRange: 0,
+    burningInDay: false,
+    passive: true,
+    xp: 1,
+    model: { parts: CHICKEN_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'feather', min: 0, max: 2 },
+      { name: 'raw_chicken', min: 1, max: 1 },
+    ],
+  },
+  enderman: {
+    name: 'enderman',
+    displayName: '末影人',
+    width: 0.6,
+    height: 2.9,
+    health: 40,
+    damage: 4,
+    speed: 3.2,
+    attackRange: 1.6,
+    detectionRange: 16,
+    burningInDay: false,
+    neutral: true,       // 中立：受击才激怒 + 受击瞬移
+    xp: 5,
+    model: { parts: ENDERMAN_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'ender_pearl', min: 0, max: 1 },
     ],
   },
 };
