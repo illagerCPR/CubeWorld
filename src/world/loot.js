@@ -19,13 +19,14 @@ const TABLES = {
     ['iron_ingot', 1, 4, 10], ['coal', 3, 8, 10], ['emerald', 1, 3, 8],
     ['compass', 1, 1, 4], ['saddle', 1, 1, 3], ['golden_apple', 1, 1, 2],
     ['bucket', 1, 1, 4], ['oak_sapling', 2, 4, 6],
-    ['ender_pearl', 1, 1, 2], ['blaze_powder', 1, 2, 2],
+    ['ender_pearl', 1, 1, 2], ['blaze_powder', 1, 2, 2], ['leather', 1, 3, 5],
   ],
   // 要塞枢纽：基础补给
   stronghold_hub: [
     ['bread', 1, 4, 14], ['coal', 3, 8, 14], ['iron_ingot', 1, 3, 10],
     ['torch', 6, 12, 12], ['arrow', 4, 10, 8], ['emerald', 1, 2, 6],
     ['stick', 4, 10, 8], ['ender_pearl', 1, 1, 3], ['blaze_rod', 1, 1, 3],
+    ['feather', 2, 5, 6],
   ],
   // 要塞图书馆：书类与经验
   stronghold_library: [
@@ -39,13 +40,14 @@ const TABLES = {
     ['bread', 1, 3, 10], ['arrow', 6, 14, 12], ['string', 1, 4, 8],
     ['emerald', 1, 3, 8], ['bucket', 1, 1, 4], ['redstone', 2, 6, 8],
     ['golden_apple', 1, 1, 2], ['ender_pearl', 1, 2, 5], ['blaze_rod', 1, 2, 4],
+    ['leather', 1, 3, 5],
   ],
   // 下界要塞：金饰/烈焰系/稀有矿物（箱子在主堡×2、桥头堡、南桥尽头脑）
   fortress: [
     ['gold_nugget', 2, 6, 14], ['gold_ingot', 1, 3, 10], ['iron_ingot', 1, 3, 8],
     ['coal', 3, 8, 12], ['bone', 1, 4, 10], ['obsidian', 2, 4, 8],
     ['flint', 1, 2, 6], ['blaze_rod', 1, 2, 4], ['golden_apple', 1, 1, 2],
-    ['diamond', 1, 1, 2], ['saddle', 1, 1, 2],
+    ['diamond', 1, 1, 2], ['saddle', 1, 1, 2], ['feather', 1, 3, 4],
   ],
   // 末地城：紫珀/矿物/紫颂（箱子在顶层战利品房×2）
   end_city: [
@@ -76,7 +78,7 @@ const TABLES = {
   aether_tower: [
     ['bread', 1, 3, 16], ['arrow', 4, 12, 12], ['coal', 3, 8, 12],
     ['iron_ingot', 1, 3, 10], ['emerald', 1, 2, 8], ['torch', 4, 8, 10],
-    ['apple', 1, 3, 10], ['experience_bottle', 1, 2, 6],
+    ['apple', 1, 3, 10], ['experience_bottle', 1, 2, 6], ['feather', 2, 4, 6],
   ],
   // 天域沉船：远航货物（甲板/舱室两箱）
   aether_ship: [

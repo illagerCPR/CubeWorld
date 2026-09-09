@@ -94,6 +94,7 @@ addShaped('diamond_sword', 1, [null,'diamond', null, null,'diamond', null, null,
 addShaped('leather_chestplate', 1, ['leather', null, 'leather','leather','leather','leather','leather','leather','leather']);
 addShaped('iron_chestplate', 1, ['iron_ingot', null, 'iron_ingot','iron_ingot','iron_ingot','iron_ingot','iron_ingot','iron_ingot','iron_ingot']);
 addShaped('diamond_chestplate', 1, ['diamond', null, 'diamond','diamond','diamond','diamond','diamond','diamond','diamond']);
+addShaped('gold_chestplate', 1, ['gold_ingot', null, 'gold_ingot','gold_ingot','gold_ingot','gold_ingot','gold_ingot','gold_ingot','gold_ingot']);
 
 // 武器
 addShaped('bow', 1, ['stick', null,'stick','stick','string','stick', null,'string', null]);
