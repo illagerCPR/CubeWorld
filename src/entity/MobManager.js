@@ -677,7 +677,14 @@ export class MobManager {
         if (!mob.diedHandled) {
           mob.diedHandled = true; // 只处理一次（防多端重复广播/重复掉落）
           if (mob.netId != null && this.mobNet) this.mobNet.sendMobDied(mob.netId);
-          if (!mob.remoteDeath) this.dropLoot(mob); // 击杀端（本地死亡）才产掉落；远端死亡由击杀端产出
+          if (!mob.remoteDeath) {
+            this.dropLoot(mob); // 击杀端（本地死亡）才产掉落；远端死亡由击杀端产出
+            // XP：同掉落口径（击杀端 + 玩家 5 秒内命中过）；远端死亡由击杀端结算
+            const xp = mob.type && mob.type.xp ? mob.type.xp : 0;
+            if (xp && mob.playerHitAt && Date.now() - mob.playerHitAt < 5000 && this.onMobXpAward) {
+              this.onMobXpAward(mob, xp);
+            }
+          }
         }
         mob.dyingAnim = { progress: 0, total: DEATH_ANIM_DURATION };
         if (mob.healthBarSprite) mob.healthBarSprite.visible = false;
@@ -966,6 +973,7 @@ export class MobManager {
     if (closest) {
       // 直接改血量（不走 Entity.damage 的无敌帧检查，玩家攻击不卡无敌期）
       closest.health -= damage;
+      closest.playerHitAt = Date.now(); // 玩家击杀判定（5 秒内死亡 → XP 归属玩家）
       if (closest.health <= 0) {
         closest.health = 0;
         closest.dead = true;

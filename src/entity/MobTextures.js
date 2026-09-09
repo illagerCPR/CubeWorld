@@ -811,6 +811,7 @@ export const MobTypes = {
     attackRange: 1.5,
     detectionRange: 16,
     burningInDay: true,
+    xp: 5,
     model: { parts: HUMANOID_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'rotten_flesh', min: 0, max: 2 },
@@ -829,6 +830,7 @@ export const MobTypes = {
     detectionRange: 16,
     ranged: true,
     burningInDay: true,
+    xp: 5,
     model: { parts: SKELETON_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'bone', min: 0, max: 2 },
@@ -847,6 +849,7 @@ export const MobTypes = {
     attackRange: 2,
     detectionRange: 16,
     burningInDay: false,
+    xp: 5,
     model: { parts: CREEPER_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'gunpowder', min: 0, max: 2 },
@@ -864,6 +867,7 @@ export const MobTypes = {
     detectionRange: 16,
     climbing: true,
     burningInDay: false,
+    xp: 5,
     model: { parts: SPIDER_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'string', min: 0, max: 2 },
@@ -897,6 +901,7 @@ export const MobTypes = {
     detectionRange: 16,
     burningInDay: false, // 下界无日光
     neutral: true,       // 中立：受击才激怒（MobManager.attackMob 传播同族仇恨）
+    xp: 5,
     model: { parts: HUMANOID_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'rotten_flesh', min: 0, max: 1 },
@@ -915,6 +920,7 @@ export const MobTypes = {
     attackRange: 1.7,
     detectionRange: 16,
     burningInDay: false,
+    xp: 5,
     model: { parts: WITHER_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'coal', min: 0, max: 1 },
@@ -934,6 +940,7 @@ export const MobTypes = {
     burningInDay: false,
     flying: true,        // 悬浮（EntityPhysics 跳过重力，Mob.update 竖直悬停控制）
     igniteOnHit: true,   // 命中点燃玩家（复用 onFire 通道）
+    xp: 10,
     model: { parts: BLAZE_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'blaze_rod', min: 0, max: 1, chance: 0.6 },
@@ -952,6 +959,7 @@ export const MobTypes = {
     burningInDay: false,
     flying: true,        // 龙全程飞行（DragonAI 接管全部速度/朝向）
     boss: true,          // Boss 标记：不进自然生成表；死亡触发 onDragonDefeated
+    xp: 500,
     model: { parts: DRAGON_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'dragon_egg', min: 1, max: 1 },
@@ -969,6 +977,7 @@ export const MobTypes = {
     detectionRange: 24,
     burningInDay: false,
     stationary: true,    // Mob.update 专用分支：蓄力延迟弹，无位移
+    xp: 5,
     model: { parts: SHULKER_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'shulker_shell', min: 0, max: 1 },
@@ -988,6 +997,7 @@ export const MobTypes = {
     burningInDay: false,
     flying: true,        // 悬浮漂浮（passive 游荡/逃离复用村民 AI 分支）
     passive: true,
+    xp: 5,
     model: { parts: WISP_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'glowstone', min: 0, max: 1, chance: 0.3 },  // 碎光凝结
@@ -1005,6 +1015,7 @@ export const MobTypes = {
     detectionRange: 18,
     burningInDay: false,  // 永昼不燃烧（天域恒白天）
     flying: true,         // 悬浮追击（对齐目标高度）
+    xp: 5,
     model: { parts: AETHER_GUARD_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'glowstone', min: 0, max: 2, chance: 0.7 },

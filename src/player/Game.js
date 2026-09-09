@@ -51,6 +51,13 @@ import { playerColorCss } from '../net/playerColor.js';
 // 工具挖掘速度倍率（按物品 tier；金质单独 9 倍——原版金工具挖得快但等级低）
 const TOOL_TIER_SPEED = { 1: 2, 2: 4, 3: 6, 4: 8 };
 
+// 挖矿经验（原版口径：煤/红石/青金/钻/绿宝给，铁金不给；门控掉落成功才结算）
+const ORE_XP = {
+  coal_ore: 1, deepslate_coal_ore: 1,
+  redstone_ore: 2, lapis_ore: 3,
+  diamond_ore: 7, deepslate_diamond_ore: 7, emerald_ore: 7,
+};
+
 // 触发方块/物品定义注册
 import '../blocks/BlockDefs.js';
 import '../items/ItemDefs.js';
@@ -299,6 +306,7 @@ export class Game {
     };
     // 末影龙击败事件（本地死亡链 + 远端同步入口，幂等）：置击败标记 + M3 建返回门/折跃门
     this.mobManager.onDragonDefeated = (mob) => this._onDragonDefeated(mob);
+    this.mobManager.onMobXpAward = (mob, xp) => { if (this.player.survival) this.player.addXp(xp); };
     // 新建的粒子系统按视频设置套密度（其余项已在构造时套用，跨存档不变）
     applySettings(this);
     // 用图集初始化怪物材质
@@ -1192,6 +1200,9 @@ export class Game {
               this.inventory.add(dropName, 1);
               this.hotbar.update();
             }
+            // 挖矿经验（掉落被门控拒绝时不给——与原版"错误工具无掉落也无经验"一致）
+            const oreXp = ORE_XP[def.name];
+            if (oreXp) this.player.addXp(oreXp);
           }
         }
       } else if (this.player.spectator) {
@@ -1242,6 +1253,16 @@ export class Game {
           this.controls.mouseRight = false;
           return;
         }
+      }
+
+      // 经验瓶：饮用 +3~11 经验（原版区间 3-11），消耗 1 个
+      if (sel && this.player.survival && sel.name === 'experience_bottle') {
+        this.hand.swing();
+        this.inventory.removeSelected(1);
+        this.hotbar.update();
+        this.player.addXp(3 + Math.floor(Math.random() * 9));
+        this.controls.mouseRight = false;
+        return;
       }
 
       // 先检查是否右键点击了工作台
@@ -1548,9 +1569,26 @@ export class Game {
 
   // 龙败奖励：① 出生点旁激活基岩喷泉返程门（踩上回主世界）
   //           ② 主岛缘 + 外岛缘折跃门阵列（角度配对，站入同维传送）
+  //           ③ 龙蛋立于主岛中央（原版喷泉柱位；真实方块进账本可挖走）
   _activateEndRewards() {
     this._ensureEndReturnPad();
     this._ensureGateways();
+    this._placeDragonEgg();
+  }
+
+  // 龙蛋：主岛中心 (0,0) 从上往下扫首个实心格的顶面放置；幂等（已有方块跳过）
+  _placeDragonEgg() {
+    const EGG = BlockRegistry.getId('dragon_egg');
+    for (let y = 80; y > 40; y--) {
+      const id = this.world.getBlock(0, y, 0);
+      if (id !== 0) {
+        if (this.world.getBlock(0, y + 1, 0) === 0) {
+          this.world.setBlock(0, y + 1, 0, EGG);
+          if (this.chatBox) this.chatBox.add('一枚龙蛋静静出现在主岛中央……', '#c8f');
+        }
+        return;
+      }
+    }
   }
 
   // 折跃门阵列（幂等：账本已有 end_gateway 即跳过）

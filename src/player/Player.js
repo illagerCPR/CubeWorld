@@ -52,6 +52,16 @@ export class Player {
     return true;
   }
 
+  // 添加经验（击杀/挖矿/经验瓶）：跨级进位，每级需求 level*10+10（与 Hud 进度条同式）
+  addXp(n) {
+    if (!Number.isFinite(n) || n <= 0) return;
+    this.xp += n;
+    while (this.xp >= this.xpLevel * 10 + 10) {
+      this.xp -= this.xpLevel * 10 + 10;
+      this.xpLevel++;
+    }
+  }
+
   // 食用食物：增加 food / saturation，返回是否成功吃下。
   //   原版规则：food += item.food，saturation += food * 0.6（简化版无 saturation 越界控制）
   //   创造/旁观 / 饱腹 时直接拒绝，不消耗物品。
