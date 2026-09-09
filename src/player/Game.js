@@ -349,8 +349,9 @@ export class Game {
     this._portalCooldown = 0;
     this._portalArmed = true;
     
-    // 物品栏：先清空，避免上一个存档的物品残留
+    // 物品栏：先清空，避免上一个存档的物品残留（含盔甲槽）
     this.inventory.slots = new Array(this.inventory.size).fill(null);
+    this.inventory.armor = new Array(4).fill(null);
     this.inventory.hotbarSelected = 0;
     if (loadData && loadData.inventory) {
       this.inventory.deserialize(loadData.inventory);
@@ -860,6 +861,9 @@ export class Game {
       for (const rp of this.remotePlayers.values()) rp.update(dt);
     }
     
+    // 盔甲点数汇总（4 格查表，每帧重算 → player.armor；hurt 内做减伤）
+    this.player.armor = this._armorPoints();
+
     // 生存模式更新
     if (this.player.survival) {
       this.updateSurvival(dt);
@@ -1565,6 +1569,17 @@ export class Game {
     if (this.chatBox) this.chatBox.add('主岛边缘升起了数座折跃门——它们通向外岛', '#a7f');
   }
 
+  // 盔甲点数合计（armorSlot 未识别/普通物品不计）
+  _armorPoints() {
+    let pts = 0;
+    for (const s of this.inventory.armor) {
+      if (!s) continue;
+      const def = ItemRegistry.getByName(s.name);
+      if (def && def.armorPoints) pts += def.armorPoints;
+    }
+    return pts;
+  }
+
   // 手持工具物品 def（未持物/非工具/剑返回 null——剑不是挖掘工具）
   _heldToolItem() {
     const sel = this.inventory.getSelected();
@@ -1683,6 +1698,7 @@ export class Game {
           // 阶段6：死亡上报（含背包掉落列表）→ 服务器生成世界掉落物广播；随后清空背包
           this.net.sendPlayerDied();
           this.inventory.slots = new Array(this.inventory.size).fill(null);
+          this.inventory.armor = new Array(4).fill(null);
           this.inventory.hotbarSelected = 0;
           if (this.hotbar) this.hotbar.update();
         }

@@ -43,6 +43,8 @@ export class Player {
   hurt(amount, source = 'mob', showVignette = true) {
     if (this.creative || this.spectator) return false;
     if (this.invulnerable > 0) return false;
+    // 盔甲减伤：每点 4%、上限 20 点（原版公式，最高 80%）；armor 由 Game 每帧从装备槽汇总
+    if (this.armor > 0) amount *= 1 - Math.min(20, this.armor) * 0.04;
     this.health = Math.max(0, this.health - amount);
     this.invulnerable = 0.5;     // 10 tick 的受击无敌期
     if (showVignette && this.onHurt) this.onHurt(amount, source);

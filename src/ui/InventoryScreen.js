@@ -189,8 +189,19 @@ export class InventoryScreen {
       cursor: pointer; image-rendering: pixelated;
     `;
     craftArea.appendChild(out);
-    
-    this.panel.appendChild(craftArea);
+
+    // 顶部行：合成区 + 盔甲槽（2×2：头/胸/腿/靴）
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display: flex; gap: 20px; align-items: flex-start;';
+    topRow.appendChild(craftArea);
+    const armorArea = document.createElement('div');
+    const armorLabel = document.createElement('div');
+    armorLabel.textContent = '盔甲';
+    armorLabel.style.cssText = 'font-size: 12px; margin-bottom: 4px; color: #555;';
+    armorArea.appendChild(armorLabel);
+    armorArea.appendChild(this.makeGrid(2, 2, 'armor'));
+    topRow.appendChild(armorArea);
+    this.panel.appendChild(topRow);
     
     // 主背包 27 格（索引 9~35）
     const main = this.makeGrid(9, 3, 'main');
@@ -345,6 +356,39 @@ export class InventoryScreen {
       this.bindSlotEvents(el, 'inv', i);
       this._bindHover(el, this.inventory.slots[i] ? this.inventory.slots[i].name : null);
     });
+
+    // 盔甲槽 armor 0~3（头/胸/腿/靴）
+    const armorSlots = this.panel.querySelectorAll('[data-slot^="armor-"]');
+    armorSlots.forEach((el) => {
+      const idx = parseInt(el.dataset.slot.split('-')[1], 10);
+      this.renderSlotContent(el, this.inventory.armor[idx]);
+      this.bindArmorSlotEvents(el, idx);
+      this._bindHover(el, this.inventory.armor[idx] ? this.inventory.armor[idx].name : null);
+    });
+  }
+
+  // 盔甲槽：左键=光标对应部位盔甲穿上（旧甲回光标）/ 光标空时脱下；
+  // 不匹配部位或普通物品放入被拒绝（原版式）
+  bindArmorSlotEvents(el, idx) {
+    const SLOT_ORDER = ['head', 'chest', 'legs', 'feet'];
+    el.onmousedown = (e) => {
+      e.preventDefault();
+      if (e.button !== 0) return;
+      const cur = this.cursorItem;
+      const curDef = cur ? ItemRegistry.getByName(cur.name) : null;
+      const worn = this.inventory.armor[idx];
+      if (cur && curDef && curDef.armorSlot === SLOT_ORDER[idx]) {
+        this.inventory.armor[idx] = { name: cur.name, count: 1, data: cur.data || null };
+        this.cursorItem = worn || null;
+      } else if (!cur && worn) {
+        this.cursorItem = worn;
+        this.inventory.armor[idx] = null;
+      } else {
+        return; // 不匹配/光标非盔甲：静默拒绝
+      }
+      this.updateCursorEl();
+      this.bindSlots();
+    };
   }
 
   renderSlotContent(el, stack) {

@@ -176,6 +176,38 @@ function toolArt(tool, pal) {
   });
 }
 
+// 头盔（圆顶 + 护颊缝）
+function helmetArt(pal) {
+  return art(g => {
+    g.hl(4, 4, 11, pal[0]);
+    g.hl(5, 3, 12, pal[0]);
+    for (let y = 6; y <= 8; y++) g.hl(y, 3, 12, pal[1]);
+    for (let y = 9; y <= 10; y++) { g.hl(y, 3, 5, pal[1]); g.hl(y, 10, 12, pal[1]); }
+    for (let y = 11; y <= 12; y++) { g.hl(y, 3, 4, pal[2]); g.hl(y, 11, 12, pal[2]); }
+    g.vl(4, 6, 8, pal[0]);
+  });
+}
+
+// 护腿（腰带 + 双腿筒）
+function leggingsArt(pal) {
+  return art(g => {
+    g.hl(3, 3, 12, pal[0]);
+    g.hl(4, 3, 12, pal[1]);
+    for (let y = 5; y <= 12; y++) { g.hl(y, 3, 6, pal[1]); g.hl(y, 9, 12, pal[1]); }
+    for (let y = 10; y <= 12; y++) { g.hl(y, 3, 6, pal[2]); g.hl(y, 9, 12, pal[2]); }
+    g.vl(3, 5, 12, pal[0]); g.vl(9, 5, 12, pal[0]);
+  });
+}
+
+// 靴子（双靴筒 + 靴头压暗）
+function bootsArt(pal) {
+  return art(g => {
+    for (let y = 7; y <= 10; y++) { g.hl(y, 2, 6, pal[1]); g.hl(y, 9, 13, pal[1]); }
+    for (let y = 11; y <= 13; y++) { g.hl(y, 2, 6, pal[2]); g.hl(y, 9, 13, pal[2]); }
+    g.hl(7, 2, 6, pal[0]); g.hl(7, 9, 13, pal[0]);
+  });
+}
+
 // 胸甲（躯干剪影 + 领口）
 function chestplateArt(pal) {
   return art(g => {
@@ -238,7 +270,10 @@ const ItemCN = {
   diamond_pickaxe: '钻石镐', diamond_axe: '钻石斧', diamond_shovel: '钻石铲', diamond_hoe: '钻石锄', diamond_sword: '钻石剑',
   // 武器/防具
   bow: '弓', arrow: '箭', shield: '盾牌',
+  leather_helmet: '皮革头盔', iron_helmet: '铁头盔', gold_helmet: '金头盔', diamond_helmet: '钻石头盔',
   leather_chestplate: '皮革胸甲', iron_chestplate: '铁胸甲', gold_chestplate: '金胸甲', diamond_chestplate: '钻石胸甲',
+  leather_leggings: '皮革护腿', iron_leggings: '铁护腿', gold_leggings: '金护腿', diamond_leggings: '钻石护腿',
+  leather_boots: '皮革靴子', iron_boots: '铁靴子', gold_boots: '金靴子', diamond_boots: '钻石靴子',
   ender_pearl: '末影珍珠', blaze_rod: '烈焰棒', ghast_tear: '恶魂之泪',
   blaze_powder: '烈焰粉', ender_eye: '末影之眼',
   book: '书', enchanted_book: '附魔书', map: '地图', compass: '指南针', clock: '钟',
@@ -554,10 +589,24 @@ reg('shield', { stack: 1 }, art(g => {
   g.r(7, 6, 2, 2, 'rgb(216,216,216)'); // 铁质盾徽
   g.s(7, 13, 'rgb(100,66,30)'); g.s(8, 13, 'rgb(100,66,30)');
 }));
-reg('leather_chestplate', { stack: 1 }, chestplateArt(['rgb(226,152,84)', 'rgb(198,116,52)', 'rgb(150,82,32)']));
-reg('iron_chestplate', { stack: 1 }, chestplateArt(P.iron));
-reg('gold_chestplate', { stack: 1 }, chestplateArt(P.gold));
-reg('diamond_chestplate', { stack: 1 }, chestplateArt(P.diamond));
+// --- 盔甲（4 材质 × 头/胸/腿/靴；armorPoints 按原版；armorSlot 决定装备槽）---
+const armorMaterials = {
+  leather: { pal: ['rgb(226,152,84)', 'rgb(198,116,52)', 'rgb(150,82,32)'], pts: [1, 3, 2, 1] },
+  iron: { pal: P.iron, pts: [2, 6, 5, 2] },
+  gold: { pal: P.gold, pts: [2, 5, 3, 1] },
+  diamond: { pal: P.diamond, pts: [3, 8, 6, 3] },
+};
+const armorPieces = [
+  ['helmet', 'head', helmetArt],
+  ['chestplate', 'chest', chestplateArt],
+  ['leggings', 'legs', leggingsArt],
+  ['boots', 'feet', bootsArt],
+];
+for (const [matName, m] of Object.entries(armorMaterials)) {
+  armorPieces.forEach(([piece, slot, artFn], i) => {
+    reg(`${matName}_${piece}`, { stack: 1, armorSlot: slot, armorPoints: m.pts[i] }, artFn(m.pal));
+  });
+}
 
 // --- 特殊物品 ---
 reg('ender_pearl', { stack: 16 }, art(g => {

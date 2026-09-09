@@ -16,6 +16,8 @@ function register(def) {
     tier: def.tier ?? 0,
     durability: def.durability ?? 0,
     damage: def.damage ?? 0,
+    armorSlot: def.armorSlot || null,
+    armorPoints: def.armorPoints ?? 0,
     blockName: def.blockName || null
   };
   items.set(id, item);

@@ -29,10 +29,18 @@ export class Hud {
     // 氧气泡（水下显示）
     this.airBar = document.createElement('div');
     this.airBar.style.cssText = `
-      position: absolute; bottom: 104px; left: 50%; transform: translateX(-50%);
+      position: absolute; bottom: 122px; left: 50%; transform: translateX(-50%);
       display: none; gap: 1px; z-index: 10; pointer-events: none;
     `;
     document.body.appendChild(this.airBar);
+
+    // 盔甲行（有护甲时显示，血条上方；氧气再上一层）
+    this.armorRow = document.createElement('div');
+    this.armorRow.style.cssText = `
+      position: absolute; bottom: 104px; left: 50%; transform: translateX(-50%);
+      display: none; gap: 1px; z-index: 10; pointer-events: none;
+    `;
+    document.body.appendChild(this.armorRow);
     
     document.body.appendChild(this.el);
     document.body.appendChild(this.xpBar);
@@ -91,6 +99,7 @@ export class Hud {
     this.el.style.display = 'none';
     this.xpBar.style.display = 'none';
     this.crosshair.style.display = 'none';
+    this.armorRow.style.display = 'none';
   }
 
   // 水下滤镜开关（Game.update 按 inWater 每帧调用，on=false 时淡出）
@@ -105,6 +114,7 @@ export class Hud {
     this.xpBar.style.display = 'none';
     this.crosshair.style.display = 'none';
     this.airBar.style.display = 'none';
+    this.armorRow.style.display = 'none';
   }
 
   // 着火滤镜开关（同款幂等开关）
@@ -123,6 +133,14 @@ export class Hud {
     </svg>`;
   }
 
+  // 盾形盔甲图标（filled=亮盾；盔甲点数为奇时末位为暗盾）
+  armorSvg(filled) {
+    const color = filled ? '#d8d8d8' : '#4a4a4a';
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges">
+      <path d="M4 2h8v7l-4 5-4-5V2z" fill="${color}" stroke="#222" stroke-width="1"/>
+    </svg>`;
+  }
+
   foodSvg(filled, half = false) {
     const color = filled ? '#a06020' : '#2a1a0a';
     return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges">
@@ -135,6 +153,7 @@ export class Hud {
     if (player.gamemode === 'spectator' || player.gamemode === 'creative') {
       this.el.style.display = 'none';
       this.xpBar.style.display = 'none';
+      this.armorRow.style.display = 'none';
       this.crosshair.style.display = player.gamemode === 'spectator' ? 'none' : 'block';
       return;
     }
@@ -170,6 +189,22 @@ export class Hud {
     const need = player.xpLevel * 10 + 10;
     this.xpFill.style.width = `${(player.xp / need) * 100}%`;
     this.xpText.textContent = player.xpLevel;
+
+    // 盔甲（10 盾，每盾 2 点；为 0 隐藏整行）
+    if (player.armor > 0) {
+      this.armorRow.style.display = 'flex';
+      this.armorRow.innerHTML = '';
+      for (let i = 0; i < 10; i++) {
+        const v = player.armor - i * 2;
+        if (v <= 0) break;
+        const img = document.createElement('div');
+        img.innerHTML = this.armorSvg(v >= 2);
+        img.style.cssText = 'width: 16px; height: 16px;';
+        this.armorRow.appendChild(img);
+      }
+    } else {
+      this.armorRow.style.display = 'none';
+    }
     
     // 氧气（水下且未满时显示）
     if (player.inWater && player.airTicks < 300) {

@@ -1,8 +1,12 @@
 // Inventory.js -- 背包系统
+// 盔甲槽：armor[0..3] = 头/胸/腿/靴（armorSlot: head/chest/legs/feet），armorPoints 由物品 def 提供
+export const ARMOR_SLOTS = ['head', 'chest', 'legs', 'feet'];
+
 export class Inventory {
   constructor(size = 36) {
     this.size = size;
     this.slots = new Array(size).fill(null); // {name, count, data?}
+    this.armor = new Array(4).fill(null);
     this.hotbarSelected = 0;
   }
 
@@ -89,14 +93,27 @@ export class Inventory {
   }
 
   serialize() {
-    return this.slots.map(s => s ? { n: s.name, c: s.count, d: s.data } : null);
+    const enc = (s) => s ? { n: s.name, c: s.count, d: s.data } : null;
+    // V2：对象形 {slots, armor}；旧版数组形仅 slots（deserialize 双形兼容）
+    return { slots: this.slots.map(enc), armor: this.armor.map(enc) };
   }
 
   deserialize(data) {
-    if (!Array.isArray(data)) return;
-    for (let i = 0; i < this.size; i++) {
-      const s = data[i];
-      this.slots[i] = s ? { name: s.n, count: s.c, data: s.d } : null;
+    if (!data) return;
+    const legacy = Array.isArray(data);
+    const slots = legacy ? data : data.slots;
+    if (Array.isArray(slots)) {
+      for (let i = 0; i < this.size; i++) {
+        const s = slots[i];
+        this.slots[i] = s ? { name: s.n, count: s.c, data: s.d } : null;
+      }
+    }
+    const armor = legacy ? null : data.armor;
+    if (Array.isArray(armor)) {
+      for (let i = 0; i < 4; i++) {
+        const s = armor[i];
+        this.armor[i] = s ? { name: s.n, count: s.c, data: s.d } : null;
+      }
     }
   }
 }

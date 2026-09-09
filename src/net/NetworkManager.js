@@ -437,10 +437,13 @@ export class NetworkManager {
 
   sendAttackPlayer(targetId, damage) { this._send(MSG.ATTACK_PLAYER, { targetId, damage }); }
   sendPlayerDied() {
-    // 阶段6：死亡上报死亡位置 + 背包内容（服务器据此生成世界掉落物并广播）
+    // 阶段6：死亡上报死亡位置 + 背包内容（服务器据此生成世界掉落物并广播）；P1 起含盔甲
     const p = this.game.player;
     const drops = [];
     for (const s of this.game.inventory.slots) {
+      if (s) drops.push({ name: s.name, count: s.count });
+    }
+    for (const s of this.game.inventory.armor) {
       if (s) drops.push({ name: s.name, count: s.count });
     }
     this._send(MSG.PLAYER_DIED, { x: p.position.x, y: p.position.y, z: p.position.z, drops });

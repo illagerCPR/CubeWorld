@@ -326,6 +326,16 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **BlockRegistry.register 是白名单**——方块 def 新增字段必须在 register 里显式透传，否则静默丢弃（minTier 曾被吞，行为全错只有注册表探针能抓到；勿只看 BlockDefs 源码就以为生效）。
 - **生存初始包自带木镐**（快捷栏槽 0）——agent-browser 验证"徒手挖掘"必须先 `inventory.hotbarSelected = 空槽`，否则速度/掉落断言全错。
 - **本作石头掉 `stone` 不是 cobblestone**（cobblestone 是 stone 的合成/熔炼产物）——掉落断言勿写 cobblestone。
+### P1 批次备忘（防回退）—— 盔甲系统（4 部位/装备槽/减伤）
+
+- **物品面**：`{mat}_{helmet|chestplate|leggings|boots}` 16 件（leather/iron/gold/diamond），def 带 `armorSlot: head|chest|legs|feet` + `armorPoints`（原版点数：皮 1/3/2/1、铁 2/6/5/2、金 2/5/3/1、钻 3/8/6/3）。**ItemRegistry.register 同样是白名单**——armorSlot/armorPoints 曾被静默丢弃，新物品字段必须显式透传（与 BlockRegistry 同款陷阱）。
+- **数据面**：`inventory.armor[0..3]`；serialize() 已升 V2 对象形 `{slots, armor}`——deserialize 双形兼容（旧数组形=仅 slots），**勿把数组形分支删掉**（旧存档全靠它）。`inventory: game.inventory.serialize()` 的全部消费方（SaveSystem / 换维 _buildSwitchLoadData）都走本地 deserialize，服务器不感知该形状（死亡掉落是独立的 drops 列表）。
+- **减伤**：`Player.hurt` 内 `amount *= 1 - min(20, armor) * 0.04`（原版公式，最高 80%）；`player.armor` 由 `Game._armorPoints()` 每帧从装备槽汇总（4 格查表）。
+- **UI**：InventoryScreen 顶部行 = 合成区 + 盔甲 2×2（`data-slot="armor-0..3"` 顺序=头/胸/腿/靴）；左键=光标**对应部位**盔甲穿上（旧甲回光标）/光标空脱下，不匹配部位或普通物品**静默拒绝**——绑定在 `bindArmorSlotEvents`，与 bindSlots 全量刷新同生命周期。
+- **死亡掉落**：联机死亡 drops 含盔甲（NetworkManager.sendPlayerDied 追加 armor 项）+ 死亡端清空 armor；SP 死亡不掉落（与背包行为一致）。
+- **HUD**：armorRow（盾 SVG ×10，每盾 2 点，奇数点末位暗盾）在 bottom:104px，氧气 airBar 已上移 122px 防重叠；hideAll/创造/旁观分支都要隐藏 armorRow（跨存档共享实例残留陷阱）。
+- **agent-browser 断言注意**：存档 JSON 的槽位字段是 `n/c/d`（不是 name/count）——eval 断言读 `.n`；槽位点击可用 `el.dispatchEvent(new MouseEvent('mousedown', {button:0}))` 直击 InventoryScreen 的 onmousedown 处理器（a11y 树对纯 div 槽位不可见，@eN 引用拿不到）。
+
 - **headless 挖掘时长验证必须手动驱动**：RAF 在软渲染下变速（~2.3× 慢），墙钟采样不可信——`g.running=false` 停循环 + 循环 `g.update(1/60)` 步进数帧（mouseLeft 直接置位），断言 `brokenAt` 帧数/背包增量；复用会话前记得 `running=true; requestAnimationFrame(g.loop)` 恢复。
 
 

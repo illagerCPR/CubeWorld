@@ -91,10 +91,14 @@ addShaped('diamond_pickaxe', 1, ['diamond','diamond','diamond', null,'stick', nu
 addShaped('diamond_sword', 1, [null,'diamond', null, null,'diamond', null, null,'stick', null]);
 
 // 防具
-addShaped('leather_chestplate', 1, ['leather', null, 'leather','leather','leather','leather','leather','leather','leather']);
-addShaped('iron_chestplate', 1, ['iron_ingot', null, 'iron_ingot','iron_ingot','iron_ingot','iron_ingot','iron_ingot','iron_ingot','iron_ingot']);
-addShaped('diamond_chestplate', 1, ['diamond', null, 'diamond','diamond','diamond','diamond','diamond','diamond','diamond']);
-addShaped('gold_chestplate', 1, ['gold_ingot', null, 'gold_ingot','gold_ingot','gold_ingot','gold_ingot','gold_ingot','gold_ingot','gold_ingot']);
+// 盔甲（原版式图形：头 XXX/X_X、胸 X_X/XXX/XXX、腿 XXX/X_X/X_X、靴 X_X/X_X）
+const armorRecipeMats = { leather: 'leather', iron: 'iron_ingot', gold: 'gold_ingot', diamond: 'diamond' };
+for (const [m, ing] of Object.entries(armorRecipeMats)) {
+  addShaped(`${m}_helmet`, 1, [ing, ing, ing, ing, null, ing]);
+  addShaped(`${m}_chestplate`, 1, [ing, null, ing, ing, ing, ing, ing, ing, ing]);
+  addShaped(`${m}_leggings`, 1, [ing, ing, ing, ing, null, ing, ing, null, ing]);
+  addShaped(`${m}_boots`, 1, [ing, null, ing, ing, null, ing]);
+}
 
 // 武器
 addShaped('bow', 1, ['stick', null,'stick','stick','string','stick', null,'string', null]);
