@@ -35,6 +35,7 @@ import {
   buildGatewayPad, gatewayTarget,
 } from '../core/Portals.js';
 import { gatewayPlacements } from '../world/dimensions/end.js';
+import { ringPoints } from '../world/structures/stronghold.js';
 import { matchRecipe } from '../core/Crafting.js';
 import { SMELT_TIME, getSmeltingResult, getFuelTime } from '../core/Smelting.js';
 import { MobManager } from '../entity/MobManager.js';
@@ -361,6 +362,14 @@ export class Game {
     this.inventory.slots = new Array(this.inventory.size).fill(null);
     this.inventory.armor = new Array(4).fill(null);
     this.inventory.hotbarSelected = 0;
+    // 床重生点：旧档读取 / 新档清空；末影之眼飞行残留清理
+    this.bedSpawn = (loadData && loadData.bedSpawn) || null;
+    if (this.eyeFlight) {
+      this.renderer.scene.remove(this.eyeFlight.mesh);
+      this.eyeFlight.mesh.geometry.dispose();
+      this.eyeFlight.mesh.material.dispose();
+      this.eyeFlight = null;
+    }
     if (loadData && loadData.inventory) {
       this.inventory.deserialize(loadData.inventory);
     } else if (mode === 'creative') {
@@ -879,6 +888,9 @@ export class Game {
 
     // 传送门穿越检测（所有模式；观战/死亡在函数内早退）
     this.updatePortals(dt);
+
+    // 末影之眼飞行（寻要塞指引）
+    if (this.eyeFlight) this._updateEyeFlight(dt);
     this.updatePortalParticles(dt);
 
     // 自动保存（联机模式不自动保存，避免覆盖本地槽位）
@@ -1265,6 +1277,19 @@ export class Game {
         return;
       }
 
+      // 床：记录重生点；夜间入睡跳到天亮（联机时间权威在服务器，仅单机跳时间）
+      if (furnaceDef && furnaceDef.name === 'white_bed' && !this.player.spectator) {
+        this.bedSpawn = { x: furnaceHit.block.x, y: furnaceHit.block.y, z: furnaceHit.block.z, dimension: this.world.dimension };
+        if (!this.networkMode && this.sky.isNight()) {
+          this.sky.time = 0.25; // 日出
+          if (this.chatBox) this.chatBox.add('你睡了一觉，重生点已设置', '#cfc');
+        } else if (this.chatBox) {
+          this.chatBox.add(this.networkMode ? '重生点已设置（联机时间由服务器管理）' : '重生点已设置（夜晚右键床可直接入睡）', '#cfc');
+        }
+        this.controls.mouseRight = false;
+        return;
+      }
+
       // 先检查是否右键点击了工作台
       if (hit) {
         const targetDef = BlockRegistry.getById(hit.id);
@@ -1303,11 +1328,11 @@ export class Game {
         }
       }
       
-      if (sel) {
+      if (sel && hit) {
         const placeX = hit.block.x + hit.normal.x;
         const placeY = hit.block.y + hit.normal.y;
         const placeZ = hit.block.z + hit.normal.z;
-        
+
         // 检查是否会与玩家重叠
         const px = this.player.position.x, py = this.player.position.y, pz = this.player.position.z;
         if (placeX >= Math.floor(px - 0.3) && placeX <= Math.floor(px + 0.3) &&
@@ -1315,7 +1340,7 @@ export class Game {
             placeZ >= Math.floor(pz - 0.3) && placeZ <= Math.floor(pz + 0.3)) {
           return;
         }
-        
+
         const blockDef = BlockRegistry.getByName(sel.name);
         if (blockDef) {
           this.hand.swing(); // 阶段10：放置方块挥动
@@ -1327,7 +1352,57 @@ export class Game {
           }
         }
       }
+      // 掷末影之眼：不依赖命中（对空掷出——原版手势）；嵌入框架分支已在上方 return
+      if (sel && sel.name === 'ender_eye' && this.world.dimension === 'overworld') {
+        this._throwEnderEye();
+        return;
+      }
       this.controls.mouseRight = false;
+    }
+  }
+
+  // 掷末影之眼：消耗 1 颗，发光小球朝最近环带锚点飞 2.5s 后落回（20% 碎裂，原版）
+  _throwEnderEye() {
+    if (this.eyeFlight) return; // 飞行中不叠加
+    this.inventory.removeSelected(1);
+    this.hotbar.update();
+    const p = this.player.position;
+    let best = null, bestD = Infinity;
+    for (const pt of ringPoints(this.world.seed)) {
+      const d = (pt.x - p.x) ** 2 + (pt.z - p.z) ** 2;
+      if (d < bestD) { bestD = d; best = pt; }
+    }
+    if (best) {
+      const dx = best.x - p.x, dz = best.z - p.z;
+      // 八方位提示（北 = -Z，顺时针）
+      const dirs = ['北', '东北', '东', '东南', '南', '西南', '西', '西北'];
+      const ang = Math.atan2(dx, -dz);
+      const dirName = dirs[((Math.round(ang / (Math.PI / 4)) % 8) + 8) % 8];
+      if (this.chatBox) this.chatBox.add(`末影之眼飞向${dirName}方（约 ${Math.round(Math.sqrt(bestD))} 格）`, '#c8f');
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.12, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x66ffcc })
+      );
+      mesh.position.set(p.x, p.y + 1.62, p.z);
+      this.renderer.scene.add(mesh);
+      this.eyeFlight = { mesh, dir: new THREE.Vector3(dx, 6, dz).normalize(), t: 0, total: 2.5 };
+    }
+  }
+
+  // 末影之眼飞行步进：到时落地——80% 落回背包，20% 碎裂（原版概率）
+  _updateEyeFlight(dt) {
+    const e = this.eyeFlight;
+    e.t += dt;
+    e.mesh.position.addScaledVector(e.dir, dt * 6);
+    if (e.t >= e.total) {
+      this.renderer.scene.remove(e.mesh);
+      e.mesh.geometry.dispose();
+      e.mesh.material.dispose();
+      this.eyeFlight = null;
+      if (Math.random() < 0.8) {
+        this.inventory.add('ender_eye', 1);
+        this.hotbar.update();
+      }
     }
   }
 
@@ -1764,8 +1839,13 @@ export class Game {
       }
       return;
     }
-    // 重生到当前维度出生点（跨维度回主世界重生需重建世界，此处不切换维度）
-    const sp = this.world.getSpawnPoint();
+    // 重生到床重生点（仅单机；同维度才生效），否则当前维度出生点
+    let sp;
+    if (!this.networkMode && this.bedSpawn && this.bedSpawn.dimension === this.world.dimension) {
+      sp = { x: this.bedSpawn.x + 0.5, y: this.bedSpawn.y + 1, z: this.bedSpawn.z + 0.5 };
+    } else {
+      sp = this.world.getSpawnPoint();
+    }
     this.player.position.set(sp.x, sp.y, sp.z);
     this.player.velocity.set(0, 0, 0);
     // 观战结束：重置观战状态并恢复正常模式

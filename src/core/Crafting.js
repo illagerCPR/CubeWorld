@@ -124,6 +124,8 @@ addShapeless('flint_and_steel', 1, ['iron_ingot', 'flint']);
 addShaped('blaze_powder', 2, [['blaze_rod']]);
 addShaped('ender_eye', 1, [['blaze_powder'],['ender_pearl']]);
 addShaped('furnace', 1, ['cobblestone','cobblestone','cobblestone','cobblestone', null,'cobblestone','cobblestone','cobblestone','cobblestone']);
+// 床（原版式）：3 羊毛 x 3 木板（2x3 图形）
+addShaped('white_bed', 1, ['white_wool','white_wool','white_wool','oak_planks','oak_planks','oak_planks']);
 addShaped('chest', 1, ['oak_planks','oak_planks','oak_planks','oak_planks', null,'oak_planks','oak_planks','oak_planks','oak_planks']);
 addShaped('tnt', 1, ['gunpowder','gunpowder','gunpowder','sand','sand','sand','sand','sand','sand']);
 

@@ -339,6 +339,14 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **经验来源与口径**：击杀（MobTypes 新增 `xp` 字段：普通怪 5 / 烈焰人 10 / 龙 500；村民无）+ 挖矿（`ORE_XP` 表：煤1/红石2/青金3/钻7/绿宝7，铁金不给——原版口径）+ 经验瓶右键饮用 +3~11。**击杀经验 = 掉落同口径**：只奖励击杀端（`!mob.remoteDeath`）且 `mob.playerHitAt`（attackMob 内打点）5 秒内——仇恨杀村民等不给；创造模式不加（`onMobXpAward` 回调里 survival 门控）。掉落被 minTier 门控拒绝时挖矿经验也不给（与原版一致）。
 - **进位公式**：`Player.addXp` 每级需 `level*10+10`（与 Hud 进度条 `need` 同式，改一处必改两处）。
 - **龙蛋**：`_placeDragonEgg` 挂 `_activateEndRewards`（与返程门/折跃门同链）——主岛中心 (0,0) 从 y=80 下扫首个实心格顶面放置，幂等；真实方块进账本可挖走。dragonDefeated 标记保证单次。
+### P2 批次备忘（防回退）—— 床（睡眠/重生点）/ 掷眼寻要塞
+
+- **床**：方块 `white_bed` 早已注册（无物品注册，hotbar 直接挂方块名即可放置）；配方 3 羊毛×3 木板（`white_bed`，2x3）。右键床 = 记录 `game.bedSpawn {x,y,z,dimension}` + 夜间（`sky.isNight()`）`sky.time = 0.25` 跳日出。**交互分支挂在 furnaceDef 同名选择器链上**（selectedBlock 的 def 检查 `name === 'white_bed'`），位于熔炉分支之后。
+- **床重生**：仅**单机**生效（联机重生位置由服务器协调，勿放开）且 `bedSpawn.dimension === world.dimension` 才用；respawn() 里替换 `world.getSpawnPoint()` 分支，站位 = 床位 +0.5/+1/+0.5（与"建门层高=立地面"同语义）。
+- **掷眼**：`_throwEnderEye`（环带 3 锚点取最近 + 八方位提示）→ `eyeFlight {mesh,dir,t,total:2.5}` 在 Game.update 步进，落地 80% 落回/20% 碎裂（Math.random，原版概率）。**方向数组必须从'北'起顺时针**（`atan2(dx, -dz)`，北=-Z）——曾从'东'起全错位。**扔出分支必须在 hit 守卫之外**（对空掷出是原版手势）——顺带修复了 `if (sel)` 块无 hit 守卫、对空右键必崩的存量隐患（`if (sel && hit)` 勿回退）。
+- **start() 重置**：`bedSpawn = loadData.bedSpawn || null`（新档 null）+ eyeFlight mesh 残留清理（scene remove + geometry/material dispose）——都是共享 Game 实例字段，换维重建/重开必须清。
+- **agent-browser 验证手法**：右键交互用 `controls.mouseRight = true + update(1/60) 步进`（真实处理器路径）；掷眼碎裂桩用 `random => 0.9`（**≥0.8 才碎**，0.1 是落回分支——桩方向勿写反）；床重生断言 respawn() 直调 + 位置比对床顶。
+
 - **agent-browser 验证经验链**：夜晚奖励经验走真实路径（`sky.time=0` + RAF 实跑数秒等 MobManager 夜间生成 → attackMob 击杀）比 eval 造实体可靠（Mob 类未挂 window）；**跨级时"xp+level*100"复合度量会被升级权重污染**——断言分项读 `player.xp` 与 `xpLevel`；经验瓶消耗断言读数量（2→1）而非槽位消失。
 
 - **agent-browser 断言注意**：存档 JSON 的槽位字段是 `n/c/d`（不是 name/count）——eval 断言读 `.n`；槽位点击可用 `el.dispatchEvent(new MouseEvent('mousedown', {button:0}))` 直击 InventoryScreen 的 onmousedown 处理器（a11y 树对纯 div 槽位不可见，@eN 引用拿不到）。
