@@ -48,6 +48,9 @@ import { ParticleSystem } from '../render/ParticleSystem.js';
 import { loadSettings, applySettings, applyFogRange } from '../core/Settings.js';
 import { playerColorCss } from '../net/playerColor.js';
 
+// 工具挖掘速度倍率（按物品 tier；金质单独 9 倍——原版金工具挖得快但等级低）
+const TOOL_TIER_SPEED = { 1: 2, 2: 4, 3: 6, 4: 8 };
+
 // 触发方块/物品定义注册
 import '../blocks/BlockDefs.js';
 import '../items/ItemDefs.js';
@@ -1148,10 +1151,13 @@ export class Game {
         if (this.redstone) this.redstone.onBlockChange(hit.block.x, hit.block.y, hit.block.z);
         this.controls.mouseLeft = false;
       } else if (this.player.survival) {
-        // 挖掘进度
+        // 挖掘进度（工具类型匹配加速：tier 速度表；无工具/类型不符 1 倍）
         const hardness = def.hardness;
         if (hardness < 0) { this.controls.mouseLeft = false; return; }
-        this.breakingProgress += dt / hardness;
+        const held = this._heldToolItem();
+        const speedMul = held && held.tool === def.tool
+          ? (held.name.startsWith('gold_') ? 9 : (TOOL_TIER_SPEED[held.tier] || 1)) : 1;
+        this.breakingProgress += dt * speedMul / hardness;
         this.breakMesh.visible = true;
         this.breakMesh.position.set(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5);
         this.breakMesh.material.opacity = Math.min(0.5, this.breakingProgress * 0.5);
@@ -1173,13 +1179,15 @@ export class Game {
           this.breakMesh.visible = false;
           this.controls.mouseLeft = false;
           const dropName = this._blockDropName(def);
-          if (this.networkMode && this.net) {
-            // 联机：生成物理掉落物（服务器广播 drop_spawn，各端看到同一个），谁都能拾取
-            this.net.sendDropSpawn(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5, dropName, 1);
-          } else {
-            // 单机：简化直接进入背包
-            this.inventory.add(dropName, 1);
-            this.hotbar.update();
+          if (dropName) {
+            if (this.networkMode && this.net) {
+              // 联机：生成物理掉落物（服务器广播 drop_spawn，各端看到同一个），谁都能拾取
+              this.net.sendDropSpawn(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5, dropName, 1);
+            } else {
+              // 单机：简化直接进入背包
+              this.inventory.add(dropName, 1);
+              this.hotbar.update();
+            }
           }
         }
       } else if (this.player.spectator) {
@@ -1557,10 +1565,24 @@ export class Game {
     if (this.chatBox) this.chatBox.add('主岛边缘升起了数座折跃门——它们通向外岛', '#a7f');
   }
 
+  // 手持工具物品 def（未持物/非工具/剑返回 null——剑不是挖掘工具）
+  _heldToolItem() {
+    const sel = this.inventory.getSelected();
+    if (!sel) return null;
+    const item = ItemRegistry.getByName(sel.name);
+    return item && item.tool && item.tool !== 'sword' ? item : null;
+  }
+
   // 方块破坏掉落映射（默认掉自身；特殊掉落统一加分支，勿在调用点散写——
   // 联机 drop_spawn 的 name 由破坏端决定上报，无确定性约束，但两端须同版本）
+  // minTier > 0 的方块需工具类型匹配且 tier 达标才掉落（原版式采收门控；
+  // 速度不受门控影响——空手/低级工具能挖碎但不掉落）
   _blockDropName(def) {
-    if (def.name === 'gravel') return Math.random() < 0.1 ? 'flint' : 'gravel'; // 原版式 10% 燧石
+    if (def.minTier > 0) {
+      const held = this._heldToolItem();
+      if (!held || held.tool !== def.tool || (held.tier || 0) < def.minTier) return null;
+    }
+    if (def.name === 'gravel') return Math.random() < 0.1 ? 'flint' : 'gravel';
     return def.name;
   }
 

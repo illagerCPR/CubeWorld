@@ -318,6 +318,16 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **flint 曾是"幽灵物品"**：fortress 战利品表一直引用 flint 但从未注册（箱子渲染空图标本 bug）——现已在 ItemDefs 注册（stack 64/燧石），表条目自动生效。
 - **验证锚点**：seed42 6×6 区块 obs≈160/badAdj=0（seed7 obs≈200）；cave-determinism 11MB 字节一致、structure 71MB 正逆序一致、dimension 4 维×2 seeds 全绿；单区块生成 5.7-6.8ms（锚点内）。
 
+### P1 批次备忘（防回退）—— 挖掘工具系统（速度/等级门控）
+
+- **挖掘速度**：`breakingProgress += dt * speedMul / hardness`；speedMul **只看类型匹配**（`held.tool === def.tool`），tier 速度表 `TOOL_TIER_SPEED`={1:2,2:4,3:6,4:8}，**金质单独 9×**（原版金工具快但等级低）。剑不算挖掘工具（`_heldToolItem` 排除）。
+- **掉落门控**：`def.minTier > 0` 时须工具类型匹配且 `held.tier ≥ minTier` 才掉落——**徒手/低级工具仍能挖碎，只是不掉**（原版式）。判定收口在 `Game._blockDropName`（返回 null=无掉落：单机不进背包、联机不发 drop_spawn）；特殊掉落（gravel→10% flint）也在此分支。
+- **minTier 布局**：stone/深板岩/煤/石砖系/砂石系/熔炉=1；铁/铜/青金石矿=2；金/红石/钻石/绿宝石矿=3；黑曜石=4（仅钻石镐）。矿物块：铁块 2/金块·钻块 3。**金工具 tier=1**（ItemDefs toolMaterials，与 wood 同级）。
+- **BlockRegistry.register 是白名单**——方块 def 新增字段必须在 register 里显式透传，否则静默丢弃（minTier 曾被吞，行为全错只有注册表探针能抓到；勿只看 BlockDefs 源码就以为生效）。
+- **生存初始包自带木镐**（快捷栏槽 0）——agent-browser 验证"徒手挖掘"必须先 `inventory.hotbarSelected = 空槽`，否则速度/掉落断言全错。
+- **本作石头掉 `stone` 不是 cobblestone**（cobblestone 是 stone 的合成/熔炼产物）——掉落断言勿写 cobblestone。
+- **headless 挖掘时长验证必须手动驱动**：RAF 在软渲染下变速（~2.3× 慢），墙钟采样不可信——`g.running=false` 停循环 + 循环 `g.update(1/60)` 步进数帧（mouseLeft 直接置位），断言 `brokenAt` 帧数/背包增量；复用会话前记得 `running=true; requestAnimationFrame(g.loop)` 恢复。
+
 
 ### 下界优化批次备忘（防回退）—— 灵魂沙峡谷 / 下界要塞 / 下界怪物 / 面板布局
 

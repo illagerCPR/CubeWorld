@@ -757,8 +757,8 @@ function reg(name, def, svgs) {
 
 // --- 自然方块 ---
 reg('air', { id: 0, displayName: '空气', solid: false, transparent: true, hardness: 0 });
-reg('stone', { hardness: 1.5, tool: 'pickaxe' }, { stone: stoneTex(1) });
-reg('grass_block', { textures: { top: 'grass_top', side: 'grass_side', bottom: 'dirt' }, hardness: 0.6 },
+reg('stone', { hardness: 1.5, tool: 'pickaxe', minTier: 1 }, { stone: stoneTex(1) });
+reg('grass_block', { tool: 'shovel', textures: { top: 'grass_top', side: 'grass_side', bottom: 'dirt' }, hardness: 0.6 },
   { grass_top: grassTopTex(7), grass_side: grassSideTex(8), dirt: noiseTex([134, 96, 67], 9) });
 // 菌丝体：紫灰顶 + 带紫缘的土侧 + dirt 底（蘑菇岛地表）
 function myceliumSideTex(seed) {
@@ -779,12 +779,12 @@ reg('mycelium', { displayName: '菌丝体', textures: { top: 'mycelium_top', sid
     mycelium_top: noiseTex([125, 100, 130], 116, { dark: 0.84, light: 1.16, dProb: 0.26, lProb: 0.14 }),
     mycelium_side: myceliumSideTex(117)
   });
-reg('dirt', { hardness: 0.5 }, { dirt: noiseTex([134, 96, 67], 9) });
-reg('coarse_dirt', { hardness: 0.5 }, { coarse_dirt: noiseTex([122, 90, 60], 10, { dProb: 0.24 }) });
-reg('sand', { hardness: 0.5 }, { sand: noiseTex([219, 207, 163], 11, { dark: 0.93, light: 1.06 }) });
-reg('red_sand', { hardness: 0.5 }, { red_sand: noiseTex([190, 105, 60], 12, { dark: 0.93, light: 1.06 }) });
-reg('gravel', { hardness: 0.6 }, { gravel: blotchTex([130, 124, 120], 13, { dark: 0.72, light: 1.2 }) });
-reg('clay', { hardness: 0.6 }, { clay: noiseTex([163, 166, 179], 14, { dark: 0.94, light: 1.06 }) });
+reg('dirt', { tool: 'shovel', hardness: 0.5 }, { dirt: noiseTex([134, 96, 67], 9) });
+reg('coarse_dirt', { tool: 'shovel', hardness: 0.5 }, { coarse_dirt: noiseTex([122, 90, 60], 10, { dProb: 0.24 }) });
+reg('sand', { tool: 'shovel', hardness: 0.5 }, { sand: noiseTex([219, 207, 163], 11, { dark: 0.93, light: 1.06 }) });
+reg('red_sand', { tool: 'shovel', hardness: 0.5 }, { red_sand: noiseTex([190, 105, 60], 12, { dark: 0.93, light: 1.06 }) });
+reg('gravel', { tool: 'shovel', hardness: 0.6 }, { gravel: blotchTex([130, 124, 120], 13, { dark: 0.72, light: 1.2 }) });
+reg('clay', { tool: 'shovel', hardness: 0.6 }, { clay: noiseTex([163, 166, 179], 14, { dark: 0.94, light: 1.06 }) });
 reg('bedrock', { hardness: -1 }, { bedrock: blotchTex([100, 100, 100], 15, { dark: 0.45, light: 1.35, dProb: 0.3, lProb: 0.25 }) });
 reg('water', { solid: false, transparent: true, fluid: true, hardness: 100 }, { water: waterTex() });
 reg('lava', { displayName: '岩浆', solid: false, transparent: true, fluid: true, light: 15, hardness: 100 }, { lava: lavaTex(17) });
@@ -793,43 +793,43 @@ reg('packed_ice', { hardness: 0.5 }, { packed_ice: iceTex(19, [138, 172, 222]) }
 reg('blue_ice', { hardness: 0.5 }, { blue_ice: iceTex(20, [110, 150, 222]) });
 reg('snow_block', { hardness: 0.2 }, { snow_block: noiseTex([246, 250, 252], 21, { dark: 0.97, light: 1.03, dProb: 0.1, lProb: 0.1 }) });
 reg('snow_layer', { transparent: true, hardness: 0.1 }, { snow_layer: noiseTex([246, 250, 252], 22, { dark: 0.97, light: 1.03, dProb: 0.1, lProb: 0.1 }) });
-reg('obsidian', { hardness: 12, tool: 'pickaxe' }, { obsidian: obsidianTex(23) });
+reg('obsidian', { hardness: 12, tool: 'pickaxe', minTier: 4 }, { obsidian: obsidianTex(23) });
 
 // --- 矿石 ---
-reg('coal_ore', { hardness: 3, tool: 'pickaxe' }, { coal_ore: oreTex([125, 125, 125], [42, 42, 42], 31) });
-reg('iron_ore', { hardness: 3, tool: 'pickaxe' }, { iron_ore: oreTex([125, 125, 125], [216, 175, 147], 32) });
-reg('gold_ore', { hardness: 3, tool: 'pickaxe' }, { gold_ore: oreTex([125, 125, 125], [250, 224, 92], 33) });
-reg('diamond_ore', { hardness: 3, tool: 'pickaxe' }, { diamond_ore: oreTex([125, 125, 125], [104, 232, 222], 34) });
-reg('emerald_ore', { hardness: 3, tool: 'pickaxe' }, { emerald_ore: oreTex([125, 125, 125], [62, 216, 92], 35) });
-reg('redstone_ore', { hardness: 3, tool: 'pickaxe', light: 9 }, { redstone_ore: oreTex([125, 125, 125], [226, 48, 42], 36) });
-reg('lapis_ore', { hardness: 3, tool: 'pickaxe' }, { lapis_ore: oreTex([125, 125, 125], [38, 70, 200], 37) });
-reg('copper_ore', { hardness: 3, tool: 'pickaxe' }, { copper_ore: oreTex([125, 125, 125], [200, 124, 84], 38) });
+reg('coal_ore', { hardness: 3, tool: 'pickaxe', minTier: 1 }, { coal_ore: oreTex([125, 125, 125], [42, 42, 42], 31) });
+reg('iron_ore', { hardness: 3, tool: 'pickaxe', minTier: 2 }, { iron_ore: oreTex([125, 125, 125], [216, 175, 147], 32) });
+reg('gold_ore', { hardness: 3, tool: 'pickaxe', minTier: 3 }, { gold_ore: oreTex([125, 125, 125], [250, 224, 92], 33) });
+reg('diamond_ore', { hardness: 3, tool: 'pickaxe', minTier: 3 }, { diamond_ore: oreTex([125, 125, 125], [104, 232, 222], 34) });
+reg('emerald_ore', { hardness: 3, tool: 'pickaxe', minTier: 3 }, { emerald_ore: oreTex([125, 125, 125], [62, 216, 92], 35) });
+reg('redstone_ore', { hardness: 3, tool: 'pickaxe', minTier: 3, light: 9 }, { redstone_ore: oreTex([125, 125, 125], [226, 48, 42], 36) });
+reg('lapis_ore', { hardness: 3, tool: 'pickaxe', minTier: 2 }, { lapis_ore: oreTex([125, 125, 125], [38, 70, 200], 37) });
+reg('copper_ore', { hardness: 3, tool: 'pickaxe', minTier: 2 }, { copper_ore: oreTex([125, 125, 125], [200, 124, 84], 38) });
 
 // 深板岩变种
-reg('deepslate', { hardness: 3, tool: 'pickaxe' }, { deepslate: deepslateTex(41) });
-reg('deepslate_coal_ore', { hardness: 4.5, tool: 'pickaxe' }, { deepslate_coal_ore: oreTex([74, 74, 82], [42, 42, 42], 42) });
-reg('deepslate_iron_ore', { hardness: 4.5, tool: 'pickaxe' }, { deepslate_iron_ore: oreTex([74, 74, 82], [216, 175, 147], 43) });
-reg('deepslate_gold_ore', { hardness: 4.5, tool: 'pickaxe' }, { deepslate_gold_ore: oreTex([74, 74, 82], [250, 224, 92], 44) });
-reg('deepslate_diamond_ore', { hardness: 4.5, tool: 'pickaxe' }, { deepslate_diamond_ore: oreTex([74, 74, 82], [104, 232, 222], 45) });
+reg('deepslate', { hardness: 3, tool: 'pickaxe', minTier: 1 }, { deepslate: deepslateTex(41) });
+reg('deepslate_coal_ore', { hardness: 4.5, tool: 'pickaxe', minTier: 1 }, { deepslate_coal_ore: oreTex([74, 74, 82], [42, 42, 42], 42) });
+reg('deepslate_iron_ore', { hardness: 4.5, tool: 'pickaxe', minTier: 2 }, { deepslate_iron_ore: oreTex([74, 74, 82], [216, 175, 147], 43) });
+reg('deepslate_gold_ore', { hardness: 4.5, tool: 'pickaxe', minTier: 3 }, { deepslate_gold_ore: oreTex([74, 74, 82], [250, 224, 92], 44) });
+reg('deepslate_diamond_ore', { hardness: 4.5, tool: 'pickaxe', minTier: 3 }, { deepslate_diamond_ore: oreTex([74, 74, 82], [104, 232, 222], 45) });
 
 // --- 原木 ---
-reg('oak_log', { textures: { top: 'oak_log_top', side: 'oak_log_side', bottom: 'oak_log_top' }, hardness: 2 },
+reg('oak_log', { tool: 'axe', textures: { top: 'oak_log_top', side: 'oak_log_side', bottom: 'oak_log_top' }, hardness: 2 },
   { oak_log_top: logTopTex([109, 84, 50], [172, 138, 90], 46), oak_log_side: logSideTex([109, 84, 50], 47) });
-reg('spruce_log', { textures: { top: 'spruce_log_top', side: 'spruce_log_side', bottom: 'spruce_log_top' }, hardness: 2 },
+reg('spruce_log', { tool: 'axe', textures: { top: 'spruce_log_top', side: 'spruce_log_side', bottom: 'spruce_log_top' }, hardness: 2 },
   { spruce_log_top: logTopTex([70, 45, 20], [120, 80, 40], 48), spruce_log_side: logSideTex([70, 45, 20], 49) });
-reg('birch_log', { textures: { top: 'birch_log_top', side: 'birch_log_side', bottom: 'birch_log_top' }, hardness: 2 },
+reg('birch_log', { tool: 'axe', textures: { top: 'birch_log_top', side: 'birch_log_side', bottom: 'birch_log_top' }, hardness: 2 },
   { birch_log_top: logTopTex([206, 199, 182], [226, 220, 206], 50), birch_log_side: logSideTex([214, 208, 194], 51) });
-reg('dark_oak_log', { textures: { top: 'dark_oak_log_top', side: 'dark_oak_log_side', bottom: 'dark_oak_log_top' }, hardness: 2 },
+reg('dark_oak_log', { tool: 'axe', textures: { top: 'dark_oak_log_top', side: 'dark_oak_log_side', bottom: 'dark_oak_log_top' }, hardness: 2 },
   { dark_oak_log_top: logTopTex([46, 32, 18], [76, 52, 28], 52), dark_oak_log_side: logSideTex([56, 40, 22], 53) });
-reg('acacia_log', { textures: { top: 'acacia_log_top', side: 'acacia_log_side', bottom: 'acacia_log_top' }, hardness: 2 },
+reg('acacia_log', { tool: 'axe', textures: { top: 'acacia_log_top', side: 'acacia_log_side', bottom: 'acacia_log_top' }, hardness: 2 },
   { acacia_log_top: logTopTex([110, 62, 24], [172, 100, 44], 54), acacia_log_side: logSideTex([128, 74, 30], 55) });
 
 // --- 木板 ---
-reg('oak_planks', { hardness: 2 }, { oak_planks: planksTex([162, 130, 78], 61) });
-reg('spruce_planks', { hardness: 2 }, { spruce_planks: planksTex([114, 84, 50], 62) });
-reg('birch_planks', { hardness: 2 }, { birch_planks: planksTex([212, 200, 176], 63) });
-reg('dark_oak_planks', { hardness: 2 }, { dark_oak_planks: planksTex([68, 50, 30], 64) });
-reg('acacia_planks', { hardness: 2 }, { acacia_planks: planksTex([168, 88, 44], 65) });
+reg('oak_planks', { tool: 'axe', hardness: 2 }, { oak_planks: planksTex([162, 130, 78], 61) });
+reg('spruce_planks', { tool: 'axe', hardness: 2 }, { spruce_planks: planksTex([114, 84, 50], 62) });
+reg('birch_planks', { tool: 'axe', hardness: 2 }, { birch_planks: planksTex([212, 200, 176], 63) });
+reg('dark_oak_planks', { tool: 'axe', hardness: 2 }, { dark_oak_planks: planksTex([68, 50, 30], 64) });
+reg('acacia_planks', { tool: 'axe', hardness: 2 }, { acacia_planks: planksTex([168, 88, 44], 65) });
 
 // --- 树叶 ---
 reg('oak_leaves', { transparent: true, solid: true, hardness: 0.2 }, { oak_leaves: leavesTex(71, [64, 118, 38]) });
@@ -838,13 +838,13 @@ reg('birch_leaves', { transparent: true, solid: true, hardness: 0.2 }, { birch_l
 reg('acacia_leaves', { transparent: true, solid: true, hardness: 0.2 }, { acacia_leaves: leavesTex(74, [202, 118, 26]) });
 
 // --- 砖/石砖 ---
-reg('cobblestone', { hardness: 2, tool: 'pickaxe' }, { cobblestone: cobbleTex(81) });
-reg('stone_bricks', { hardness: 1.5, tool: 'pickaxe' }, { stone_bricks: stoneBricksTex(82) });
-reg('mossy_stone_bricks', { hardness: 1.5, tool: 'pickaxe' }, { mossy_stone_bricks: stoneBricksMossyTex(89) });
-reg('cracked_stone_bricks', { hardness: 1.5, tool: 'pickaxe' }, { cracked_stone_bricks: stoneBricksCrackedTex(90) });
-reg('mossy_cobblestone', { hardness: 2, tool: 'pickaxe' }, { mossy_cobblestone: blotchTex([100, 118, 82], 83, { dark: 0.7, light: 1.2 }) });
-reg('brick_block', { hardness: 2, tool: 'pickaxe' }, { brick_block: brickTex(84) });
-reg('nether_bricks', { hardness: 2, tool: 'pickaxe' }, { nether_bricks: brickTexMagenta(85) });
+reg('cobblestone', { hardness: 2, tool: 'pickaxe', minTier: 1 }, { cobblestone: cobbleTex(81) });
+reg('stone_bricks', { hardness: 1.5, tool: 'pickaxe', minTier: 1 }, { stone_bricks: stoneBricksTex(82) });
+reg('mossy_stone_bricks', { hardness: 1.5, tool: 'pickaxe', minTier: 1 }, { mossy_stone_bricks: stoneBricksMossyTex(89) });
+reg('cracked_stone_bricks', { hardness: 1.5, tool: 'pickaxe', minTier: 1 }, { cracked_stone_bricks: stoneBricksCrackedTex(90) });
+reg('mossy_cobblestone', { hardness: 2, tool: 'pickaxe', minTier: 1 }, { mossy_cobblestone: blotchTex([100, 118, 82], 83, { dark: 0.7, light: 1.2 }) });
+reg('brick_block', { hardness: 2, tool: 'pickaxe', minTier: 1 }, { brick_block: brickTex(84) });
+reg('nether_bricks', { hardness: 2, tool: 'pickaxe', minTier: 1 }, { nether_bricks: brickTexMagenta(85) });
 reg('bookshelf', { hardness: 1.5, tool: 'axe', textures: { top: 'oak_planks', side: 'bookshelf_side', bottom: 'oak_planks' } }, { bookshelf_side: bookshelfSideTex(91) });
 reg('end_portal_frame', { hardness: -1, textures: { top: 'end_portal_frame_top', side: 'end_portal_frame_side', bottom: 'stone_bricks' } }, { end_portal_frame_top: endPortalFrameTopTex(92), end_portal_frame_side: endPortalFrameSideTex(93) });
 
@@ -970,9 +970,9 @@ function endPortalFrameSideTex(seed) {
   return pixelSvg(px);
 }
 
-reg('sandstone', { hardness: 0.8, tool: 'pickaxe' }, { sandstone: sandstoneTex(86) });
-reg('red_sandstone', { hardness: 0.8, tool: 'pickaxe' }, { red_sandstone: sandstoneTexR(87) });
-reg('quartz_block', { hardness: 0.8, tool: 'pickaxe' }, { quartz_block: noiseTex([236, 233, 226], 88, { dark: 0.97, light: 1.03, dProb: 0.12, lProb: 0.1 }) });
+reg('sandstone', { hardness: 0.8, tool: 'pickaxe', minTier: 1 }, { sandstone: sandstoneTex(86) });
+reg('red_sandstone', { hardness: 0.8, tool: 'pickaxe', minTier: 1 }, { red_sandstone: sandstoneTexR(87) });
+reg('quartz_block', { hardness: 0.8, tool: 'pickaxe', minTier: 1 }, { quartz_block: noiseTex([236, 233, 226], 88, { dark: 0.97, light: 1.03, dProb: 0.12, lProb: 0.1 }) });
 
 // 下界砖：深紫红砖 + 深缝（brickTex 的调色变体）
 function brickTexMagenta(seed) {
@@ -1005,12 +1005,12 @@ function sandstoneTexR(seed) {
 }
 
 // --- 功能方块 ---
-reg('crafting_table', { textures: { top: 'crafting_table_top', side: 'crafting_table_side', bottom: 'oak_planks' }, hardness: 2.5 },
+reg('crafting_table', { tool: 'axe', textures: { top: 'crafting_table_top', side: 'crafting_table_side', bottom: 'oak_planks' }, hardness: 2.5 },
   {
     crafting_table_top: craftingTopTex(91),
     crafting_table_side: craftingSideTex(92)
   });
-reg('furnace', { textures: { top: 'stone', side: 'furnace_side', bottom: 'stone' }, hardness: 3.5, tool: 'pickaxe' },
+reg('furnace', { textures: { top: 'stone', side: 'furnace_side', bottom: 'stone' }, hardness: 3.5, tool: 'pickaxe', minTier: 1 },
   { furnace_side: furnaceTex(93) });
 reg('glass', { transparent: true, hardness: 0.3 }, { glass: glassTex() });
 reg('glowstone', { displayName: '荧石', light: 15, hardness: 0.3 }, { glowstone: glowstoneTex(95) });
@@ -1065,9 +1065,9 @@ reg('torch', { displayName: '火把', transparent: true, light: 14, hardness: 0,
   });
 
 // --- 金面方块 ---
-reg('iron_block', { hardness: 5, tool: 'pickaxe' }, { iron_block: mineralBlockTex([219, 219, 219], 101) });
-reg('gold_block', { hardness: 5, tool: 'pickaxe' }, { gold_block: mineralBlockTex([250, 222, 90], 102) });
-reg('diamond_block', { hardness: 5, tool: 'pickaxe' }, { diamond_block: mineralBlockTex([98, 229, 226], 103) });
+reg('iron_block', { hardness: 5, tool: 'pickaxe', minTier: 2 }, { iron_block: mineralBlockTex([219, 219, 219], 101) });
+reg('gold_block', { hardness: 5, tool: 'pickaxe', minTier: 3 }, { gold_block: mineralBlockTex([250, 222, 90], 102) });
+reg('diamond_block', { hardness: 5, tool: 'pickaxe', minTier: 3 }, { diamond_block: mineralBlockTex([98, 229, 226], 103) });
 reg('emerald_block', { hardness: 5, tool: 'pickaxe' }, { emerald_block: mineralBlockTex([62, 216, 92], 104) });
 reg('lapis_block', { hardness: 3, tool: 'pickaxe' }, { lapis_block: mineralBlockTex([40, 72, 204], 105) });
 reg('coal_block', { hardness: 5, tool: 'pickaxe' }, { coal_block: noiseTex([28, 28, 28], 107, { dark: 0.8, light: 1.35, dProb: 0.3, lProb: 0.12 }) });

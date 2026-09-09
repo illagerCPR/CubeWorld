@@ -28,6 +28,7 @@ function register(def) {
     solid: def.solid ?? true,
     hardness: def.hardness ?? 1,
     tool: def.tool || null,
+    minTier: def.minTier ?? 0,
     light: def.light ?? 0,
     fluid: def.fluid ?? false,
     renderType: def.renderType || 'cube',
