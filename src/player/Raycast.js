@@ -7,8 +7,9 @@ export class Raycast {
   }
 
   // 从 origin 沿 direction 射出，最大距离 maxDist
+  // includeFluid: 命中流体（空桶舀水/岩浆用）——默认跳过（准星穿透水）
   // 返回 { block: {x,y,z}, normal: {x,y,z} } 或 null
-  cast(origin, direction, maxDist = 5) {
+  cast(origin, direction, maxDist = 5, includeFluid = false) {
     let x = Math.floor(origin.x);
     let y = Math.floor(origin.y);
     let z = Math.floor(origin.z);
@@ -32,7 +33,7 @@ export class Raycast {
       const id = this.world.getBlock(x, y, z);
       if (id !== 0) {
         const def = BlockRegistry.getById(id);
-        if (def && def.solid && !def.fluid) {
+        if (def && ((def.solid && !def.fluid) || (includeFluid && def.fluid))) {
           return {
             block: { x, y, z },
             normal: lastFace,

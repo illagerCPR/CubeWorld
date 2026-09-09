@@ -362,7 +362,7 @@ export class Game {
     this.inventory.slots = new Array(this.inventory.size).fill(null);
     this.inventory.armor = new Array(4).fill(null);
     this.inventory.hotbarSelected = 0;
-    // 床重生点：旧档读取 / 新档清空；末影之眼飞行残留清理
+    // 床重生点：旧档读取 / 新档清空；末影之眼飞行与弓箭投射物残留清理
     this.bedSpawn = (loadData && loadData.bedSpawn) || null;
     if (this.eyeFlight) {
       this.renderer.scene.remove(this.eyeFlight.mesh);
@@ -370,6 +370,10 @@ export class Game {
       this.eyeFlight.mesh.material.dispose();
       this.eyeFlight = null;
     }
+    if (this.arrows) {
+      for (const a of this.arrows) this.renderer.scene.remove(a.mesh);
+    }
+    this.arrows = [];
     if (loadData && loadData.inventory) {
       this.inventory.deserialize(loadData.inventory);
     } else if (mode === 'creative') {
@@ -891,6 +895,9 @@ export class Game {
 
     // 末影之眼飞行（寻要塞指引）
     if (this.eyeFlight) this._updateEyeFlight(dt);
+
+    // 弓箭投射物
+    if (this.arrows.length) this._updateArrows(dt);
     this.updatePortalParticles(dt);
 
     // 自动保存（联机模式不自动保存，避免覆盖本地槽位）
@@ -1089,7 +1096,9 @@ export class Game {
     this.renderer.camera.getWorldDirection(dir);
 
     const maxDist = this.player.creative ? 5 : 4.5;
-    const hit = this.raycast.cast(origin, dir, maxDist);
+    // 空桶对准流体：射线需命中水/岩浆（否则准星穿透无法舀取）
+    const held = this.inventory.getSelected();
+    const hit = this.raycast.cast(origin, dir, maxDist, !!held && held.name === 'bucket');
     this.selectedBlock = hit;
 
     if (hit) {
@@ -1177,7 +1186,7 @@ export class Game {
       } else if (this.player.survival) {
         // 挖掘进度（工具类型匹配加速：tier 速度表；无工具/类型不符 1 倍）
         const hardness = def.hardness;
-        if (hardness < 0) { this.controls.mouseLeft = false; return; }
+        if (hardness < 0 || def.fluid) { this.controls.mouseLeft = false; return; }
         const held = this._heldToolItem();
         const speedMul = held && held.tool === def.tool
           ? (held.name.startsWith('gold_') ? 9 : (TOOL_TIER_SPEED[held.tier] || 1)) : 1;
@@ -1312,6 +1321,30 @@ export class Game {
             return;
           }
         }
+        // 桶：空桶对准流体舀取 / 满桶对任意面倒出（本作水体静态，无流动模拟）
+        if (sel && sel.name === 'bucket' && targetDef && targetDef.fluid) {
+          const filled = targetDef.name === 'water' ? 'water_bucket' : 'lava_bucket';
+          this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
+          if (this.player.survival) {
+            this.inventory.slots[this.inventory.hotbarSelected] = { name: filled, count: 1, data: null };
+            this.hotbar.update();
+          }
+          this.controls.mouseRight = false;
+          return;
+        }
+        if (sel && (sel.name === 'water_bucket' || sel.name === 'lava_bucket') && hit) {
+          const fluid = sel.name === 'water_bucket' ? 'water' : 'lava';
+          const fx = hit.block.x + hit.normal.x, fy = hit.block.y + hit.normal.y, fz = hit.block.z + hit.normal.z;
+          if (this.world.getBlock(fx, fy, fz) === 0) {
+            this.world.setBlock(fx, fy, fz, BlockRegistry.getId(fluid));
+            if (this.player.survival) {
+              this.inventory.slots[this.inventory.hotbarSelected] = { name: 'bucket', count: 1, data: null };
+              this.hotbar.update();
+            }
+            this.controls.mouseRight = false;
+            return;
+          }
+        }
         // 传送门点火：打火石右键黑曜石框→下界门 / 萤石框→天域门（迭代 M2）
         if (sel && sel.name === 'flint_and_steel' && targetDef) {
           if (this._tryLightPortal(hit, targetDef)) {
@@ -1351,6 +1384,17 @@ export class Game {
             this.hotbar.update();
           }
         }
+      }
+      // 弓：右键射箭（消耗 1 支箭；命中怪复用 attackMob 链→击退/掉落/经验全通）
+      if (sel && sel.name === 'bow') {
+        const hasArrow = this.player.creative || this.inventory.slots.some(s => s && s.name === 'arrow');
+        if (hasArrow) {
+          if (!this.player.creative) this.inventory.removeItems('arrow', 1);
+          this._shootArrow();
+          this.hand.swing();
+        }
+        this.controls.mouseRight = false;
+        return;
       }
       // 掷末影之眼：不依赖命中（对空掷出——原版手势）；嵌入框架分支已在上方 return
       if (sel && sel.name === 'ender_eye' && this.world.dimension === 'overworld') {
@@ -1404,6 +1448,60 @@ export class Game {
         this.hotbar.update();
       }
     }
+  }
+
+  // 射箭：箭矢为本地投射物（几何/材质模块级共享），重力下坠、命中怪复用 attackMob 链
+  _shootArrow() {
+    const dir = new THREE.Vector3();
+    this.renderer.camera.getWorldDirection(dir);
+    const start = this.player.position.clone();
+    start.y += 1.62;
+    start.addScaledVector(dir, 0.6);
+    if (!Game._arrowGeo) Game._arrowGeo = new THREE.BoxGeometry(0.06, 0.06, 0.5);
+    if (!Game._arrowMat) Game._arrowMat = new THREE.MeshBasicMaterial({ color: 0x9a7442 });
+    const mesh = new THREE.Mesh(Game._arrowGeo, Game._arrowMat);
+    mesh.position.copy(start);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+    this.renderer.scene.add(mesh);
+    this.arrows.push({ mesh, pos: start, vel: dir.multiplyScalar(28), life: 8, stuck: false });
+  }
+
+  _updateArrows(dt) {
+    for (let i = this.arrows.length - 1; i >= 0; i--) {
+      const a = this.arrows[i];
+      a.life -= dt;
+      if (a.life <= 0) { this._despawnArrow(i); continue; }
+      if (a.stuck) continue; // 钉在方块上直到寿命尽
+      a.vel.y -= 12 * dt;
+      const old = a.pos.clone();
+      a.pos.addScaledVector(a.vel, dt);
+      // 命中怪：整段位移作射线（球体口径同近战）
+      const seg = new THREE.Vector3().subVectors(a.pos, old);
+      const segLen = seg.length();
+      if (segLen > 0 && this.mobManager) {
+        const dirN = seg.clone().normalize();
+        const mh = this.mobManager.findMobByRay(old, dirN, segLen + 0.2);
+        if (mh && !mh.mob.dead) {
+          this.mobManager.attackMob(old, dirN, segLen + 0.2, 6);
+          this._despawnArrow(i);
+          continue;
+        }
+      }
+      // 命中方块：钉住
+      const bdef = BlockRegistry.getById(this.world.getBlock(Math.floor(a.pos.x), Math.floor(a.pos.y), Math.floor(a.pos.z)));
+      if (bdef && bdef.solid && !bdef.fluid) {
+        a.pos.copy(old);
+        a.vel.set(0, 0, 0);
+        a.stuck = true;
+      }
+      a.mesh.position.copy(a.pos);
+    }
+  }
+
+  _despawnArrow(i) {
+    const a = this.arrows[i];
+    this.renderer.scene.remove(a.mesh); // 几何/材质为模块级共享，不 dispose
+    this.arrows.splice(i, 1);
   }
 
   // 打火石点火传送门：点击框体 → 内部候选格 = 点击面外邻格 → 框校验 → 填充门方块。

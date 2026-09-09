@@ -345,6 +345,13 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **床重生**：仅**单机**生效（联机重生位置由服务器协调，勿放开）且 `bedSpawn.dimension === world.dimension` 才用；respawn() 里替换 `world.getSpawnPoint()` 分支，站位 = 床位 +0.5/+1/+0.5（与"建门层高=立地面"同语义）。
 - **掷眼**：`_throwEnderEye`（环带 3 锚点取最近 + 八方位提示）→ `eyeFlight {mesh,dir,t,total:2.5}` 在 Game.update 步进，落地 80% 落回/20% 碎裂（Math.random，原版概率）。**方向数组必须从'北'起顺时针**（`atan2(dx, -dz)`，北=-Z）——曾从'东'起全错位。**扔出分支必须在 hit 守卫之外**（对空掷出是原版手势）——顺带修复了 `if (sel)` 块无 hit 守卫、对空右键必崩的存量隐患（`if (sel && hit)` 勿回退）。
 - **start() 重置**：`bedSpawn = loadData.bedSpawn || null`（新档 null）+ eyeFlight mesh 残留清理（scene remove + geometry/material dispose）——都是共享 Game 实例字段，换维重建/重开必须清。
+### P3 批次备忘（防回退）—— 桶（舀/倒） / 弓射击
+
+- **桶**：Raycast.cast 加第 4 参 `includeFluid`（空桶手持时 updateRaycast 传入 → 准星可命中水/岩浆；其他物品准星仍穿透流体——勿全局开）。空桶对流体=舀取（setBlock 0 + 槽换满桶）；满桶对面=倒出邻格（必须空气，非空气静默拒）+ 槽换空桶。**槽位替换直接写 `inventory.slots[hotbarSelected]`**（不是 remove+add，防落到别的槽）。本作水体静态无流动模拟——舀水留洞/倒水不成流属设计边界。岩浆倒出经 LightEngine 自动给光 15。创造模式：世界可编辑但槽位不变。
+- **弓**：右键射箭（消耗 arrow×1，`removeItems`；创造不耗）；箭 = 本地投射物 `{mesh,pos,vel(28m/s),life:8,stuck}`，重力 -12；命中怪=整段位移作射线走 `findMobByRay`→`attackMob(…,6)`（击退/掉落/XP 全链复用）；命中实体块=钉住至寿命尽。几何/材质**模块级共享不 dispose**（`Game._arrowGeo/_arrowMat` 惰性单例），despawn 只 scene.remove。`arrows` 数组在 start() **无条件初始化**（曾漏——首启 undefined 在 update 里 `this.arrows.length` 直接炸循环）。
+- **右键分支顺序**：villager→furnace→床→crafting→红石→frame→(hit 内)桶/打火石/末影眼框→放置 `if (sel && hit)`→(hit 外)弓→掷眼。弓/掷眼分支不依赖命中（对空可用）。
+- **agent-browser 打怪验证**：怪会走位导致脱靶——`m0.speed = 0` 冻结 AI 再射；箭矢伤害断言读 `hpBefore-hpAfter`（=6），勿断言必杀（20 血怪一箭不死是正确行为）。
+
 - **agent-browser 验证手法**：右键交互用 `controls.mouseRight = true + update(1/60) 步进`（真实处理器路径）；掷眼碎裂桩用 `random => 0.9`（**≥0.8 才碎**，0.1 是落回分支——桩方向勿写反）；床重生断言 respawn() 直调 + 位置比对床顶。
 
 - **agent-browser 验证经验链**：夜晚奖励经验走真实路径（`sky.time=0` + RAF 实跑数秒等 MobManager 夜间生成 → attackMob 击杀）比 eval 造实体可靠（Mob 类未挂 window）；**跨级时"xp+level*100"复合度量会被升级权重污染**——断言分项读 `player.xp` 与 `xpLevel`；经验瓶消耗断言读数量（2→1）而非槽位消失。
