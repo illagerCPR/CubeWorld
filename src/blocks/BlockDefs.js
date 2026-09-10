@@ -1375,6 +1375,68 @@ reg('chest', { textures: { top: 'chest_top', side: 'chest_side', bottom: 'chest_
     chest_bottom: chestTex(963, false),
   });
 
+// --- 耕种（P3-4）：耕地 / 小麦作物 8 阶段 / 草丛（种子来源） ---
+// 湿土：比 dirt 深 + 水渍暗斑 + 两条犁沟
+function farmlandTex(seed) {
+  const px = makeTex();
+  const soil = [96, 66, 44];
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const t = hash2(x, y, seed);
+    let f = 1 + (hash2(x, y, seed + 1) - 0.5) * 0.08;
+    if (t < 0.14) f *= 0.72;
+    px[y * 16 + x] = rgb(soil, f);
+  }
+  fillRect(px, 0, 5, 15, 5, rgb(soil, 0.8));
+  fillRect(px, 0, 11, 15, 11, rgb(soil, 0.8));
+  return pixelSvg(px);
+}
+
+// 小麦 8 阶段：绿矮苗 → 高绿秆 → 金黄穗（5 株/格，高度与颜色随阶段插值）
+function wheatTex(stage) {
+  const px = makeTex();
+  const h = 3 + Math.round((stage / 7) * 11);
+  const t = stage / 7;
+  const stalk = t < 0.7 ? [92, 150, 60] : [176, 158, 64];
+  const head = [222, 190, 84];
+  for (let i = 0; i < 5; i++) {
+    const x = 2 + i * 3 + (hash2(i, stage, 41) > 0.5 ? 1 : 0);
+    const sh = Math.max(2, h - Math.floor(hash2(i, 1, 42) * 3));
+    for (let y = 15; y > 15 - sh; y--) {
+      const f = 0.9 + hash2(x, y, 43) * 0.2;
+      setPx(px, x, y, rgb(y < 15 - sh + 3 && t > 0.6 ? head : stalk, f));
+    }
+    if (t > 0.6) {
+      setPx(px, x, 16 - sh - 1, rgb(head, 1.05));
+      setPx(px, x - 1, 16 - sh, rgb(head, 0.95));
+      setPx(px, x + 1, 16 - sh, rgb(head, 0.95));
+    }
+  }
+  return pixelSvg(px);
+}
+
+// 草丛：7 株弯叶剪影
+function tallGrassTex(seed) {
+  const px = makeTex();
+  const grass = [96, 152, 64];
+  for (let i = 0; i < 7; i++) {
+    const x = 1 + i * 2 + Math.floor(hash2(i, 0, seed) * 2);
+    const h = 5 + Math.floor(hash2(i, 1, seed) * 7);
+    for (let y = 15; y > 15 - h; y--) {
+      const bend = (15 - y) > h * 0.6 ? (hash2(i, 2, seed) > 0.5 ? 1 : -1) : 0;
+      setPx(px, x + bend, y, rgb(grass, 0.85 + hash2(x, y, seed + 3) * 0.3));
+    }
+  }
+  return pixelSvg(px);
+}
+
+reg('farmland', { displayName: '耕地', tool: 'shovel', hardness: 0.6 }, { farmland: farmlandTex(61) });
+for (let s = 0; s <= 7; s++) {
+  reg(`wheat_crop_${s}`, { displayName: '小麦', transparent: true, solid: false, hardness: 0, renderType: 'cross' },
+    { [`wheat_crop_${s}`]: wheatTex(s) });
+}
+reg('tall_grass', { displayName: '草丛', transparent: true, solid: false, hardness: 0, renderType: 'cross' },
+  { tall_grass: tallGrassTex(62) });
+
 export const BlockSVGDefinitions = svgMap;
 
 export function getBlockCount() {

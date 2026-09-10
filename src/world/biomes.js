@@ -141,7 +141,8 @@ export const BiomeConfig = {
     treeType: 'oak',
     heightScale: 1.0,
     heightOffset: 0,
-    sunflowerChance: 0.04 // 向日葵密植（群系辨识核心）
+    sunflowerChance: 0.04, // 向日葵密植（群系辨识核心）
+    grassChance: 0.1       // 草丛（小麦种子来源之一）
   },
   [Biomes.MUSHROOM_FIELDS]: {
     name: '蘑菇岛',

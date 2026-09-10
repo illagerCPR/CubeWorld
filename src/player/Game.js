@@ -9,6 +9,7 @@ import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
 import { Player } from './Player.js';
 import { Physics, GLIDE_GRAVITY } from './Physics.js';
+import { CROP_MAX_STAGE, isCropId, cropStageOf, cropIdAtStage, isHydrated } from '../core/crops.js';
 import { Controls } from './Controls.js';
 import { Inventory } from './Inventory.js';
 import { Raycast } from './Raycast.js';
@@ -254,6 +255,9 @@ export class Game {
     // 换维等待）内 world 已可用，此时本地放置方块也要上报服务器（曾因绑定过晚
     // 丢失换维后立即放置的方块，联机账本不收敛）
     if (this.networkMode && this.net) this.net.bindWorld(this.world);
+    // 耕种：作物登记表钩子（setBlock 全路径收口：种/长/收/破坏/远端同步）+ 生长计时复位
+    this.world.onCropBlockChange = (x, y, z, oldId, newId) => this._trackCrop(x, y, z, oldId, newId);
+    this._cropTimer = 0;
     // 重置跨存档共享的玩家运行时状态（避免上一存档的 invulnerable 残留）
     this.player.invulnerable = 0;
     // 受击红屏：所有调用 player.hurt(amount, ..., true) 的源都触发
@@ -905,6 +909,13 @@ export class Game {
       this.updateSurvival(dt);
     }
 
+    // 耕种：作物生长节拍（host/单机权威；客户端看 host 的 block_set 广播收敛）
+    this._cropTimer += dt;
+    if (this._cropTimer >= 8) {
+      this._cropTimer = 0;
+      this._growCrops();
+    }
+
     // 传送门穿越检测（所有模式；观战/死亡在函数内早退）
     this.updatePortals(dt);
 
@@ -1226,16 +1237,18 @@ export class Game {
           this.breakingProgress = 0;
           this.breakMesh.visible = false;
           this.controls.mouseLeft = false;
-          const dropName = this._blockDropName(def);
-          if (dropName) {
-            if (this.networkMode && this.net) {
-              // 联机：生成物理掉落物（服务器广播 drop_spawn，各端看到同一个），谁都能拾取
-              this.net.sendDropSpawn(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5, dropName, 1);
-            } else {
-              // 单机：简化直接进入背包
-              this.inventory.add(dropName, 1);
-              this.hotbar.update();
+          const drops = this._blockDrops(def);
+          if (drops.length > 0) {
+            for (const d of drops) {
+              if (this.networkMode && this.net) {
+                // 联机：生成物理掉落物（服务器广播 drop_spawn，各端看到同一个），谁都能拾取
+                this.net.sendDropSpawn(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5, d.name, d.count);
+              } else {
+                // 单机：简化直接进入背包
+                this.inventory.add(d.name, d.count);
+              }
             }
+            this.hotbar.update();
             // 挖矿经验（掉落被门控拒绝时不给——与原版"错误工具无掉落也无经验"一致）
             const oreXp = ORE_XP[def.name];
             if (oreXp) this.player.addXp(oreXp);
@@ -1373,6 +1386,11 @@ export class Game {
             this.controls.mouseRight = false;
             return;
           }
+        }
+        // 耕种：骨粉催熟/右键收获/播种/锄地（作物与耕地专属，不与放置路径冲突）
+        if (this._tryFarmInteract(hit, targetDef, sel)) {
+          this.controls.mouseRight = false;
+          return;
         }
       }
       
@@ -1825,6 +1843,116 @@ export class Game {
     }
     if (def.name === 'gravel') return Math.random() < 0.1 ? 'flint' : 'gravel';
     return def.name;
+  }
+
+  // 掉落列表化（耕种 P3-4）：作物/草丛多样掉落；其余复用 _blockDropName 单项掉落
+  _blockDrops(def) {
+    // 小麦成熟：小麦×1 + 种子 1-3（原版式）；未熟：仅种子×1
+    if (def.name === `wheat_crop_${CROP_MAX_STAGE}`) {
+      return [
+        { name: 'wheat', count: 1 },
+        { name: 'wheat_seeds', count: 1 + Math.floor(Math.random() * 3) },
+      ];
+    }
+    if (isCropId(BlockRegistry.getId(def.name))) {
+      return [{ name: 'wheat_seeds', count: 1 }];
+    }
+    // 草丛：40% 掉种子（种子获取主来源），否则无掉落
+    if (def.name === 'tall_grass') {
+      return Math.random() < 0.4 ? [{ name: 'wheat_seeds', count: 1 }] : [];
+    }
+    const name = this._blockDropName(def);
+    return name ? [{ name, count: 1 }] : [];
+  }
+
+  // 作物登记表维护（World.setBlock 钩子）：作物入表、非作物出表（懒清理兜底在 _growCrops）
+  _trackCrop(x, y, z, oldId, newId) {
+    const key = `${x},${y},${z}`;
+    if (isCropId(newId)) {
+      this.world.cropMap.set(key, { x, y, z });
+    } else if (isCropId(oldId)) {
+      this.world.cropMap.delete(key);
+    }
+  }
+
+  // 作物生长节拍（每 8s 一拍）：随机推进 + 水分加成；host/单机权威（客户端
+  // 不跑生长，看 host 的 block_set 广播收敛——与怪物生成同款门控策略）。
+  // 登记表懒清理：指向格已不是作物（收获/破坏/远端改动）则移出。
+  _growCrops() {
+    if (!this.world || !this.world.cropMap) return;
+    if (this.networkMode && this.net && !this.net.isHost) return;
+    for (const [key, c] of this.world.cropMap) {
+      const id = this.world.getBlock(c.x, c.y, c.z);
+      if (!isCropId(id)) { this.world.cropMap.delete(key); continue; }
+      const stage = cropStageOf(id);
+      if (stage < 0 || stage >= CROP_MAX_STAGE) continue;
+      // 水分：耕地所在层 9×9 有水 → 概率翻倍（0.3 → 0.6）
+      const chance = isHydrated(this.world, c.x, c.y - 1, c.z) ? 0.6 : 0.3;
+      if (Math.random() < chance) {
+        this.world.setBlock(c.x, c.y, c.z, cropIdAtStage(stage + 1));
+      }
+    }
+  }
+
+  // 右键耕作交互（右键链内、放置分支前）：骨粉催熟 / 成熟收获 / 播种 / 锄地。
+  // 返回 true 表示本次点击已被消费（调用方置 mouseRight=false 并 return）。
+  _tryFarmInteract(hit, groundDef, sel) {
+    const { x, y, z } = hit.block;
+
+    // 骨粉催熟：对作物推进 1-3 段（clamp 到成熟）
+    if (sel && (sel.name === 'bone_meal' || sel.name === 'bone_meal_item') && groundDef && isCropId(groundDef.id)) {
+      const stage = cropStageOf(groundDef.id);
+      if (stage >= 0 && stage < CROP_MAX_STAGE) {
+        const next = Math.min(CROP_MAX_STAGE, stage + 1 + Math.floor(Math.random() * 3));
+        this.world.setBlock(x, y, z, cropIdAtStage(next));
+        if (this.player.survival) {
+          this.inventory.removeSelected(1);
+          this.hotbar.update();
+        }
+        this.hand.swing();
+        return true;
+      }
+      return false; // 已成熟：不消耗不拦截（落回通用分支）
+    }
+
+    // 右键收获：成熟作物直接破坏+掉落（空手/任意物品均可；骨粉已在上面优先）
+    if (groundDef && groundDef.id === cropIdAtStage(CROP_MAX_STAGE)) {
+      const drops = this._blockDrops(groundDef);
+      this.world.setBlock(x, y, z, 0);
+      for (const d of drops) {
+        if (this.networkMode && this.net) {
+          this.net.sendDropSpawn(x + 0.5, y + 0.5, z + 0.5, d.name, d.count);
+        } else {
+          this.inventory.add(d.name, d.count);
+        }
+      }
+      this.hotbar.update();
+      this.hand.swing();
+      return true;
+    }
+
+    // 播种：手持小麦种子对耕地（上方空气），种下 0 阶段作物
+    if (sel && sel.name === 'wheat_seeds' && groundDef && groundDef.name === 'farmland' &&
+        this.world.getBlock(x, y + 1, z) === 0) {
+      this.world.setBlock(x, y + 1, z, cropIdAtStage(0));
+      if (this.player.survival) {
+        this.inventory.removeSelected(1);
+        this.hotbar.update();
+      }
+      this.hand.swing();
+      return true;
+    }
+
+    // 锄地：锄头类物品对草/土 → 耕地（上方须空气；对已耕地/砂石等无效）
+    if (sel && groundDef && (groundDef.name === 'grass_block' || groundDef.name === 'dirt')) {
+      const item = ItemRegistry.getByName(sel.name);
+      if (item && item.tool === 'hoe' && this.world.getBlock(x, y + 1, z) === 0) {
+        this.world.setBlock(x, y, z, BlockRegistry.getId('farmland'));
+        this.hand.swing();
+        return true;
+      }
+    }
+    return false;
   }
 
   // 末影水晶被击碎：范围爆炸（复用怪物爆炸破坏路径）+ 按距离衰减伤害

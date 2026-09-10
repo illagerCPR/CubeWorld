@@ -116,6 +116,9 @@ addShaped('diamond_block', 1, ['diamond','diamond','diamond','diamond','diamond'
 addShapeless('bread', 1, ['wheat','wheat','wheat']);
 addShaped('cookie', 8, ['wheat','wheat','wheat', null, null, null, null, null, null]);
 
+// 耕种
+addShapeless('bone_meal', 3, ['bone']);
+
 // 功能
 addShaped('torch', 4, [['coal'],['stick']]);
 // 打火石（原版式）：铁锭 + 燧石（燧石来源=砾石 10% 掉落 / 下界要塞箱）

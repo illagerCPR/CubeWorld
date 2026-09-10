@@ -5,6 +5,7 @@ import { TerrainGenerator } from '../world/terrain.js';
 import { BlockRegistry } from './BlockRegistry.js';
 import { LightEngine } from './LightEngine.js';
 import { chestLoot } from '../world/loot.js';
+import { isCropId } from './crops.js';
 import { getDimension, DEFAULT_DIMENSION } from './dimensions.js';
 
 export class World {
@@ -25,6 +26,8 @@ export class World {
     // T5 容器：打开时惰性生成（结构箱子按 (seed,表名,坐标) 确定性 loot），
     // 玩家改动即落 Map（存档持久化；联机经 container_set 广播收敛）
     this.onLocalBlockChange = null;  // 本地发起方块修改回调 (x,y,z,id)，由 NetworkManager 注册（联机上报）
+    this.onCropBlockChange = null;   // 作物方块增删回调 (x,y,z,oldId,newId)，由 Game 注册（生长登记表维护）
+    this.cropMap = new Map();        // 作物生长登记表 key "x,y,z" -> {x,y,z}（setBlock 钩子 + 区块重载扫描维护）
     this.lightEngine = new LightEngine(this); // 体素光照（纯客户端视觉，不进存档/协议）
   }
 
@@ -80,6 +83,21 @@ export class World {
       this.chunks.set(k, c);
       // 光照初始化（含从已加载邻居导入边界光，改动的邻居会被标 dirty）
       this.lightEngine.initChunkLight(c);
+      // 作物重载扫描：存档载入/区块重载后，把田里现存作物登记回生长表
+      //（作物阶段本身是方块 id 随存档持久化，登记表是易失的运行期加速结构）
+      if (this.onCropBlockChange) {
+        const baseX = cx * CHUNK_SIZE, baseZ = cz * CHUNK_SIZE;
+        for (let y = 0; y < CHUNK_HEIGHT; y++) {
+          for (let z = 0; z < CHUNK_SIZE; z++) {
+            for (let x = 0; x < CHUNK_SIZE; x++) {
+              const id = c.blocks[Chunk.index(x, y, z)];
+              if (id !== 0 && isCropId(id)) {
+                this.onCropBlockChange(baseX + x, y, baseZ + z, 0, id);
+              }
+            }
+          }
+        }
+      }
     }
     return c;
   }
@@ -127,6 +145,8 @@ export class World {
     c.dirty = true;
     if (recordMod) this.modifiedBlocks.set(`${gx},${gy},${gz}`, id);
     if (this.onLocalBlockChange) this.onLocalBlockChange(gx, gy, gz, id);
+    // 作物登记表维护（种/长/收/破坏/远端同步全路径收口于此）
+    if (this.onCropBlockChange) this.onCropBlockChange(gx, gy, gz, oldId, id);
     // 标记邻居区块 dirty（边界方块）
     if (lx === 0) { const n = this.getChunk(cx - 1, cz); if (n) n.dirty = true; }
     if (lx === CHUNK_SIZE - 1) { const n = this.getChunk(cx + 1, cz); if (n) n.dirty = true; }

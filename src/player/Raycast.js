@@ -33,7 +33,9 @@ export class Raycast {
       const id = this.world.getBlock(x, y, z);
       if (id !== 0) {
         const def = BlockRegistry.getById(id);
-        if (def && ((def.solid && !def.fluid) || (includeFluid && def.fluid))) {
+        // 可选中：实心非流体 / cross 装饰（作物/草丛/火把/按钮/花——原版语义，
+        // 否则火把拆不掉、按钮点不着、作物无法右键）；流体仅 includeFluid（空桶）
+        if (def && !def.fluid && (def.solid || def.renderType === 'cross')) {
           return {
             block: { x, y, z },
             normal: lastFace,

@@ -350,7 +350,17 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **桶**：Raycast.cast 加第 4 参 `includeFluid`（空桶手持时 updateRaycast 传入 → 准星可命中水/岩浆；其他物品准星仍穿透流体——勿全局开）。空桶对流体=舀取（setBlock 0 + 槽换满桶）；满桶对面=倒出邻格（必须空气，非空气静默拒）+ 槽换空桶。**槽位替换直接写 `inventory.slots[hotbarSelected]`**（不是 remove+add，防落到别的槽）。本作水体静态无流动模拟——舀水留洞/倒水不成流属设计边界。岩浆倒出经 LightEngine 自动给光 15。创造模式：世界可编辑但槽位不变。
 - **弓**：右键射箭（消耗 arrow×1，`removeItems`；创造不耗）；箭 = 本地投射物 `{mesh,pos,vel(28m/s),life:8,stuck}`，重力 -12；命中怪=整段位移作射线走 `findMobByRay`→`attackMob(…,6)`（击退/掉落/XP 全链复用）；命中实体块=钉住至寿命尽。几何/材质**模块级共享不 dispose**（`Game._arrowGeo/_arrowMat` 惰性单例），despawn 只 scene.remove。`arrows` 数组在 start() **无条件初始化**（曾漏——首启 undefined 在 update 里 `this.arrows.length` 直接炸循环）。
 - **右键分支顺序**：villager→furnace→床→crafting→红石→frame→(hit 内)桶/打火石/末影眼框→放置 `if (sel && hit)`→(hit 外)弓→掷眼。弓/掷眼分支不依赖命中（对空可用）。
-### P3 批次备忘（防回退）—— 鞘翅滑翔（装备/落体展开/俯冲翱翔） + 摔落伤害修复
+### P3 批次备忘（防回退）—— 耕种（锄地/播种/生长/收获） + Raycast cross 命中修复
+
+- **方块三件套**：`farmland`（耕地，shovel 0.6，全面深湿土纹理）、`wheat_crop_0..7`（8 阶段 cross，阶段=独立方块 id，**不依赖 id 连续**——`src/core/crops.js` 惰性查表 `CROP_STAGE_IDS`，增删作物 id 必须同步该表）、`tall_grass`（草丛 cross，**种子主来源**：`grassChance` 装饰分支已填实——曾只是"用雪层占位"的空壳，破坏 40% 掉 wheat_seeds）。
+- **生长架构（勿改成每帧随机刻）**：阶段本身是方块 id（随存档持久化）；`world.cropMap`（key "x,y,z"）是**易失运行期登记表**——`World.setBlock` 末尾钩子 `onCropBlockChange`（Game.start 注入 `_trackCrop`）全路径收口（种/长/收/破坏/远端 block_set 自动维护）；`ensureChunk` 末尾**重载扫描**（有监听者才扫，65k/chunk ~0.3ms）把田里现存作物登记回表。Game.update 每 **8s 一拍** `_growCrops()`：随机推进 1 段（`Math.random` 允许——host 权威+非世界账本），**水分加成** `isHydrated(world, x, y-1, z)`（耕地层 9×9 有水，概率 0.3→0.6）。
+- **联机门控**：`networkMode && !net.isHost` 客户端不跑生长（host 权威，与 mobManager.spawnEnabled 同款策略）；host 的生长 setBlock 经 `onLocalBlockChange` 自动广播，客户端不用写生长逻辑。
+- **右键链**：`_tryFarmInteract(hit, targetDef, sel)` 挂在 ender_eye 之后、放置分支之前，内部顺序 = 骨粉催熟(+1..+3 段)→ 成熟收获(破坏+`_blockDrops` 掉落)→ 播种(种子对耕地，上方须净空)→ 锄地(`item.tool==='hoe'` 对 grass/dirt，上方须空气)。上方是**非固体装饰（雪层/草丛）**时锄地/播种会先清掉它再落子（水下 dirt 被正确拒绝——出生点浅水边实测）。
+- **⚠ Raycast cross 命中修复（存量缺陷，勿回退）**：旧条件 `def.solid && !def.fluid` 使**全部 cross 方块被准星穿透**——火把拆不掉、石按钮点不着、作物/草丛无法交互。现 `!def.fluid && (def.solid || def.renderType === 'cross')`；流体仍仅空桶 includeFluid。副作用核查过：对 cross 放置按 normal 贴边（原版对花同款）；紫颂/折越门无射线依赖（穿越走站立检测）。
+- **掉落列表化**：挖掘调用点从 `_blockDropName`（单名）改为 **`_blockDrops`（[{name,count}] 数组）**——成熟=小麦×1+种子 1-3、未熟=种子×1、草丛 40% 种子或空；其余方块委托 `_blockDropName` 包装成单项。**勿删 `_blockDropName`**（gravel flint/minTier 门控仍在其中）。
+- **配方/战利品**：`addShapeless('bone_meal', 3, ['bone'])`；village_big 加 `['wheat_seeds', 2, 5, 8]`。bone_meal 与 bone_meal_item **双注册共存**（历史遗留），交互分支两个名字都接受。
+- **验证锚点**：草丛密度 grassChance 0.3 ≈ 7 株/chunk（169 chunk 1200 株实测）；生长对照桩——`Math.random=()=>0.35`：无水不长/放水后长（0.3<0.35<0.6 的窗口设计即为此对照）；重载断言 `cropMap.has(key)`。**cropMap 存的是作物层坐标（y=作物格）**，不是耕地层——探针别读错层。
+
 
 - **装备面**：elytra def 带 `armorSlot: 'chest'` + `armorPoints: 0`（穿胸甲槽、不减伤，`_armorPoints` 对 0 点数自然跳过）；来源 = 末地船船长箱（FORCED 保底）。无耐久系统（盔甲系整体无耐久，elytra 同）。
 - **滑翔状态机分两层（勿合并）**：① `Game._updateGlideFold()` 每帧在移动分支**之前**调用（update 开头，`_updateWaterState` 之后）——没穿/创造飞行/旁观/在水中/在地面 → 折叠；② `_updateGlideAero(dt)` 在移动分支 else-if 链调用（返回 true 时**不覆写水平速度**，动量主导）。分两层的原因：入水走游泳分支根本不进移动滑翔分支，若折叠只在 aero 里做，入水后 gliding 残留 true。

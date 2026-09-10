@@ -373,9 +373,10 @@ export class TerrainGenerator {
             chunk.get(x, SEA_LEVEL, z) === WATER()) {
           chunk.set(x, SEA_LEVEL, z, BlockRegistry.getId('lily_pad'));
         }
-        // 草丛
-        if (cfg.grassChance && rand() < cfg.grassChance && surfaceName === 'grass_block') {
-          // 简化：用雪层占位
+        // 草丛（cross 装饰；破坏 40% 掉小麦种子——耕种种子来源）
+        if (cfg.grassChance && rand() < cfg.grassChance && surfaceName === 'grass_block' &&
+            chunk.get(x, surfaceY + 1, z) === 0) {
+          chunk.set(x, surfaceY + 1, z, BlockRegistry.getId('tall_grass'));
         }
       }
     }

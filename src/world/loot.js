@@ -18,7 +18,7 @@ const TABLES = {
     ['bread', 2, 5, 16], ['apple', 2, 4, 12], ['cooked_beef', 2, 4, 12],
     ['iron_ingot', 1, 4, 10], ['coal', 3, 8, 10], ['emerald', 1, 3, 8],
     ['compass', 1, 1, 4], ['saddle', 1, 1, 3], ['golden_apple', 1, 1, 2],
-    ['bucket', 1, 1, 4], ['oak_sapling', 2, 4, 6],
+    ['bucket', 1, 1, 4], ['oak_sapling', 2, 4, 6], ['wheat_seeds', 2, 5, 8],
     ['ender_pearl', 1, 1, 2], ['blaze_powder', 1, 2, 2], ['leather', 1, 3, 5],
   ],
   // 要塞枢纽：基础补给
