@@ -10,6 +10,7 @@ export class Player {
     this.pitch = 0;
     this.onGround = false;
     this.flying = false;
+    this.gliding = false;   // 鞘翅滑翔中（Game 每帧维护；Physics 按此切换温和重力）
     this.creative = false;
     this.spectator = false;
     this.survival = false;

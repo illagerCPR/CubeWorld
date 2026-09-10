@@ -649,8 +649,8 @@ reg('ghast_tear', { stack: 64 }, art(g => {
   g.s(7, 4, 'rgb(200,230,255)'); g.s(6, 5, 'rgb(200,230,255)');
   g.hl(12, 6, 10, 'rgb(180,200,220)');
 }));
-reg('elytra', { stack: 1, displayName: '鞘翅' }, art(g => {
-  // 末地船船长箱战利品（灰紫膜翅，飞行机制另行立项——现为稀有收藏）
+reg('elytra', { stack: 1, armorSlot: 'chest', armorPoints: 0, displayName: '鞘翅' }, art(g => {
+  // 末地船船长箱战利品；穿在胸甲槽（不减伤），空中下落自动展开滑翔
   for (let i = 0; i < 5; i++) {
     g.hl(4 + i, 3 + i * 2, 5 + i * 2, 'rgb(96,84,116)');
     g.hl(4 + i, 11 - i * 2, 12 - i * 2, 'rgb(96,84,116)');

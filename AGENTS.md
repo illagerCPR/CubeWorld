@@ -350,6 +350,17 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **桶**：Raycast.cast 加第 4 参 `includeFluid`（空桶手持时 updateRaycast 传入 → 准星可命中水/岩浆；其他物品准星仍穿透流体——勿全局开）。空桶对流体=舀取（setBlock 0 + 槽换满桶）；满桶对面=倒出邻格（必须空气，非空气静默拒）+ 槽换空桶。**槽位替换直接写 `inventory.slots[hotbarSelected]`**（不是 remove+add，防落到别的槽）。本作水体静态无流动模拟——舀水留洞/倒水不成流属设计边界。岩浆倒出经 LightEngine 自动给光 15。创造模式：世界可编辑但槽位不变。
 - **弓**：右键射箭（消耗 arrow×1，`removeItems`；创造不耗）；箭 = 本地投射物 `{mesh,pos,vel(28m/s),life:8,stuck}`，重力 -12；命中怪=整段位移作射线走 `findMobByRay`→`attackMob(…,6)`（击退/掉落/XP 全链复用）；命中实体块=钉住至寿命尽。几何/材质**模块级共享不 dispose**（`Game._arrowGeo/_arrowMat` 惰性单例），despawn 只 scene.remove。`arrows` 数组在 start() **无条件初始化**（曾漏——首启 undefined 在 update 里 `this.arrows.length` 直接炸循环）。
 - **右键分支顺序**：villager→furnace→床→crafting→红石→frame→(hit 内)桶/打火石/末影眼框→放置 `if (sel && hit)`→(hit 外)弓→掷眼。弓/掷眼分支不依赖命中（对空可用）。
+### P3 批次备忘（防回退）—— 鞘翅滑翔（装备/落体展开/俯冲翱翔） + 摔落伤害修复
+
+- **装备面**：elytra def 带 `armorSlot: 'chest'` + `armorPoints: 0`（穿胸甲槽、不减伤，`_armorPoints` 对 0 点数自然跳过）；来源 = 末地船船长箱（FORCED 保底）。无耐久系统（盔甲系整体无耐久，elytra 同）。
+- **滑翔状态机分两层（勿合并）**：① `Game._updateGlideFold()` 每帧在移动分支**之前**调用（update 开头，`_updateWaterState` 之后）——没穿/创造飞行/旁观/在水中/在地面 → 折叠；② `_updateGlideAero(dt)` 在移动分支 else-if 链调用（返回 true 时**不覆写水平速度**，动量主导）。分两层的原因：入水走游泳分支根本不进移动滑翔分支，若折叠只在 aero 里做，入水后 gliding 残留 true。
+- **⚠ 展开抖动陷阱（曾真出）**：站立时每帧重力使 vy=-0.533，恰低于展开阈值 `GLIDE_DEPLOY_VY=-0.5` → 落地后每帧"fold 折叠 ↔ aero 展开"抖动、HUD 恒亮。修复：aero 展开前置条件**必须含 `!p.onGround`**（站地面不展开；走下悬崖/跳过 apex 正常展开）。
+- **摔落伤害修复（存量死代码，本批修复）**：`moveAxis` y 轴落地把 `velocity.y` 清零，旧写法 `onGround && velocity.y < -15` 永假——摔落从未生效。现 `Physics.collide` 在 moveAxis 前**捕获冲击速度** `entity.impactVy/impactVh/wallCrash`（每帧开头重置），Game 侧读 `impactVy` 结算（`floor(-vy/3-3)`）。25 格坠 ≈ 扣 10 血。
+- **滑翔禁用 auto-jump（moveAxis `!entity.gliding` 门控，勿删）**：否则俯冲撞山坡被逐级抬升"漂移爬山"（实测 20s 悬停 y 卡 97），撞山应走碰撞回退 → wallCrash 伤害停滑（原版语义）。撞墙：`wallCrash` 在 x/z 清速度前记录（阈值 8 m/s），Game 侧 `hurt(floor(speed/4))` 并折叠；撞停后仍在空中会重新展开（原版式，伤害只结算一次）。
+- **气动参数（Game.js 顶部常量，实测锚点）**：THRUST=8 / DRAG=0.994 / BRAKE=0.5 / LIFT=6 / DEPLOY_VY=-0.5；`GLIDE_GRAVITY=-9` 与**动态下沉上限** `-3.9/(1+vh*0.10)`（飞得快下沉缓——否则每次拉起都要先从 -3.9 深坑爬出，翱翔出不来）在 Physics.js（GLIDE_GRAVITY **导出**供 Game 升力上限引用）。锚点：俯冲 3s 8→10 m/s、极速 ~27；拉起（vh 9.5, pitch 0.5）爬升 ~4 格、vy 峰 +3 后失速；升力模型 = `sin(pitch)·vAlong·LIFT` 超过重力才净爬升（鼓励"俯冲攒速→拉起翱翔→失速回落"循环）。**CLIMB 混合/上旋模型已被升力模型替换**——混合模型被 collide 侧重力对抗压回负 vy（稳态 targetVy - 0.15/blend），勿回退。
+- **HUD**：`hud.setGliding(on)` 开关 `glideTag`（准星下方偏上"🪂 鞘翅滑翔中"）；hideAll/start/respawn 三处都要隐藏（Hud 跨存档共享）。
+- **验证手法**：滑翔读 `p.pitch` 字段不经相机——eval 直接设 pitch 可靠（与"射线瞄准必须真实 mouse move"的陷阱不冲突）；手动步进 `g.running=false + g.update(1/60)`；落地折叠断言要在循环退出后**再补一帧 update**（fold 在帧开头，落地帧内不折叠是正确时序）；断言"站立零抖动"跑 60 帧数 gliding 翻转次数（应为 0）。
+
 ### P3 批次备忘（防回退）—— 被动动物 / 末影人（可再生掉落源）
 
 - **四类新生物**：牛（beef+leather）、羊（white_wool）、鸡（feather+raw_chicken）——`passive: true` 走村民系 AI 分支，白天草地成群（2-3 只）生成，独立上限 `MAX_PASSIVE=12`（不含村民，不挤 MAX_MOBS 敌对名额）；末影人（ender_pearl 0-1）——`neutral: true` 受击激怒 + **受击 60% 瞬移**（`_teleportMob`：±16 格下扫首个"实心+2 格净空"，8 次失败原地不动），夜晚主世界表 10% 混入 + 末地主产。

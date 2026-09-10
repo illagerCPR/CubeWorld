@@ -41,7 +41,18 @@ export class Hud {
       display: none; gap: 1px; z-index: 10; pointer-events: none;
     `;
     document.body.appendChild(this.armorRow);
-    
+
+    // 滑翔指示（鞘翅展开时显示在准星下方偏上，轻提示不打断视野）
+    this.glideTag = document.createElement('div');
+    this.glideTag.textContent = '🪂 鞘翅滑翔中';
+    this.glideTag.style.cssText = `
+      position: fixed; top: 60%; left: 50%; transform: translateX(-50%);
+      display: none; z-index: 10; pointer-events: none;
+      color: #d8e6ff; font: 600 13px sans-serif; letter-spacing: 2px;
+      text-shadow: 0 1px 3px #000, 0 0 8px rgba(80,120,255,0.6);
+    `;
+    document.body.appendChild(this.glideTag);
+
     document.body.appendChild(this.el);
     document.body.appendChild(this.xpBar);
     
@@ -107,6 +118,11 @@ export class Hud {
     this.underwaterOverlay.style.opacity = on ? '1' : '0';
   }
 
+  // 滑翔指示开关（Game._updateGliding 展开/折叠时调用）
+  setGliding(on) {
+    this.glideTag.style.display = on ? 'block' : 'none';
+  }
+
   // 全部状态栏隐藏（返回主菜单时调用；Hud 是跨存档共享实例，
   // 不隐藏会让血量/饥饿/经验条/氧气/准星残留在菜单界面上）
   hideAll() {
@@ -115,6 +131,7 @@ export class Hud {
     this.crosshair.style.display = 'none';
     this.airBar.style.display = 'none';
     this.armorRow.style.display = 'none';
+    this.glideTag.style.display = 'none';
   }
 
   // 着火滤镜开关（同款幂等开关）

@@ -8,7 +8,7 @@ import { World } from '../core/World.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
 import { Player } from './Player.js';
-import { Physics } from './Physics.js';
+import { Physics, GLIDE_GRAVITY } from './Physics.js';
 import { Controls } from './Controls.js';
 import { Inventory } from './Inventory.js';
 import { Raycast } from './Raycast.js';
@@ -58,6 +58,13 @@ const ORE_XP = {
   redstone_ore: 2, lapis_ore: 3,
   diamond_ore: 7, deepslate_diamond_ore: 7, emerald_ore: 7,
 };
+
+// 鞘翅滑翔气动参数（每秒口径；重力/下沉上限在 Physics.js）
+const GLIDE_THRUST = 8;    // 俯冲推进加速度上限 m/s²（按 -sin(pitch) 比例；与气动阻尼平衡出俯冲极速 ~27m/s）
+const GLIDE_DRAG = 0.994;  // 水平气动阻尼（pow 基，dt*60 口径；过强会把拉起后的翱翔窗口掐死）
+const GLIDE_BRAKE = 0.5;   // 拉起刹车强度（sin(pitch) 比例的水平动能损耗；过大会瞬间失速翱翔不出）
+const GLIDE_LIFT = 6;      // 拉起升力系数（升力 = sin(pitch)·vAlong·此值；升力超过滑翔重力才净爬升）
+const GLIDE_DEPLOY_VY = -0.5; // 展开阈值：空中下落至此速度自动展开（落体展开，原版式）
 
 // 触发方块/物品定义注册
 import '../blocks/BlockDefs.js';
@@ -353,6 +360,9 @@ export class Game {
       this.player.position.set(spawn.x, spawn.y, spawn.z);
     }
     this.player.setMode(mode);
+    // 滑翔瞬态复位（Player 跨存档共享实例；掉落展开由 _updateGliding 逐帧重判）
+    this.player.gliding = false;
+    if (this.hud) this.hud.setGliding(false);
     // 传送门穿越状态复位（传送门到达的吸附/建门在 start 完成后由 _afterPortalArrival 处理）
     this._portalTimer = 0;
     this._portalCooldown = 0;
@@ -658,6 +668,8 @@ export class Game {
   update(dt) {
     // 检测玩家是否在水中（眼睛位置）
     this._updateWaterState();
+    // 鞘翅滑翔折叠判定（水中/落地等环境变化要在移动分支前收口，gliding 不得跨分支残留）
+    this._updateGlideFold();
 
     // 受击无敌帧衰减
     if (this.player.invulnerable > 0) {
@@ -709,6 +721,9 @@ export class Game {
         if (this.controls.isJumping()) this.player.velocity.y = 4.0;
         else if (this.controls.isSneaking()) this.player.velocity.y = -4.0;
         // 其余交给 Physics 的水中重力与阻力
+      } else if (this._updateGlideAero(dt)) {
+        // 鞘翅滑翔帧：速度由动量主导（俯冲推进/拉起刹车已在 _updateGliding 内结算），
+        // 不走地面移动的速度覆写，否则动量每帧被清成 4.3m/s 滑翔无从谈起
       } else {
         this.player.velocity.x = move.x * speed * sprint;
         this.player.velocity.z = move.z * speed * sprint;
@@ -1868,6 +1883,66 @@ export class Game {
     return -1;
   }
 
+  // 鞘翅滑翔折叠判定（每帧在移动分支之前调用）：没穿鞘翅 / 创造飞行 / 旁观 /
+  // 在水中 / 已在地面 → 折叠。独立于气动结算——水中走游泳分支不进移动滑翔分支，
+  // 若不在此处统一折叠，入水后 gliding 会残留 true。
+  _updateGlideFold() {
+    const p = this.player;
+    if (!p.gliding) return;
+    const chest = this.inventory ? this.inventory.armor[1] : null;
+    if (!chest || chest.name !== 'elytra' || p.flying || p.spectator || p.inWater || p.onGround) {
+      p.gliding = false;
+      if (this.hud) this.hud.setGliding(false);
+    }
+  }
+
+  // 鞘翅滑翔气动结算（移动分支调用）：返回 true 表示本帧处于滑翔（移动分支不再
+  // 覆写水平速度，动量得以保留）。展开条件：胸甲槽穿鞘翅 + 空中下落（落体展开）。
+  // 气动模型（简化原版）：低头俯冲加速、抬头迎角升力翱翔、常驻水平阻尼。
+  _updateGlideAero(dt) {
+    const p = this.player;
+    if (!p.gliding) {
+      const chest = this.inventory ? this.inventory.armor[1] : null;
+      // onGround 必须排除：站立时每帧重力使 vy=-0.53 恰好越过展开阈值，
+      // 会与 _updateGlideFold 的落地折叠形成逐帧抖动（HUD 闪烁）
+      if (!chest || chest.name !== 'elytra' || p.flying || p.spectator || p.inWater || p.onGround) return false;
+      if (p.velocity.y > GLIDE_DEPLOY_VY) return false; // 起跳上升段不展开，过 apex 后触发
+      p.gliding = true;
+      if (this.hud) this.hud.setGliding(true);
+    }
+
+    // 气动结算：视线水平方向 = forward = (-sin(yaw), 0, -cos(yaw))；低头 pitch 为负
+    const fwdX = -Math.sin(p.yaw);
+    const fwdZ = -Math.cos(p.yaw);
+    const pitch = p.pitch;
+    const vAlong = p.velocity.x * fwdX + p.velocity.z * fwdZ; // 沿视线的前向速度分量
+
+    if (pitch < 0) {
+      // 俯冲：沿视线水平分量推进（越低头推力越大）
+      const thrust = -Math.sin(pitch) * GLIDE_THRUST;
+      p.velocity.x += fwdX * thrust * dt;
+      p.velocity.z += fwdZ * thrust * dt;
+    } else if (pitch > 0) {
+      // 拉起：机翼迎角升力 = sin(pitch)·前向速度·GLIDE_LIFT，超过滑翔重力才净爬升
+      // （鼓励"俯冲攒速→拉起翱翔"循环；速度被刹车耗尽后升力不足，自然失速下坠）
+      if (vAlong > 1) {
+        const lift = Math.sin(pitch) * vAlong * GLIDE_LIFT;
+        p.velocity.y += Math.min(lift, -GLIDE_GRAVITY * 1.35) * dt;
+      }
+      const brake = Math.min(1, Math.sin(pitch) * GLIDE_BRAKE * dt);
+      p.velocity.x -= p.velocity.x * brake;
+      p.velocity.z -= p.velocity.z * brake;
+    }
+
+    // 常驻水平气动阻尼（帧率无关）+ 爬升上限保护
+    const drag = Math.pow(GLIDE_DRAG, dt * 60);
+    p.velocity.x *= drag;
+    p.velocity.z *= drag;
+    if (p.velocity.y > 9) p.velocity.y = 9;
+
+    return true;
+  }
+
   updateSurvival(dt) {
     // 饥饿/生命恢复
     this.player.exhaustion += dt * 0.4;
@@ -1888,12 +1963,22 @@ export class Game {
       this.player.health -= dt * 0.5;
     }
     
-    // 摔落伤害
-    if (this.player.onGround && this.player.velocity.y < -15) {
-      const dmg = Math.floor(-this.player.velocity.y / 3 - 3);
+    // 摔落伤害（读落地前的冲击速度 impactVy——moveAxis 落地会把 velocity.y 清零，
+    // 旧写法 onGround && velocity.y<-15 永远为假，摔落从未生效，本批修复）
+    const impactVy = this.player.impactVy || 0;
+    if (this.player.onGround && impactVy < -15) {
+      const dmg = Math.floor(-impactVy / 3 - 3);
       if (dmg > 0) {
         this.player.hurt(dmg, 'fall', true);
       }
+    }
+
+    // 滑翔撞墙伤害（wallCrash 由 Physics.moveAxis 在清零水平速度前捕获；撞停即折叠）
+    if (this.player.gliding && this.player.wallCrash > 0) {
+      const dmg = Math.max(1, Math.floor(this.player.wallCrash / 4));
+      this.player.hurt(dmg, 'flyIntoWall', true);
+      this.player.gliding = false;
+      if (this.hud) this.hud.setGliding(false);
     }
 
     // 虚空伤害（末地/天域等无底维度）：y<-16 持续扣血（持续伤害口径，不走红屏）
@@ -1924,6 +2009,8 @@ export class Game {
     this.player.exhaustion = 0;
     this.player.onFire = 0;
     this.player.invulnerable = 0;
+    this.player.gliding = false;
+    if (this.hud) this.hud.setGliding(false);
     // 末地死亡回主世界重生（原版语义；防"败龙前死亡软锁在末地"）：
     // switchDimension 重建世界并落主世界出生点（背包/账本经 loadData 保留）
     if (this.world && this.world.dimension === 'end') {

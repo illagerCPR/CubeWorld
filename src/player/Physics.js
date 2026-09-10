@@ -8,6 +8,9 @@ const JUMP_VELOCITY = 9;
 const WATER_GRAVITY = -8;       // 水中重力（约为陆地的 1/4）
 const WATER_DRAG = 0.8;         // 水中垂直阻力（每帧速度衰减）
 const WATER_HORZ_DRAG = 0.7;    // 水中水平阻力
+export const GLIDE_GRAVITY = -9;  // 鞘翅滑翔重力（约为落体的 1/3.5；Game._updateGliding 升力上限也引用）
+const GLIDE_MAX_FALL = -3.9;    // 滑翔下沉速度上限（m/s，原版平飞下沉口径）
+const GLIDE_WALL_CRASH_SPEED = 8; // 滑翔撞墙的最小水平冲击速度（低于此仅停下不受伤）
 
 export class Physics {
   constructor(world) {
@@ -19,7 +22,7 @@ export class Physics {
     const half = 0.3;
     const height = 1.8;
     
-    // 应用重力（水中减弱）
+    // 应用重力（水中减弱 / 滑翔温和）
     if (!entity.flying && !entity.spectator) {
       if (entity.inWater) {
         entity.velocity.y += WATER_GRAVITY * dt;
@@ -27,16 +30,29 @@ export class Physics {
         // 限制水中垂直速度
         if (entity.velocity.y < -4) entity.velocity.y = -4;
         if (entity.velocity.y > 6) entity.velocity.y = 6;
+      } else if (entity.gliding) {
+        entity.velocity.y += GLIDE_GRAVITY * dt;
+        // 下沉上限随机速变化：飞得越快升力越大，平飞下沉越缓（拉起转爬升的起
+        // 点也更浅——否则每次拉起都要先从 -3.9 的深坑里爬出来，翱翔手感出不来）
+        const vh = Math.hypot(entity.velocity.x, entity.velocity.z);
+        const maxFall = GLIDE_MAX_FALL / (1 + vh * 0.10);
+        if (entity.velocity.y < maxFall) entity.velocity.y = maxFall;
       } else {
         entity.velocity.y += GRAVITY * dt;
       }
     }
-    
+
     // 限制速度
     const maxVel = 50;
     entity.velocity.x = Math.max(-maxVel, Math.min(maxVel, entity.velocity.x));
     entity.velocity.y = Math.max(-maxVel, Math.min(maxVel, entity.velocity.y));
     entity.velocity.z = Math.max(-maxVel, Math.min(maxVel, entity.velocity.z));
+
+    // 冲击速度捕获：在 y 轴碰撞把 velocity 清零之前记录本帧重力应用后的速度，
+    // 供摔落伤害 / 滑翔撞墙伤害判定（moveAxis 落地会清零 velocity.y，事后读不到）
+    entity.impactVy = entity.velocity.y;
+    entity.impactVh = Math.hypot(entity.velocity.x, entity.velocity.z);
+    entity.wallCrash = 0;
     
     if (entity.spectator) {
       // 旁观：无碰撞
@@ -125,8 +141,10 @@ export class Physics {
     if (bestResolve !== null) {
       // 自动台阶（auto-jump）：水平碰撞时若阻挡方块顶面只高出 1 个方块以内，
       // 同时玩家头部上方有足够空间，则提升玩家 y 而不阻挡水平移动
-      // 适用于陆上台阶和水中上岸
+      // 适用于陆上台阶和水中上岸；滑翔中禁用——否则俯冲会沿山坡逐级"漂移爬山"，
+      // 撞山应走碰撞回退 → wallCrash 伤害停滑（原版语义）
       if (axis !== 'y' &&
+          !entity.gliding &&
           isFinite(maxBlockTopY) &&
           maxBlockTopY - entity.position.y > 0 &&
           maxBlockTopY - entity.position.y <= 1.0 + 0.01) {
@@ -169,8 +187,15 @@ export class Physics {
         entity.velocity.y = 0;
         if (amount < 0) entity.onGround = true;
       } else if (axis === 'x') {
+        // 滑翔撞墙：记录清零前的水平冲击速度（Game 侧结算伤害并终止滑翔）
+        if (entity.gliding && Math.abs(entity.velocity.x) > GLIDE_WALL_CRASH_SPEED) {
+          entity.wallCrash = Math.max(entity.wallCrash, Math.abs(entity.velocity.x));
+        }
         entity.velocity.x = 0;
       } else {
+        if (entity.gliding && Math.abs(entity.velocity.z) > GLIDE_WALL_CRASH_SPEED) {
+          entity.wallCrash = Math.max(entity.wallCrash, Math.abs(entity.velocity.z));
+        }
         entity.velocity.z = 0;
       }
     }
