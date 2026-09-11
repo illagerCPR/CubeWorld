@@ -1,6 +1,6 @@
 // terrain.js -- 地形生成（含确定性 3D 噪声洞穴雕刻）
 import { SimplexNoise } from './noise.js';
-import { Biomes, BiomeConfig } from './biomes.js';
+import { Biomes, BiomeConfig, DEFAULT_BIOME_SCALE, BIOME_SCALES, safeBiomeScale } from './biomes.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 
 // 高山判定阈值：mountainNoise.fbm2D 超过此值 → 高山群系（优先级高于温湿判定）
@@ -45,9 +45,12 @@ const OBSIDIAN_SALT = 7717;
 const OBSIDIAN_P = 0.07;
 
 export class TerrainGenerator {
-  constructor(seed) {
+  constructor(seed, biomeScale = DEFAULT_BIOME_SCALE) {
     this.seed = seed;
     this.dimensionId = 'overworld'; // 结构维度作用域（StructureManager.dimMatches 读取）
+    this.biomeScale = safeBiomeScale(biomeScale);
+    // 群系布局频率乘数：small=1.0 与旧版逐字节一致；洞穴/基础地形噪声不参与缩放
+    this.biomeFreqMul = BIOME_SCALES[this.biomeScale].freqMul;
     this.noise = new SimplexNoise(seed);
     this.tempNoise = new SimplexNoise(seed + 1);
     this.humidNoise = new SimplexNoise(seed + 2);
@@ -64,21 +67,23 @@ export class TerrainGenerator {
     this.structureManager = new StructureManager(this, seed);
   }
 
-  // 取群系（纯函数 of (seed, 坐标)，跨端/跨区块顺序一致）
+  // 取群系（纯函数 of (seed, biomeScale, 坐标)，跨端/跨区块顺序一致）
+  // 全部频率乘 biomeFreqMul（群系规模档位）；freqMul=1 时与旧版逐字节一致
   getBiome(wx, wz) {
-    const river = this.riverNoise.ridge2D(wx * 0.003, wz * 0.003, 3);
+    const mul = this.biomeFreqMul;
+    const river = this.riverNoise.ridge2D(wx * 0.003 * mul, wz * 0.003 * mul, 3);
 
     // 河流：ridge 噪声接近 0 时
     if (river < 0.06) return Biomes.RIVER;
 
     // 高山：独立山地噪声成片，可出现在任何温区
-    if (this.mountainNoise.fbm2D(wx * 0.0035, wz * 0.0035, 3) > MOUNTAIN_T) return Biomes.MOUNTAINS;
+    if (this.mountainNoise.fbm2D(wx * 0.0035 * mul, wz * 0.0035 * mul, 3) > MOUNTAIN_T) return Biomes.MOUNTAINS;
 
-    const temp = this.tempNoise.fbm2D(wx * 0.004, wz * 0.004, 3);
-    const humid = this.humidNoise.fbm2D(wx * 0.005, wz * 0.005, 3);
+    const temp = this.tempNoise.fbm2D(wx * 0.004 * mul, wz * 0.004 * mul, 3);
+    const humid = this.humidNoise.fbm2D(wx * 0.005 * mul, wz * 0.005 * mul, 3);
 
     // 蘑菇岛：罕见独立区（与温湿无关，紧随高山）
-    if (this.mushroomNoise.fbm2D(wx * 0.004, wz * 0.004, 2) > MUSHROOM_T) return Biomes.MUSHROOM_FIELDS;
+    if (this.mushroomNoise.fbm2D(wx * 0.004 * mul, wz * 0.004 * mul, 2) > MUSHROOM_T) return Biomes.MUSHROOM_FIELDS;
 
     // 沼泽：温和带高湿（抢占平原的高湿区）
     if (temp > -0.1 && temp < 0.35 && humid >= 0.25) return Biomes.SWAMP;
@@ -87,7 +92,7 @@ export class TerrainGenerator {
     if (temp < -0.3) return humid > 0 ? Biomes.SNOWY_TAIGA : Biomes.TAIGA;
     // 向日葵平原：平原带变体（低湿温和区 + 变体噪声）
     if (temp > -0.3 && temp < 0.35 && humid < 0.05 &&
-        this.sunflowerNoise.fbm2D(wx * 0.006, wz * 0.006, 2) > SUNFLOWER_T) return Biomes.SUNFLOWER_PLAINS;
+        this.sunflowerNoise.fbm2D(wx * 0.006 * mul, wz * 0.006 * mul, 2) > SUNFLOWER_T) return Biomes.SUNFLOWER_PLAINS;
     // 温和带：中湿 = 桦木森林（更湿区已被沼泽取走，更干 = 平原）
     if (humid > 0.05 && humid < 0.25) return Biomes.BIRCH_FOREST;
     return Biomes.PLAINS;

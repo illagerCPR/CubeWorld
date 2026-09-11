@@ -452,7 +452,7 @@ export class NetworkManager {
   sendGamemode(mode) { this._send(MSG.GAMEMODE, { mode }); }
   sendSetTime(t) { this._send(MSG.SET_TIME, { time: t }); }
   sendChat(text) { this._send(MSG.CHAT, { text }); }
-  createRoom(seed, mode, room) { this._sendQueued(MSG.CREATE_ROOM, { seed, mode, room }); }
+  createRoom(seed, mode, room, biomeScale) { this._sendQueued(MSG.CREATE_ROOM, { seed, mode, room, biomeScale }); }
   joinRoom(room) { this._sendQueued(MSG.JOIN_ROOM, { room }); }
 
   // 阶段5：世界内换房 / 重建世界（保持连接，服务器回 WORLD_INFO(restart) 后重启本地世界）

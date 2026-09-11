@@ -13,7 +13,8 @@ export const DIMENSIONS = {
     id: 'overworld',
     name: '主世界',
     implemented: true,
-    createGenerator: (seed) => new TerrainGenerator(seed),
+    // opts.biomeScale：主世界群系规模档位（small/medium/large/huge），其余维度忽略
+    createGenerator: (seed, opts = {}) => new TerrainGenerator(seed, opts.biomeScale),
     noDayCycle: false,
     sky: { fixedColor: null, celestials: true, clouds: true, cloudsY: 140, fog: { color: null, nearK: 0.5, farK: 0.95 } },
     light: { hasSkylight: true },

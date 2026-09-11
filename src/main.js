@@ -30,11 +30,11 @@ if (location.search.includes('bake-panorama')) {
   const net = new NetworkManager(game);
   game.net = net;
 
-  // 主菜单
-  const menu = new MenuScreen((mode, seed, loadData, slot, cheatsEnabled) => {
+  // 主菜单（onStart 第 6 参：新建世界的生物群系规模档位）
+  const menu = new MenuScreen((mode, seed, loadData, slot, cheatsEnabled, biomeScale) => {
     if (game.running) game.returnToMenu(false);
     menu.hide();
-    game.start(mode, seed, loadData, slot, cheatsEnabled);
+    game.start(mode, seed, loadData, slot, cheatsEnabled, false, biomeScale);
   }, net);
 
   // 菜单显隐联动全景启停（game.running 期间全景循环自身也会早退）
@@ -47,20 +47,20 @@ if (location.search.includes('bake-panorama')) {
     menu.show();
   };
 
-  // 联机：收到世界信息后用服务器 seed 启动本地世界（msg.room 用于房间展示）
-  net.on('world_info', async ({ seed, mode, time, room }) => {
+  // 联机：收到世界信息后用服务器 seed 启动本地世界（msg.room 用于房间展示；biomeScale 随房间固定）
+  net.on('world_info', async ({ seed, mode, time, room, biomeScale }) => {
     net.room = room || net.room || 'default';
     menu.hide();
-    await game.start(mode, seed, null, 0, false, true);
+    await game.start(mode, seed, null, 0, false, true, biomeScale);
     game.sky.time = time;
     net.onWorldStarted();
     net.sendPlayerFull();
   });
 
   // 阶段5：世界内换房 / 重建世界 —— 保持连接，用新 seed 重启本地世界（不回主菜单）
-  net.on('restart_world', async ({ seed, mode, time, room }) => {
+  net.on('restart_world', async ({ seed, mode, time, room, biomeScale }) => {
     net.room = room || net.room || 'default';
-    await game.start(mode, seed, null, 0, false, true);
+    await game.start(mode, seed, null, 0, false, true, biomeScale);
     game.sky.time = time;
     net.onWorldStarted();
     net.sendPlayerFull();

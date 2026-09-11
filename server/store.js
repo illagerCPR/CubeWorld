@@ -27,6 +27,7 @@ export function saveRoom(room, dir = DEFAULT_DIR) {
   const data = {
     name: room.name,
     seed: room.seed,
+    biomeScale: room.biomeScale || null, // 群系规模档位（旧快照无字段 → restore 回落 null→small）
     time: room.time,
     nextDropId: room.nextDropId,
     nextMobId: room.nextMobId,

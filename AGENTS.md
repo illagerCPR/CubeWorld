@@ -182,8 +182,8 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - `src/core/SaveSystem.js`：localStorage 多槽位存档，`SAVE_PREFIX='project-mc-save-'`，`MAX_SAVE_SLOTS=6`，旧版无后缀键自动迁移到槽 1。API：`save(game, slot)` / `load(slot)` / `hasSave(slot)` / `listSaves()` / `deleteSave(slot)` / `findEmptySlot()`。
 - `Game.currentSlot` 跟踪当前槽位，`Game.start(mode, seed, loadData, slot=1)` 接受槽位参数。
 - `update()` 每 30 秒自动保存；F5 手动保存（注意要 `e.preventDefault()` 否则浏览器刷新）。
-- `MenuScreen.js` 是存档选择界面：6 个槽位列表，有存档显示模式/时间/种子并可继续或删除，空槽用选定的模式+种子新建。构造时默认 `display:flex`。
-- `cheatsEnabled` 持久化字段：存档数据 `data.cheatsEnabled` 由 `SaveSystem.save` 在 `game.cheatsEnabled` 上读取，`listSaves()` 返回项含 `cheatsEnabled`；`MenuScreen` 的"启用命令"复选框 → `selectedCheats` 状态 → `onStart(mode,seed,loadData,slot,cheatsEnabled)` 第 5 参数 → `Game.start(mode,seed,loadData,slot=1,cheatsEnabled=false)` 第 5 参数；加载存档时由 `loadData.cheatsEnabled` 覆盖（`Game.start` 第 145-149 行：有 loadData 走 `loadData.cheatsEnabled`，否则走函数参数）。改 API 要同步这 5 处签名。
+- `MenuScreen.js` 是三页主菜单（`page` 状态机：`main`/`single`/`lan`）：主页 = Logo + 「单人游戏」「局域网游戏」两颗石质大按钮 + 视频设置；单人页 = 6 个槽位列表（有存档显示模式/维度/时间/种子并可继续或删除，空槽用选定的模式+种子新建）+ 种子/模式/启用命令设置区；局域网页 = 昵称/服务器/房间名 + 创建/加入房间。`show()` 重置回主页。构造时默认 `display:flex`。按钮统一石质材质：模块级 `stoneSvgDataUri()`（确定性哈希噪点，同 BlockDefs `stoneTex` 风格）生成 data-URI 背景，构造期 `ensureMenuStyles()` 向 head 注入一次 `.cw-stone-btn` 样式表（hover/active/selected 伪类必须走 class，内联样式写不了）；页面导航与视频设置入口走构造期事件委托（render() 重建 innerHTML 无需重绑）。`setMpStatus` 暂存到 `mpStatus` 字段，非 LAN 页先存、进 LAN 页回显（DOM 存在时同步直更）。
+- `cheatsEnabled` 持久化字段：存档数据 `data.cheatsEnabled` 由 `SaveSystem.save` 在 `game.cheatsEnabled` 上读取，`listSaves()` 返回项含 `cheatsEnabled`；`MenuScreen` 单人页"启用命令"复选框 → `selectedCheats` 状态 → `onStart(mode,seed,loadData,slot,cheatsEnabled)` 第 5 参数 → `Game.start(mode,seed,loadData,slot=1,cheatsEnabled=false)` 第 5 参数；加载存档时由 `loadData.cheatsEnabled` 覆盖（`Game.start` 第 145-149 行：有 loadData 走 `loadData.cheatsEnabled`，否则走函数参数）。改 API 要同步这 5 处签名。
 
 ### 命令面板（作弊系统）
 
@@ -273,6 +273,16 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 - **建筑归属查询**：`structureNameAt` 走 recordsAround（抗 LRU），InfoBar 内部 0.5s 节流（performance.now，update 无 dt 参数）；CommandPanel 探索区在 `show()` 时重建（村庄 ±3 cell 扫描 + 要塞 O(1)），新增结构类型在 structureNameAt 加一个分支即可。
 
 - **行走卡顿三件套（W-卡顿批次）**：① `LightEngine.initChunkLight` **价差入队**——只把"光照 <15 的格 + 与已处理邻列（左/后）价差 ≥2 的边缘格"入队 BFS，旧版全量入队 5 万+格致 48ms/块（跨区块行走 690ms/帧卡顿主犯），新版 2.2ms（22×）；对照验证：653 万格仅 0.09% 差异且**全部 +1**（新版传播是旧版超集，修复了旧版链式横向光漏一级的缺陷）。**勿回退全量入队**；改光照传播逻辑必须跑 node 新旧对照（653 万格 dark/哈希+单调性）。注意：光照 forward/reverse 顺序本就不幂等（存量，纯视觉不进存档/协议）。② `updateChunks` 分帧预算：缺口按距玩家排序、每帧限时 8ms（至少 1 块）；③ `rebuildDirtyChunks` 时间预算 12ms（洞穴后单块 mesh ~15ms，固定 2 个/帧会叠出 29ms）。实测跨边界：单帧 690ms → 13 帧×≤33ms 渐次补完。已知尖峰残余：30s 自动保存序列化长探索存档的单帧尖峰（未处理）。
+
+### 生物群系规模批次备忘（防回退）—— 小/中/大/巨大 档位（world/biome-scale 批次）
+
+- **档位定义**：`biomes.js` 导出 `BIOME_SCALES`（small freqMul=1.0 / medium=0.55 / large=0.35 / huge=0.22）+ `DEFAULT_BIOME_SCALE='small'` + `safeBiomeScale()` 清洗。**small=1.0 必须与旧版逐字节一致**（`getBiome` 全部频率 `× biomeFreqMul`，IEEE754 乘 1.0 精确无损）——旧存档/旧联机世界/全部确定性测试依赖此锚点；调任何档位数值先跑 `tests/biome-scale-determinism.mjs`（② 断言守护）。
+- **只缩放群系布局噪声**（river/mountain/temp/humid/mushroom/sunflower 六组），**洞穴频率与基础地形噪声不缩放**（群系布局 ≠ 地形细节，与原版语义一致）；改动频率集合注意同步测试 ③ 的连通占比单调断言。
+- **签名链（6 环一次改齐）**：MenuScreen `selectedBiomeScale`（单人页/LAN 页控件共享状态，仅对新建生效）→ `onStart` 第 6 参 → `Game.start` 第 7 参（有 loadData 走 `loadData.biomeScale`，与 cheatsEnabled 同款）→ `new World(seed, dim, {biomeScale})` → `dimDef.createGenerator(seed, opts)`（仅 overworld 消费，其余维度忽略第二参）→ `TerrainGenerator(seed, biomeScale)`；联机侧 `world_info`/`restart_world` 事件 payload 直透 msg 字段。
+- **联机语义与 seed 同款**：房间 `biomeScale` 首次开房固定（`Room.createRoom` 仅 `this.biomeScale===null` 时写），重复开房/加入/重启恢复（store 快照 + `Room.restore`）不得覆盖；3 处 `WORLD_INFO` 发送都必须带 `biomeScale: this.biomeScale`，漏一处即该路径加入者群系与房间其他端分裂。测试断言在 `server/test-mp.mjs`（回传/跟随/重复开房不改档）。
+- **换维必须透传**：`_composeSwitchLoadData` 带 `biomeScale: this.biomeScale`，`_resolveArrivalY` 的临时生成器直调 `createGenerator(seed, {biomeScale})`——漏传=传送门落点按 small 群系算，与实际世界（large/huge）地形不符，落点悬空/嵌墙。
+- **存档**：`SaveSystem.save` 写 `data.biomeScale`，`listSaves` 返回读档显示（旧档无字段回落 small，不回写）；菜单槽位仅非 small 显示「群系:X」。
+- **冒烟锚点**：新建 huge 世界 eval 断言 `game.biomeScale==='huge' && world.generator.biomeFreqMul===0.22`；联机 host 选档后 join 端 `biomeScale` 自动一致、两端 `generator.getBiome(同坐标)` 同值。
 
 ### 维度批次备忘（防回退）—— 维度基建/下界/末地/天域/联机同步（M1-M4 全部交付）
 

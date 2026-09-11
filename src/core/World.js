@@ -9,12 +9,12 @@ import { isCropId } from './crops.js';
 import { getDimension, DEFAULT_DIMENSION } from './dimensions.js';
 
 export class World {
-  constructor(seed = 0, dimension = DEFAULT_DIMENSION) {
+  constructor(seed = 0, dimension = DEFAULT_DIMENSION, worldOpts = null) {
     this.seed = seed;
     this.dimension = dimension;
     this.dimDef = getDimension(dimension) || getDimension(DEFAULT_DIMENSION);
     this.chunks = new Map();
-    this.generator = this.dimDef.createGenerator(seed);
+    this.generator = this.dimDef.createGenerator(seed, worldOpts || {});
     // 维度分桶账本：modifiedBlocks/containers 是"当前维度"桶的指针
     //（切换维度 = 整体重建 World，指针永不跨维度换绑）
     this.dimensionBlocks = new Map();     // dimId -> Map("x,y,z" -> 方块 id)

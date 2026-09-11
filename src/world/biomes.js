@@ -157,3 +157,20 @@ export const BiomeConfig = {
     smallMushroomChance: 0.05   // 地面小蘑菇
   }
 };
+
+// 生物群系规模档位（world/biome-scale 批次）：freqMul 乘在 getBiome 全部噪声频率上，
+// 频率越小斑块越大。small=1.0 必须与旧版逐字节一致（现有世界/确定性测试零变化的锚点）。
+// 洞穴频率与基础地形噪声不参与缩放（群系布局 ≠ 地形细节）。
+export const BIOME_SCALES = {
+  small:  { label: '小', freqMul: 1.0 },
+  medium: { label: '中', freqMul: 0.55 },
+  large:  { label: '大', freqMul: 0.35 },
+  huge:   { label: '巨大', freqMul: 0.22 }
+};
+
+export const DEFAULT_BIOME_SCALE = 'small';
+
+// 非法值兜底（存档/联机消息清洗共用）
+export function safeBiomeScale(v) {
+  return (v && BIOME_SCALES[v]) ? v : DEFAULT_BIOME_SCALE;
+}

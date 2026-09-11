@@ -52,6 +52,15 @@ else
     exit 1
 fi
 
+# 生物群系规模档位回归（纯 node：small 与旧版逐字节一致/档位单调放大/清洗兜底）
+echo "=== biome-scale-determinism ==="
+if node tests/biome-scale-determinism.mjs; then
+    echo "biome-scale-determinism: OK"
+else
+    echo "biome-scale-determinism: FAILED"
+    exit 1
+fi
+
 # 传送门逻辑回归（纯 node：框校验/填充/拆门清波/自动返程门/账本搜门）
 echo "=== portals-unit ==="
 if node tests/portals-unit.mjs; then

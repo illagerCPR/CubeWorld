@@ -45,6 +45,7 @@ import { VoxelLightUniforms, GfxState, ShadowUniforms } from '../render/VoxelLig
 import { RedstoneSystem } from '../core/RedstoneSystem.js';
 import { SaveSystem } from '../core/SaveSystem.js';
 import { getDimension } from '../core/dimensions.js';
+import { DEFAULT_BIOME_SCALE, safeBiomeScale } from '../world/biomes.js';
 import { FirstPersonHand } from '../render/FirstPersonHand.js';
 import { ParticleSystem } from '../render/ParticleSystem.js';
 import { loadSettings, applySettings, applyFogRange } from '../core/Settings.js';
@@ -98,6 +99,7 @@ export class Game {
     this.deathScreen = null;
     this.commandPanel = null;
     this.cheatsEnabled = false;
+    this.biomeScale = DEFAULT_BIOME_SCALE; // 生物群系规模档位（新建走参数/联机消息，载入走存档）
     this.paused = false;
     // 阶段10：第一人称手持物（跨存档共享相机挂点，start 时重置手持内容）
     this.hand = new FirstPersonHand(this);
@@ -210,7 +212,7 @@ export class Game {
     if (this.chatBox) { this.chatBox.dispose(); this.chatBox = null; }
   }
 
-  async start(mode, seed, loadData = null, slot = 1, cheatsEnabled = false, networkMode = false) {
+  async start(mode, seed, loadData = null, slot = 1, cheatsEnabled = false, networkMode = false, biomeScale = DEFAULT_BIOME_SCALE) {
     try {
     // 清理旧世界资源，防止切换存档时残留
     this._disposeWorld();
@@ -239,13 +241,16 @@ export class Game {
       seed = loadData.seed;
       mode = loadData.gamemode;
       this.cheatsEnabled = !!loadData.cheatsEnabled;
+      // 生物群系规模：存档携带（旧存档无字段回落 small，与旧世界逐字节一致）
+      this.biomeScale = safeBiomeScale(loadData.biomeScale);
     } else {
       this.cheatsEnabled = !!cheatsEnabled;
+      this.biomeScale = safeBiomeScale(biomeScale);
     }
 
     // 维度：存档携带（V2）或新建默认主世界；世界与天空档案按维度装配
     const dimension = (loadData && loadData.dimension) || 'overworld';
-    this.world = new World(seed, dimension);
+    this.world = new World(seed, dimension, { biomeScale: this.biomeScale });
     this.world.dragonDefeated = !!(loadData && loadData.dragonDefeated); // 末影龙击败标记（存档恢复）
     if (this.sky) this.sky.applyDimensionProfile(this.world.dimDef);
     // L4-B 太阳阴影：shadow 相机挂在 sunLight 上（Sky 跨存档共享，幂等），target 需入场景
@@ -1996,7 +2001,7 @@ export class Game {
   _resolveArrivalY(dim, x, z) {
     const def = getDimension(dim);
     if (!def) return -1;
-    const gen = def.createGenerator(this.world.seed);
+    const gen = def.createGenerator(this.world.seed, { biomeScale: this.biomeScale });
     const cx = Math.floor(x / CHUNK_SIZE), cz = Math.floor(z / CHUNK_SIZE);
     const c = new Chunk(cx, cz);
     gen.generateChunk(c);
@@ -2247,6 +2252,7 @@ export class Game {
       seed: this.world.seed,
       gamemode: p.gamemode,
       cheatsEnabled: this.cheatsEnabled,
+      biomeScale: this.biomeScale, // 群系规模跨维透传（换维重建世界后主世界群系布局不变）
       dimension: dim,
       dimensionSpawn: !hasPos, // 传送门落点带坐标；否则忽略坐标落到目标维度出生点
       dragonDefeated: !!this.world.dragonDefeated, // 击败标记跨维透传（换维重建不丢）

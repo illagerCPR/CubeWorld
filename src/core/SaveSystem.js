@@ -25,6 +25,7 @@ export class SaveSystem {
         dimension: game.world.dimension,
         gamemode: game.player.gamemode,
         cheatsEnabled: game.cheatsEnabled || false,
+        biomeScale: game.biomeScale || 'small', // 群系规模档位（旧存档无字段 → 读侧回落 small）
         player: {
           x: game.player.position.x,
           y: game.player.position.y,
@@ -100,6 +101,7 @@ export class SaveSystem {
           slot, empty: false,
           gamemode: data.gamemode || 'creative',
           cheatsEnabled: !!data.cheatsEnabled,
+          biomeScale: data.biomeScale || 'small',
           timestamp: data.timestamp || 0,
           seed: data.seed || 0,
           dimension: data.dimension || 'overworld'

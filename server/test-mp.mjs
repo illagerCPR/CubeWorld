@@ -34,11 +34,12 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // A 创建房间
 const A = await connect('Alice');
 assert('A 收到 welcome', !!A);
-A.ws.send(JSON.stringify({ t: 'create_room', seed: 12345, mode: 'survival' }));
+A.ws.send(JSON.stringify({ t: 'create_room', seed: 12345, mode: 'survival', biomeScale: 'large' }));
 await sleep(200);
 assert('A 收到 room_created', !!A.queue.find(m => m.t === 'room_created'));
 const aWorld = A.queue.find(m => m.t === 'world_info');
 assert('A 收到 world_info seed=12345', !!aWorld && aWorld.seed === 12345);
+assert('A world_info 带回 biomeScale=large', !!aWorld && aWorld.biomeScale === 'large');
 
 // B 加入
 const B = await connect('Bob');
@@ -47,6 +48,7 @@ B.ws.send(JSON.stringify({ t: 'join_room' }));
 await sleep(250);
 const bWorld = B.queue.find(m => m.t === 'world_info');
 assert('B 收到 world_info seed=12345', !!bWorld && bWorld.seed === 12345);
+assert('B world_info 沿用房间 biomeScale=large（加入者自动跟随）', !!bWorld && bWorld.biomeScale === 'large');
 assert('B 收到 A 的 player_join 回放（进房后回放已有玩家）', !!B.queue.find(m => m.t === 'player_join' && m.id === A.selfId));
 assert('A 收到 player_join Bob', !!A.queue.find(m => m.t === 'player_join' && m.id === B.selfId && m.name === 'Bob'));
 
@@ -170,6 +172,14 @@ G.ws.send(JSON.stringify({ t: 'join_room', room: 'alpha' }));
 await sleep(250);
 const gWorld = G.queue.find(m => m.t === 'world_info');
 assert('G 加入 alpha 收到 seed=555', !!gWorld && gWorld.seed === 555 && gWorld.room === 'alpha');
+assert('G world_info biomeScale 回落 small（alpha 建房未带档位）', !!gWorld && (gWorld.biomeScale || 'small') === 'small');
+
+// 重复开房 alpha 换档位：房间群系规模与 seed 同语义，仅首次固定，不得被覆盖
+F.ws.send(JSON.stringify({ t: 'create_room', seed: 666, mode: 'survival', room: 'alpha', biomeScale: 'huge' }));
+await sleep(250);
+const fWorld2 = F.queue.filter(m => m.t === 'world_info').pop();
+assert('重复开房 alpha 不改 seed', !!fWorld2 && fWorld2.seed === 555);
+assert('重复开房 alpha 不改 biomeScale（仍 small 非 huge）', !!fWorld2 && (fWorld2.biomeScale || 'small') === 'small');
 assert('G 收到 alpha 内已有玩家 F 的 player_join 回放', !!G.queue.find(m => m.t === 'player_join' && m.id === F.selfId));
 assert('F 收到 G 加入 alpha 的 player_join', !!F.queue.find(m => m.t === 'player_join' && m.id === G.selfId));
 
