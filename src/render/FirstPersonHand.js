@@ -34,6 +34,7 @@ export class FirstPersonHand {
     this.currentName = undefined; // undefined=未初始化；null=空手
     this._buildSeq = 0;           // 异步构建序号（防旧结果覆盖新选择）
     this.swingT = 1;              // 挥动进度 0..1（1=结束）
+    this.miningPeriod = 0.3;      // 阶段11：挖掘挥动周期（秒）——由 Game 按方块硬度/工具速度写入
     this.bobPhase = 0;
     this._autoSwingCd = 0;        // 按住左键的自动挥动冷却
     this.visible = false;         // 默认隐藏（主菜单不显示第一人称手臂），Game.start 里 setVisible(true)
@@ -76,17 +77,22 @@ export class FirstPersonHand {
     const bobX = Math.cos(this.bobPhase) * amp * 1.4;
 
     // 挥动动画：swingT 0→1，正弦包络
+    // 阶段11：挥速随挖掘周期缩放（单次挥动时长 ≈ 周期，连续挖掘节奏贴合实际挖穿耗时）
+    const period = Math.min(1.0, Math.max(0.2, this.miningPeriod));
+    const swingRate = 3.2 * (0.3 / period);
+    // 硬块（长周期）挥得更深更有力
+    const swAmp = 0.85 + 0.35 * Math.min(1, Math.max(0, (period - 0.25) / 0.75));
     let swDown = 0, swRot = 0;
     if (this.swingT < 1) {
-      this.swingT = Math.min(1, this.swingT + dt * 3.2);
-      swDown = Math.sin(this.swingT * Math.PI);
-      swRot = Math.sin(Math.min(1, this.swingT * 1.6) * Math.PI * 0.5) * 0.9;
+      this.swingT = Math.min(1, this.swingT + dt * swingRate);
+      swDown = Math.sin(this.swingT * Math.PI) * swAmp;
+      swRot = Math.sin(Math.min(1, this.swingT * 1.6) * Math.PI * 0.5) * 0.9 * swAmp;
     }
-    // 按住左键（挖掘/攻击中）自动连续挥动
+    // 按住左键（挖掘/攻击中）自动连续挥动（周期跟随 miningPeriod）
     const mining = this.game.controls.mouseLeft && !(this.game.inventoryScreen && this.game.inventoryScreen.visible);
     if (mining) {
       this._autoSwingCd -= dt;
-      if (this._autoSwingCd <= 0) { this._autoSwingCd = 0.3; this.swing(); }
+      if (this._autoSwingCd <= 0) { this._autoSwingCd = period; this.swing(); }
     } else {
       this._autoSwingCd = 0;
     }

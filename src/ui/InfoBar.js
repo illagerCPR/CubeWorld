@@ -40,11 +40,12 @@ export class InfoBar {
   show() { this.el.style.display = 'block'; }
   hide() { this.el.style.display = 'none'; }
 
-  // update(player, generator, sky, crosshairInfo, rttMs = null, dimensionName = null)
+  // update(player, generator, sky, crosshairInfo, rttMs = null, dimensionName = null, rttJitterMs = null)
   //   crosshairInfo: null 或 { type: 'block'|'mob', displayName, name }
   //   rttMs: 阶段10 联机平滑 RTT（毫秒），null=单机/未测得（隐藏该行）
   //   dimensionName: 非主世界维度名（生物群系行加"维度: X ｜"前缀；null=主世界）
-  update(player, generator, sky, crosshairInfo, rttMs = null, dimensionName = null) {
+  //   rttJitterMs: 阶段11 RTT 抖动（毫秒），null=未测得（网络行不显示 ± 部分）
+  update(player, generator, sky, crosshairInfo, rttMs = null, dimensionName = null, rttJitterMs = null) {
     const x = player.position.x;
     const y = player.position.y;
     const z = player.position.z;
@@ -99,7 +100,10 @@ export class InfoBar {
 
     if (rttMs != null) {
       this.rttLine.style.display = 'block';
-      this.rttLine.textContent = `网络: ${Math.round(rttMs)}ms`;
+      // 阶段11：抖动可测时显示 ± 部分（jitter 为相邻 RTT 样本差的 EMA，向上取整）
+      this.rttLine.textContent = rttJitterMs != null
+        ? `网络: ${Math.round(rttMs)}ms ±${Math.ceil(rttJitterMs)}ms`
+        : `网络: ${Math.round(rttMs)}ms`;
     } else {
       this.rttLine.style.display = 'none';
     }

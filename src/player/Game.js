@@ -108,6 +108,7 @@ export class Game {
     this.mobManager = null;
     this.selectedBlock = null;
     this.breakingProgress = 0;
+    this._miningActive = false; // 阶段11：本端正在挖掘（联机随 player_state 广播 mine 标志）
     this.lastTime = 0;
     this.running = false;
     this.frame = 0;
@@ -867,7 +868,8 @@ export class Game {
     if (this.infoBar && this.world && this.world.generator) {
       this.infoBar.update(this.player, this.world.generator, this.sky, this.crosshairInfo,
         this.networkMode && this.net ? this.net.rttMs : null, // 阶段10：联机时显示 RTT
-        this.world.dimension !== 'overworld' ? this.world.dimDef.name : null); // 非主世界显示维度
+        this.world.dimension !== 'overworld' ? this.world.dimDef.name : null, // 非主世界显示维度
+        this.networkMode && this.net ? this.net.rttJitterMs : null); // 阶段11：抖动 ± 显示
     }
 
     // 阶段10：第一人称手持物（物品变化检测 + bob/挥动；观战与旁观隐藏）
@@ -1164,6 +1166,7 @@ export class Game {
   }
 
   handleMouseInput(dt) {
+    this._miningActive = false; // 默认非挖掘（早退分支自然复位）
     if (this.inventoryScreen && this.inventoryScreen.visible) return;
     if (this.chestScreen && this.chestScreen.visible) return;
     if (this.furnaceScreen && this.furnaceScreen.visible) return;
@@ -1221,6 +1224,10 @@ export class Game {
         const held = this._heldToolItem();
         const speedMul = held && held.tool === def.tool
           ? (held.name.startsWith('gold_') ? 9 : (TOOL_TIER_SPEED[held.tier] || 1)) : 1;
+        // 阶段11：挥动节奏与挖掘进度联动——挥动周期 ≈ 实际挖穿耗时（硬块深而慢、软块轻快）
+        const breakTime = Math.min(10, Math.max(0.1, hardness / speedMul));
+        this.hand.miningPeriod = Math.min(1.0, Math.max(0.25, breakTime));
+        this._miningActive = true;
         this.breakingProgress += dt * speedMul / hardness;
         this.breakMesh.visible = true;
         this.breakMesh.position.set(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5);

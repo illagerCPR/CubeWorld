@@ -41,6 +41,20 @@ function getRoom(name) {
   return room;
 }
 
+// 阶段11：房间白名单（config.roomWhitelist，名单为空/不存在 = 不启用，所有人可进）
+function whitelistAllows(roomName, playerName) {
+  const list = serverConfig.roomWhitelist && serverConfig.roomWhitelist[roomName];
+  if (!list || !list.length) return true;
+  return list.includes(playerName);
+}
+
+// 初次进房（create_room/join_room）白名单拒绝：发 kicked（客户端停止自动重连）后断开底层连接
+function rejectByWhitelist(player, roomName) {
+  send(player.ws, { t: MSG.KICKED, reason: `房间「${roomName}」已启用白名单，你的昵称不在名单内` });
+  setTimeout(() => { try { player.ws.close(); } catch {} }, 50);
+  console.log(`[拒绝] ${player.name} 试图进入白名单房间「${roomName}」`);
+}
+
 // 服务器聊天命令（/rooms /seed /room /rebuild /help），结果只回给发起者
 function handleCommand(player, text) {
   const args = text.slice(1).trim().split(/\s+/);
@@ -66,13 +80,13 @@ function handleCommand(player, text) {
       return; // 切换结果经 WORLD_INFO/聊天消息告知
     }
   } else if (cmd === 'rebuild' || cmd === 'reset' || cmd === 'regen') {
-    if (player.id !== room.hostId) reply = '只有房主(HOST)可以重建世界';
+    if (!room.isOperator(player)) reply = '只有房主(HOST)/op 可以重建世界'; // 阶段11：op 名单放行
     else {
       room.resetWorld();
       return; // 重建结果经 WORLD_INFO(restart) 广播告知
     }
   } else if (cmd === 'help') {
-    reply = '命令: /rooms 列出房间  /seed 当前世界  /room <名> 切换房间  /rebuild 重建世界(host)  /dim <名> 切换维度  /help 帮助';
+    reply = '命令: /rooms 列出房间  /seed 当前世界  /room <名> 切换房间  /rebuild 重建世界(host/op)  /dim <名> 切换维度  /help 帮助';
   } else {
     reply = `未知命令 /${cmd}（/help 查看）`;
   }
@@ -85,6 +99,11 @@ function switchRoom(player, roomName) {
   if (!player.room) return;
   if (key === player.room.name) {
     player.room.sendTo(player, MSG.CHAT, { from: '系统', fromId: 0, text: `你已在房间「${key}」` });
+    return;
+  }
+  // 阶段11：换房同样受目标房间白名单约束（游戏内用聊天提示而非踢下线）
+  if (!whitelistAllows(key, player.name)) {
+    player.room.sendTo(player, MSG.CHAT, { from: '系统', fromId: 0, text: `房间「${key}」已启用白名单，无法切换（继续留在当前房间）` });
     return;
   }
   const target = getRoom(key);
@@ -134,16 +153,17 @@ const adminHtml = (() => {
 // 阶段5 管理面板鉴权：管理账号列表非空时开启，API 请求须带 Authorization: Bearer <token>
 // 阶段10：升级为多账号（serverConfig.adminAccounts），任一未过期账号均可通过；旧 adminToken 等价于 default 账号
 // 账号过期 → 'expired'（仅放行 POST /api/config 续期/关闭，其余 401）
+// 阶段11：返回 {state, role}，role = 'op'|'viewer'（viewer 对写操作 403）；未开启鉴权 = 全权 op
 function authState(req) {
   const accounts = Array.isArray(serverConfig.adminAccounts) ? serverConfig.adminAccounts : [];
-  if (!accounts.length) return 'ok'; // 未开启鉴权（局域网信任环境默认关闭）
+  if (!accounts.length) return { state: 'ok', role: 'op' }; // 未开启鉴权（局域网信任环境默认关闭）
   const auth = req.headers['authorization'] || '';
-  if (!auth.startsWith('Bearer ')) return 'no';
+  if (!auth.startsWith('Bearer ')) return { state: 'no', role: null };
   const token = auth.slice(7);
   const acc = accounts.find((a) => a.token === token);
-  if (!acc) return 'no';
-  if (acc.expires > 0 && Date.now() / 1000 >= acc.expires) return 'expired';
-  return 'ok';
+  if (!acc) return { state: 'no', role: null };
+  if (acc.expires > 0 && Date.now() / 1000 >= acc.expires) return { state: 'expired', role: acc.role || 'op' };
+  return { state: 'ok', role: acc.role === 'viewer' ? 'viewer' : 'op' };
 }
 
 // 阶段6 管理操作日志（内存环形缓冲，最近 200 条，/api/logs 查询）
@@ -161,7 +181,7 @@ function accountId(a) {
 // 对外返回配置时掩码口令，避免泄露明文；adminToken 兼容字段由 default 账号派生显示
 function maskedConfig() {
   const c = { ...serverConfig };
-  const accounts = (c.adminAccounts || []).map((a) => ({ id: accountId(a), label: a.label, expires: a.expires, token: a.token ? '****' : '' }));
+  const accounts = (c.adminAccounts || []).map((a) => ({ id: accountId(a), label: a.label, expires: a.expires, role: a.role === 'viewer' ? 'viewer' : 'op', token: a.token ? '****' : '' }));
   const def = accounts.find((a) => a.label === 'default') || null;
   c.adminAccounts = accounts;
   c.adminToken = def && def.token ? '****' : '';
@@ -184,15 +204,21 @@ const server = http.createServer(async (req, res) => {
     try {
       // 阶段5 鉴权：开启 adminToken 后所有 API 都要求 Bearer 口令（未开则放行）
       // 阶段6：口令已过期 → 仅允许 POST /api/config 续期/关闭，其余 401；并记录失败尝试
+      // 阶段11：viewer 角色只读——所有非 GET 请求 403（含 config/tokens/broadcast/kick/whitelist）
       const auth = authState(req);
-      if (auth === 'no') {
+      if (auth.state === 'no') {
         logAdmin('auth-fail', `访问 ${req.method} ${p} 未授权（口令缺失/错误）`);
         sendJson(res, 401, { error: '未授权：请先登录管理面板' });
         return;
       }
-      if (auth === 'expired' && !(p === '/api/config' && req.method === 'POST')) {
+      if (auth.state === 'expired' && !(p === '/api/config' && req.method === 'POST')) {
         logAdmin('auth-fail', `口令已过期访问 ${req.method} ${p}（仅允许 /api/config 续期）`);
         sendJson(res, 401, { error: '口令已过期：请在配置卡中续期（或清空口令关闭鉴权）后保存' });
+        return;
+      }
+      if (auth.state === 'ok' && auth.role === 'viewer' && req.method !== 'GET') {
+        logAdmin('auth-fail', `viewer 账号尝试写操作 ${req.method} ${p}（已拒绝）`);
+        sendJson(res, 403, { error: 'viewer 账号为只读权限，无权执行写操作' });
         return;
       }
       if (p === '/api/status' && req.method === 'GET') {
@@ -218,6 +244,36 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 200, { ok: true, config: maskedConfig() });
         return;
       }
+      // 阶段11：当前登录账号角色（面板据此适配 UI；未开启鉴权 = op）
+      if (p === '/api/whoami' && req.method === 'GET') {
+        sendJson(res, 200, { role: auth.role, authEnabled: (serverConfig.adminAccounts || []).length > 0 });
+        return;
+      }
+      // 阶段11：房间白名单 / op 名单（GET 两角色均可读；POST 已被上方 viewer 403 拦截，仅 op）
+      if (p === '/api/whitelist' && req.method === 'GET') {
+        sendJson(res, 200, { roomWhitelist: serverConfig.roomWhitelist || {}, roomOps: serverConfig.roomOps || {} });
+        return;
+      }
+      if (p === '/api/whitelist' && req.method === 'POST') {
+        const body = await readBody(req);
+        if ('roomWhitelist' in body) {
+          const wl = config.sanitizeRoomNameMap(body.roomWhitelist);
+          if (!wl) { sendJson(res, 400, { error: 'roomWhitelist 格式非法（应为 {房间名: [昵称...]}）' }); return; }
+          serverConfig.roomWhitelist = wl;
+        }
+        if ('roomOps' in body) {
+          const ops = config.sanitizeRoomNameMap(body.roomOps);
+          if (!ops) { sendJson(res, 400, { error: 'roomOps 格式非法（应为 {房间名: [昵称...]}）' }); return; }
+          serverConfig.roomOps = ops;
+        }
+        config.saveConfig(serverConfig);
+        const wlRooms = Object.entries(serverConfig.roomWhitelist).filter(([, l]) => l.length).length;
+        const opRooms = Object.entries(serverConfig.roomOps).filter(([, l]) => l.length).length;
+        logAdmin('whitelist', `更新白名单/Op 名单（启用白名单房间 ${wlRooms} 个，op 名单房间 ${opRooms} 个）`);
+        console.log(`[管理] 更新白名单/Op 名单（启用白名单房间 ${wlRooms} 个，op 名单房间 ${opRooms} 个）`);
+        sendJson(res, 200, { ok: true, roomWhitelist: serverConfig.roomWhitelist, roomOps: serverConfig.roomOps });
+        return;
+      }
       // 阶段6 操作日志（仅管理面板 / 管理员查看）
       if (p === '/api/logs' && req.method === 'GET') {
         sendJson(res, 200, { logs: [...adminLogs].reverse() }); // 最新在前
@@ -233,9 +289,10 @@ const server = http.createServer(async (req, res) => {
         const label = String(body.label || '').trim().slice(0, 24) || `token-${Date.now() % 10000}`;
         const minutes = Number(body.expiresMinutes) || 0;
         const expires = minutes > 0 ? Math.floor(Date.now() / 1000) + minutes * 60 : 0;
-        serverConfig.adminAccounts.push({ token, label, expires });
+        const role = body.role === 'viewer' ? 'viewer' : 'op'; // 阶段11：角色（缺省 op）
+        serverConfig.adminAccounts.push({ token, label, expires, role });
         config.saveConfig(serverConfig);
-        logAdmin('token-create', `新增管理账号「${label}」${expires > 0 ? `（${new Date(expires * 1000).toLocaleString()} 过期）` : '（永不过期）'}`);
+        logAdmin('token-create', `新增管理账号「${label}」（${role === 'viewer' ? 'viewer 只读' : 'op 全权'}）${expires > 0 ? `（${new Date(expires * 1000).toLocaleString()} 过期）` : '（永不过期）'}`);
         console.log(`[管理] 新增管理账号「${label}」（共 ${serverConfig.adminAccounts.length} 个）`);
         sendJson(res, 200, { ok: true, token, label, expires });
         return;
@@ -385,11 +442,15 @@ wss.on('connection', (ws, req) => {
     }
 
     if (msg.t === MSG.CREATE_ROOM) {
+      const roomKey = String(msg.room || '').trim() || 'default';
+      if (!whitelistAllows(roomKey, player.name)) { rejectByWhitelist(player, roomKey); return; } // 阶段11：白名单
       const room = getRoom(msg.room);
       if (!room.addPlayer(player)) return; // 房间已满：addPlayer 已发 kicked
       player.room = room;
       room.createRoom(player, msg);
     } else if (msg.t === MSG.JOIN_ROOM) {
+      const roomKey = String(msg.room || '').trim() || 'default';
+      if (!whitelistAllows(roomKey, player.name)) { rejectByWhitelist(player, roomKey); return; } // 阶段11：白名单
       const room = getRoom(msg.room);
       if (!room.addPlayer(player)) return; // 房间已满：addPlayer 已发 kicked
       player.room = room;
@@ -400,11 +461,14 @@ wss.on('connection', (ws, req) => {
       player = null;
       ws.close();
     } else if (msg.t === MSG.SWITCH_ROOM) {
-      // 阶段5：世界内换房（保持连接，客户端重启本地世界）
+      // 阶段5：世界内换房（保持连接，客户端重启本地世界）；阶段11：目标房间白名单约束
       switchRoom(player, String(msg.room || ''));
     } else if (msg.t === MSG.WORLD_RESET) {
-      // 阶段5：重建当前房间世界（仅 host；非 host 直接忽略）
-      if (player.room && player.room.hostId === player.id) player.room.resetWorld();
+      // 阶段5：重建当前房间世界（仅 host；阶段11：房间 op 名单放行；无权限回系统聊天提示）
+      if (player.room) {
+        if (player.room.isOperator(player)) player.room.resetWorld();
+        else player.room.sendTo(player, MSG.CHAT, { from: '系统', fromId: 0, text: '只有房主(HOST)/op 可以重建世界' });
+      }
     } else if (msg.t === MSG.CHAT && String(msg.text || '').startsWith('/')) {
       // 服务器聊天命令：/rooms /seed /room /rebuild /help
       handleCommand(player, String(msg.text || '').slice(0, 120));

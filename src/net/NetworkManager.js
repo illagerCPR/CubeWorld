@@ -2,6 +2,7 @@
 import { MSG } from '../../server/protocol.js';
 import { RemotePlayer } from '../entity/RemotePlayer.js';
 import { playerColorCss } from './playerColor.js';
+import { createNetStats, pushRttSample } from './netStats.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { getDimension } from '../core/dimensions.js';
 
@@ -32,7 +33,10 @@ export class NetworkManager {
     this._explicitClose = false;  // 主动关闭（returnToMenu）则不自动重连
     this.onStatusChange = null;   // (status: 'connected'|'reconnecting'|'closed', text) => void
     // 阶段10：RTT 直测（应用层 ping/pong 计时），供插值自适应与信息栏显示
+    // 阶段11：rttMs + rttJitterMs（抖动 EMA）经 netStats 纯函数维护
     this.rttMs = null;            // 平滑后的往返延迟（毫秒，EMA 0.8/0.2）；null=尚未测得
+    this.rttJitterMs = null;      // 阶段11：RTT 抖动（相邻样本差绝对值的 EMA）；null=尚未测得
+    this._netStats = createNetStats();
     this._pingSeq = 0;
     this._pingTimer = 0;
     this._pingInterval = 2;       // 每 2 秒直测一次 RTT
@@ -319,11 +323,12 @@ export class NetworkManager {
         break;
       case MSG.PONG:
         // 阶段10：自己发起的 RTT 直测回包（服务器回显 ts）——与心跳 PONG（无 ts）区分
+        // 阶段11：RTT 与抖动统一经 netStats 更新（非法样本内部忽略）
         if (typeof msg.ts === 'number' && msg.ts > 0) {
           const rtt = performance.now() - msg.ts;
-          if (rtt >= 0 && rtt < 10000) {
-            this.rttMs = this.rttMs == null ? rtt : this.rttMs * 0.8 + rtt * 0.2;
-          }
+          pushRttSample(this._netStats, rtt);
+          this.rttMs = this._netStats.rttMs;
+          this.rttJitterMs = this._netStats.rttJitterMs;
         }
         break;
       case MSG.DROP_DENY:
@@ -419,6 +424,7 @@ export class NetworkManager {
       onGround: p.onGround, flying: p.flying, inWater: p.inWater,
       selected: this.game.inventory.hotbarSelected,
       held: sel ? sel.name : null,
+      mine: this.game._miningActive ? 1 : 0, // 阶段11：挖掘中标志（远端播放挥臂）
     });
   }
 

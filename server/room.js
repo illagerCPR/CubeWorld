@@ -294,6 +294,14 @@ export class Room {
     return h ? h.mode : 'survival';
   }
 
+  // 阶段11：游戏内权限——host，或昵称在 config.roomOps[房间名] 名单内的玩家（改模式/设时间/重建世界）
+  isOperator(player) {
+    if (!player) return false;
+    if (player.id === this.hostId) return true;
+    const ops = this.config && this.config.roomOps && this.config.roomOps[this.name];
+    return !!(ops && ops.length && ops.includes(player.name));
+  }
+
   // 重建当前房间世界（阶段5，仅 host 可触发）：新种子 + 清空方块/掉落/时间，
   // 广播 WORLD_INFO(restart) 让所有端重启本地世界，并重放 PLAYER_JOIN 让各端重建远端玩家
   resetWorld() {
@@ -465,13 +473,14 @@ export class Room {
     p.x = safeNum(msg.x, p.x); p.y = safeNum(msg.y, p.y); p.z = safeNum(msg.z, p.z);
     p.yaw = safeNum(msg.yaw, p.yaw); p.pitch = safeNum(msg.pitch, p.pitch);
     player.onGround = !!msg.onGround; player.flying = !!msg.flying; player.inWater = !!msg.inWater;
+    player.mining = !!msg.mine; // 阶段11：挖掘中标志（瞬时状态，不进 joinInfo）
     // 阶段6：手持物品同步——广播当前快捷栏槽位与物品名（远端模型据此渲染手持物）
     if (msg.selected !== undefined) player.selected = safeInt(msg.selected, player.selected);
     if (typeof msg.held === 'string') player.heldItem = msg.held.slice(0, 32);
     this.broadcastDim(MSG.PLAYER_STATE, {
       id: player.id, x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch,
       onGround: player.onGround, flying: player.flying, inWater: player.inWater,
-      selected: player.selected, held: player.heldItem,
+      selected: player.selected, held: player.heldItem, mine: player.mining ? 1 : 0,
       ts: Date.now(), // 阶段5：服务器时间戳，客户端做时间对齐的缓冲插值
     }, player.dim, player.id);
   }
@@ -566,7 +575,10 @@ export class Room {
   }
 
   onGamemode(player, msg) {
-    if (player.id !== this.hostId) return; // 仅 host 可改模式
+    if (!this.isOperator(player)) { // 阶段11：host/op 可改自己的模式；拒绝给系统提示（原为静默忽略）
+      this.sendTo(player, MSG.CHAT, { from: '系统', fromId: 0, text: '只有房主(HOST)/op 可以切换游戏模式' });
+      return;
+    }
     player.mode = msg.mode === 'creative' ? 'creative' : (msg.mode === 'spectator' ? 'spectator' : 'survival');
     this.broadcast(MSG.GAMEMODE, { id: player.id, mode: player.mode });
   }
@@ -625,7 +637,10 @@ export class Room {
   }
 
   onSetTime(player, msg) {
-    if (player.id !== this.hostId) return; // 仅 host 可设时间
+    if (!this.isOperator(player)) { // 阶段11：host/op 可设时间；拒绝给系统提示（原为静默忽略）
+      this.sendTo(player, MSG.CHAT, { from: '系统', fromId: 0, text: '只有房主(HOST)/op 可以设定时间' });
+      return;
+    }
     this.time = Math.min(1, Math.max(0, safeNum(msg.time, this.time)));
     this.broadcast(MSG.TIME, { time: this.time });
     this.save();

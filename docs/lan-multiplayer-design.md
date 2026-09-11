@@ -593,12 +593,25 @@ server/
 - [x] **插值延迟 RTT 直测**：客户端每 2s 发 `ping {seq, ts}`（应用层），服务器回显 `{seq, ts}`，客户端 PONG 分支算 EMA(0.8/0.2) 平滑 RTT（`NetworkManager.rttMs`）；`RemotePlayer` 自适应以 RTT 为主信号（目标延迟 ≈ 0.05s + RTT/2，钳 0.05~0.4s，平滑靠拢），头余量仅保留欠载保护（<0.03s 加大延迟）；InfoBar 联机时显示「网络: Xms」行。
 - [x] 验证：`node --check` + `npm run build`（47 模块，655 kB）+ 新增 `server/test-stage10.mjs` **41/41**（RTT 回显/完整快捷栏透传与 joinRoom 回放/归属锁拒绝与补发实体/owner 放行/普通掉落先到先得/账本不存在 deny 防复制/多账号生成轮换撤销与旧接口兼容/踢出原因透传）+ 全基线 test-mp 34/34、test-store 15/15、test-admin 26/26、test-stage5 16/16、test-stage6 20/20 全绿 + agent-browser 冒烟（第一人称手持方块/火把/物品截图、挥动动画、远端玩家手持 3D 模型、joinInfo 回放断言、InfoBar RTT 行、掉落锁确定性断言：锁内拦截/过期放行、管理面板生成→轮换→撤销全流程）。
 
-### 阶段 11 及以后（候选项）
+### 阶段 11（完成，2026-09-02）—— 打磨包：挥动联动 / 头顶快捷栏 / 白名单与权限 / 抖动自适应
 
-- 手持物挥动与挖掘进度联动（按方块硬度同步挥动频率/幅度）。
-- 远端玩家快捷栏 UI 可视化（头顶槽位图标，基于已同步的 hotbar 数据）。
-- 服务器房间白名单 / 每账号权限分级（op 与 viewer）。
-- 插值延迟结合抖动方差的更细自适应。
+- [x] **手持物挥动与挖掘进度联动**：`Game.handleMouseInput` 生存挖掘分支按 `hardness/speedMul` 算实际挖穿耗时，写入 `hand.miningPeriod`（钳 0.25~1.0s）；`FirstPersonHand` 自动挥动周期从固定 0.3s 改为跟随该值，挥速同步缩放（单次挥动时长 ≈ 周期）、幅度随硬度微调（硬块更深 swAmp 0.85~1.2）。**联机可见**：`player_state` 增 `mine` 标志（本端挖掘中，20Hz 消息 +1 字节）→ `Room.onPlayerState` 透传 → `RemotePlayer` 记录 `mining`，右臂在行走摆臂上叠加 ~0.3s 周期敲击动作（`_mineAmp` 平滑进出防关节跳变；飞行/死亡/重生复位）。
+- [x] **远端玩家头顶快捷栏可视化**：新文件 `src/render/RemoteHotbarSprite.js`——9 槽 canvas sprite（每实例独享 texture/material，dispose 释放；昵称上方 y+2.62，renderOrder 999 / depthTest false）。图标走与 Hotbar 同口径的解析链（`itemSvgMap[name]` → `blockSvgMap[block.side||top]`），`svgToImage` 异步加载完成后补画，Image 模块级缓存复用。**重绘节流**：内容/选中槽指纹比较（player_state 20Hz 触发仅字符串比较），变化才重绘；全空快捷栏隐藏；死亡隐藏、重生恢复。
+- [x] **房间白名单 + 权限分级**（名单存 `config.json`，管理面板实时改）：
+  - `config.js`：新增 `roomWhitelist` / `roomOps`（`{<房间名>: [昵称...]}`，≤32 房 × 16 名，trim 去重，非法整体丢弃）；`adminAccounts` 每项增 `role: 'op'|'viewer'`（缺省归一 op，旧配置兼容）。
+  - 入房拦截：`CREATE_ROOM` / `JOIN_ROOM` 白名单拒 → `kicked`（客户端停自动重连）+ 断开；`SWITCH_ROOM`（含 `/room` 命令）游戏内用系统聊天拒绝（与"房间已满"同款，不踢下线）。
+  - 角色分级：`authState` 返回 `{state, role}`；**viewer 所有非 GET 请求 403**（config/whitelist/kick/tokens/broadcast 全拒，写操作日志记录）；`GET /api/whoami` 供面板取角色；未开启鉴权 = op。`POST /api/whitelist`（op）整卡替换两份名单。
+  - 房间 op：`Room.isOperator()`（host 或昵称在 `roomOps[房间名]`）放行 `gamemode` / `set_time` / `world_reset`（原仅 hostId）；拒绝从静默改为系统聊天提示「只有房主(HOST)/op 可以…」。
+  - `admin.html`：角色标签（顶部）+ viewer 隐藏全部写按钮（`body.viewer .card button`）+ 账号表增角色列 + 生成账号可选 op/viewer + 新「房间白名单 / Op 名单」卡（每行 `房间名=昵称1,昵称2`，textarea 聚焦编辑中不被 3s 轮询回显覆盖）。
+- [x] **插值延迟结合抖动方差**：新文件 `src/net/netStats.js` 纯函数模块（无 DOM/three 依赖，node 直测）——`pushRttSample`（RTT EMA 0.8/0.2 + 抖动 = 相邻样本差绝对值的 EMA，非法样本忽略）与 `targetInterpDelay`（= 0.05 + rtt/2000 + jitter/4000，钳 0.05~0.4，抖动权重取 RTT 一半）。`NetworkManager` PONG 分支改走 netStats（`rttMs` + `rttJitterMs`）；`RemotePlayer` 自适应目标延迟叠加抖动项（RTT 缺失时保留头余量欠载保护兜底；样本下标 `i ≤ len-2` 防越界不变）；InfoBar 网络行 `网络: Xms ±Yms`（第 7 参，旧签名兼容）。
+- [x] 验证：`node --check` × 10 + `npm run build`（100 模块）+ 新增 `server/test-stage11.mjs` **33/33**（netStats EMA/抖动/钳位、白名单 trim 回读、名单外 join/create 被 kicked 断开、名单内放行、换房聊天拒绝且留原房、无名单对照、whoami 三态、viewer GET 放行 / 全部写 403、无 role 旧账号归一 op、房间 op gamemode/set_time/world_reset 放行与名单外拒绝提示、清空名单失权）+ 全基线 test-mp 34/34、test-store 15/15、test-admin 26/26、test-stage5 16/16、test-stage6 20/20、test-stage10 41/41 全绿 + agent-browser 双会话冒烟（头顶快捷栏随切槽高亮、挖掘挥动软/硬块节奏、远端挖掘摆臂、InfoBar ±抖动行、白名单拒绝提示）。
+
+### 阶段 12 及以后（候选项）
+
+- 玩家列表面板（Tab 键）：房间内玩家/维度/ping 一览（数据已齐）。
+- 远端玩家盔甲外观同步（盔甲槽已有数据通道，缺外观渲染）。
+- 服务器性能面板：每房间消息速率 / 字节量统计（管理面板图表化）。
+- 房间内私聊 / 队伍分组。
 
 ---
 

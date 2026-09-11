@@ -4,8 +4,10 @@
 // 阶段 6：手持物品外观同步（右臂挂 sprite 渲染当前手持物）+ 插值延迟自适应（按缓冲头余量动态调延迟）
 import * as THREE from 'three';
 import { playerColorHue, playerColorCss } from '../net/playerColor.js';
+import { targetInterpDelay } from '../net/netStats.js';
 import { SVGTextures } from '../render/SVGTextures.js';
 import { buildHeldItemTemplate } from '../render/HeldItemMesh.js';
+import { RemoteHotbarSprite } from '../render/RemoteHotbarSprite.js';
 
 // 简化方块人部件（局部坐标原点在脚 y=0，单位：格）
 // 关节部件（head/arm/leg）用 pivot 支撑：mesh 挂在 pivot 下，旋转 pivot 即旋转肢体
@@ -67,6 +69,9 @@ export class RemotePlayer {
     this.nameSprite = this._makeNameSprite(name);
     scene.add(this.nameSprite);
     scene.add(this.group);
+    // 阶段11：头顶快捷栏 sprite（昵称上方；hotbar 数据经 applyFull/setHotbar 驱动）
+    this.hotbarSprite = new RemoteHotbarSprite();
+    scene.add(this.hotbarSprite.sprite);
 
     this.yaw = (pos && pos.yaw) || 0;
     this.pitch = (pos && pos.pitch) || 0;
@@ -75,6 +80,7 @@ export class RemotePlayer {
     this._targetPitch = this.pitch;
     this.group.position.copy(this._target);
     this.nameSprite.position.set(this._target.x, this._target.y + 2.3, this._target.z);
+    this.hotbarSprite.sprite.position.set(this._target.x, this._target.y + 2.62, this._target.z);
     this.flying = false;
     this.inWater = false;
     this.onGround = false;
@@ -91,6 +97,10 @@ export class RemotePlayer {
     // 行走动画状态：摆动相位 + 估算水平速度（由缓冲段位移算出）
     this._walkPhase = 0;
     this._speed = 0;
+    // 阶段11：挖掘挥臂（player_state 的 mine 标志驱动，叠加在行走摆臂上）
+    this.mining = false;
+    this._minePhase = 0;
+    this._mineAmp = 0; // 0..1 挥臂强度（进出挖掘状态平滑过渡，防关节跳变）
   }
 
   _makeNameSprite(name) {
@@ -131,8 +141,12 @@ export class RemotePlayer {
     });
     if (this._buffer.length > 40) this._buffer.shift();
     // 阶段6/10：手持物品变化时更新右臂挂载的 3D 模型；selected 槽位随状态更新
-    if (typeof s.selected === 'number') this.selectedSlot = s.selected;
+    if (typeof s.selected === 'number') {
+      this.selectedSlot = s.selected;
+      this._refreshHotbarSprite(); // 滚轮切槽 20Hz 高频：sprite 内部签名比较挡掉无效重绘
+    }
     if (typeof s.held === 'string' && s.held !== this.heldItem) this._setHeld(s.held);
+    this.mining = !!s.mine; // 阶段11：远端挖掘标志
   }
 
   applyFull(s) {
@@ -147,6 +161,12 @@ export class RemotePlayer {
       const name = this.hotbar[this.selectedSlot].name;
       if (name !== this.heldItem) this._setHeld(name);
     }
+    this._refreshHotbarSprite();
+  }
+
+  // 阶段11：头顶快捷栏重绘（内部签名比较，内容未变只做字符串比较零重绘）
+  _refreshHotbarSprite() {
+    if (this.hotbarSprite) this.hotbarSprite.setHotbar(this.hotbar, this.selectedSlot);
   }
 
   // 阶段6→10：更新手持物品并异步重建右臂挂载的 3D 模型（带序号防竞态）
@@ -185,6 +205,7 @@ export class RemotePlayer {
     this.group.visible = true;
     if (this.nameSprite) this.nameSprite.visible = true;
     this._buffer.length = 0; // 重生=瞬移，丢弃旧样本避免轨迹回拉
+    this.mining = false; this._mineAmp = 0; this._minePhase = 0; // 阶段11：复位挖掘挥臂
     this._target.set(s.x, s.y, s.z);
     this._targetYaw = s.yaw || this.yaw;
     this._targetPitch = s.pitch || this.pitch;
@@ -237,11 +258,13 @@ export class RemotePlayer {
 
       // 阶段6/10 自适应插值延迟：
       // ① RTT 直测可用（应用层 ping/pong 平滑值）→ 以 RTT 为主信号：目标延迟 ≈ 单向延迟(RTT/2) + 状态包缓冲
-      // ② 头余量仅作欠载保护（渲染时刻逼近最新样本时加大延迟吸收抖动）
+      // ② 阶段11：叠加抖动吸收项（jitter/4000，抖动大 → 延迟略增），经 netStats.targetInterpDelay 统一计算
+      // ③ 头余量仅作欠载保护（渲染时刻逼近最新样本时加大延迟吸收抖动）
       const net = this.game && this.game.net ? this.game.net : null;
       const rttS = net && typeof net.rttMs === 'number' ? net.rttMs : null;
       if (rttS != null) {
-        const target = Math.min(0.4, Math.max(0.05, 0.05 + rttS / 2000)); // rttMs/1000*0.5 + 0.05 基底
+        const jitterS = net && typeof net.rttJitterMs === 'number' ? net.rttJitterMs : 0;
+        const target = targetInterpDelay(rttS, jitterS);
         this._interpDelay += (target - this._interpDelay) * Math.min(1, dt * 0.5); // 平滑靠拢，RTT 突变不猛拉
       }
       const headroom = buf[buf.length - 1].ts - renderTime;
@@ -274,13 +297,25 @@ export class RemotePlayer {
     const s = Math.sin(this._walkPhase) * swing;
     const s2 = Math.sin(this._walkPhase + Math.PI) * swing;
     if (this.joints.armL) this.joints.armL.pivot.rotation.x = s;
-    if (this.joints.armR) this.joints.armR.pivot.rotation.x = s2;
+    // 阶段11：挖掘挥臂——右臂在行走摆臂之上叠加固定节奏（~0.3s）的敲击动作，飞行时不挥
+    const mineTarget = (this.mining && !this.flying) ? 1 : 0;
+    this._mineAmp += (mineTarget - this._mineAmp) * Math.min(1, dt * 10);
+    if (this._mineAmp > 0.01) {
+      this._minePhase += dt * 21; // 2π/21 ≈ 0.3s 一个敲击周期
+      if (this._minePhase > Math.PI * 2) this._minePhase -= Math.PI * 2;
+    }
+    const mineSw = Math.sin(this._minePhase) * 0.8 * this._mineAmp;
+    if (this.joints.armR) this.joints.armR.pivot.rotation.x = s2 - mineSw;
     if (this.joints.legL) this.joints.legL.pivot.rotation.x = s2;
     if (this.joints.legR) this.joints.legR.pivot.rotation.x = s;
 
-    // 昵称标签跟随
+    // 昵称标签跟随（阶段11：头顶快捷栏 sprite 一并跟随）
     if (this.nameSprite) {
       this.nameSprite.position.set(this.group.position.x, this.group.position.y + 2.3, this.group.position.z);
+    }
+    if (this.hotbarSprite) {
+      this.hotbarSprite.sprite.position.set(this.group.position.x, this.group.position.y + 2.62, this.group.position.z);
+      this.hotbarSprite.setVisible(!this.dead); // 死亡隐藏（内部再按"有物品"过滤）
     }
   }
 
@@ -301,6 +336,11 @@ export class RemotePlayer {
         this.nameSprite.material.dispose();
       }
       this.nameSprite = null;
+    }
+    // 阶段11：释放头顶快捷栏 sprite（texture/material 每实例独享，必须 dispose）
+    if (this.hotbarSprite) {
+      this.hotbarSprite.dispose();
+      this.hotbarSprite = null;
     }
   }
 }

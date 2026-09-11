@@ -1,6 +1,8 @@
 // config.js -- 服务器配置：默认参数 + 磁盘持久化（server/config.json，管理面板可改，重启保留）
 // 阶段10：管理鉴权升级为多账号 adminAccounts [{token,label,expires}]；
 //         旧字段 adminToken/adminTokenExpires 保留为兼容接口（等价于 label='default' 的账号）
+// 阶段11：adminAccounts 增 role（'op'|'viewer'，缺省 op）；新增房间白名单 roomWhitelist 与
+//         房间 op 名单 roomOps（{<房间名>: [昵称...]}，名单为空/不存在 = 不启用）
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +16,9 @@ const DEFAULTS = {
   maxPlayersPerRoom: 10, // 单个房间最大玩家数（超出拒绝加入）
   adminToken: '',        // 兼容接口：等价于 default 账号（空=无 default 账号；全部账号为空时=不鉴权）
   adminTokenExpires: 0,  // 兼容接口：default 账号过期时间（Unix 秒，0=永不过期）
-  adminAccounts: [],     // 阶段10：管理账号列表 [{token,label,expires}]；空数组=不鉴权（局域网信任）
+  adminAccounts: [],     // 阶段10：管理账号列表 [{token,label,expires,role}]；空数组=不鉴权（局域网信任）
+  roomWhitelist: {},     // 阶段11：房间白名单 {<房间名>: [昵称...]}；名单非空时仅名单内昵称可进
+  roomOps: {},           // 阶段11：房间 op 名单 {<房间名>: [昵称...]}；名单内玩家享 host 级游戏权限（改模式/设时间/重建世界）
 };
 
 // 数字配置的合法范围（防止管理面板提交脏值）
@@ -28,7 +32,11 @@ const RANGES = {
 // 字符串配置的最大长度（如管理口令）
 const STRING_MAX = { adminToken: 64 };
 
-// 校验管理账号数组（阶段10）：≤10 项，每项 {token 1..64, label ≤24, expires 0..2100年}；非法整体丢弃
+// 房间名/玩家昵称映射表的清洗上限
+const ROOM_MAP_LIMITS = { maxRooms: 32, maxNames: 16, roomNameMax: 32, playerNameMax: 16 };
+
+// 校验管理账号数组（阶段10/11）：≤10 项，每项 {token 1..64, label ≤24, expires 0..2100年, role}；
+// role 仅认 'viewer'（只读），其余一律归一为 'op'（含缺省/旧配置，向后兼容）；非法整体丢弃
 export function sanitizeAccounts(raw) {
   if (!Array.isArray(raw) || raw.length > 10) return null;
   const out = [];
@@ -37,7 +45,30 @@ export function sanitizeAccounts(raw) {
     const label = typeof a.label === 'string' ? a.label.slice(0, 24) : '';
     const n = Number(a.expires);
     const expires = Number.isFinite(n) && n >= 0 && n <= 4102444800 ? Math.round(n) : 0;
-    out.push({ token: a.token, label, expires });
+    const role = a.role === 'viewer' ? 'viewer' : 'op';
+    out.push({ token: a.token, label, expires, role });
+  }
+  return out;
+}
+
+// 校验 {<房间名>: [昵称...]} 形态的映射（阶段11：roomWhitelist / roomOps 共用）：
+// ≤32 个房间 × 每房 ≤16 个昵称（去重），房间名/昵称裁剪去空白；非法整体返回 null
+export function sanitizeRoomNameMap(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out = {};
+  let rooms = 0;
+  for (const [rawRoom, rawNames] of Object.entries(raw)) {
+    if (rooms >= ROOM_MAP_LIMITS.maxRooms) break;
+    const room = String(rawRoom || '').trim().slice(0, ROOM_MAP_LIMITS.roomNameMax);
+    if (!room || !Array.isArray(rawNames)) continue;
+    const names = [];
+    for (const v of rawNames) {
+      const s = String(v || '').trim().slice(0, ROOM_MAP_LIMITS.playerNameMax);
+      if (s && !names.includes(s)) names.push(s);
+      if (names.length >= ROOM_MAP_LIMITS.maxNames) break;
+    }
+    out[room] = names;
+    rooms++;
   }
   return out;
 }
@@ -64,8 +95,12 @@ export function loadConfig() {
         cfg.adminAccounts = accounts;
       } else if (cfg.adminToken) {
         // 旧版配置迁移：adminToken 非空 → default 账号（沿用 adminTokenExpires）
-        cfg.adminAccounts = [{ token: cfg.adminToken, label: 'default', expires: cfg.adminTokenExpires }];
+        cfg.adminAccounts = [{ token: cfg.adminToken, label: 'default', expires: cfg.adminTokenExpires, role: 'op' }];
       }
+      const whitelist = sanitizeRoomNameMap(data.roomWhitelist);
+      if (whitelist) cfg.roomWhitelist = whitelist;
+      const ops = sanitizeRoomNameMap(data.roomOps);
+      if (ops) cfg.roomOps = ops;
     }
   } catch (e) {
     console.error(`[配置] 读取 ${CONFIG_PATH} 失败: ${e.message}`);
@@ -90,6 +125,15 @@ export function applyConfig(current, patch) {
   if ('adminAccounts' in patch) {
     const accounts = sanitizeAccounts(patch.adminAccounts);
     if (accounts) next.adminAccounts = accounts;
+  }
+  // 阶段11：房间白名单 / op 名单（整体替换，非法丢弃）
+  if ('roomWhitelist' in patch) {
+    const wl = sanitizeRoomNameMap(patch.roomWhitelist);
+    if (wl) next.roomWhitelist = wl;
+  }
+  if ('roomOps' in patch) {
+    const ops = sanitizeRoomNameMap(patch.roomOps);
+    if (ops) next.roomOps = ops;
   }
   // 兼容语义：adminToken 变更同步到 default 账号（空=移除 default 账号；其余账号不受影响）
   if ('adminToken' in patch) {

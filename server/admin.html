@@ -36,11 +36,16 @@
   .toast.err { background: #9f3a3a; }
   textarea { width: 100%; min-height: 40px; padding: 8px; background: #1b1f27; color: #e6e6e6;
              border: 1px solid #4a5264; border-radius: 4px; font-family: inherit; }
+  /* 阶段11：viewer 只读角色——隐藏所有写操作按钮（含保存/生成/踢出/广播/轮换等） */
+  body.viewer .card button { display: none; }
+  body.viewer .card textarea, body.viewer .card input, body.viewer .card select { opacity: 0.6; }
+  .tag-viewer { background: #3f5a7a; color: #bfe0ff; }
 </style>
 </head>
 <body>
   <h1>🖥 CubeWorld 服务器管理面板</h1>
   <div class="sub" id="server-line">加载中…</div>
+  <div class="sub" id="role-line" style="display:none; margin-top:2px;">当前角色：<span class="tag" id="role-tag">-</span></div>
 
   <!-- 阶段6：口令过期提示（仍可编辑下方配置卡续期/关闭鉴权） -->
   <div id="expired-banner" style="display:none; background:#8a3a2f; color:#fff; padding:10px 14px; border-radius:6px; margin-bottom:16px;">
@@ -92,8 +97,30 @@
         <input id="acc-expiry" type="number" min="0" step="1" value="0" style="width:120px;">
       </div>
       <div class="cfg-item" style="margin-bottom:0;">
+        <label>角色（阶段11）</label>
+        <select id="acc-role" style="padding:6px 8px;background:#1b1f27;color:#e6e6e6;border:1px solid #4a5264;border-radius:4px;">
+          <option value="op">op（全权）</option>
+          <option value="viewer">viewer（只读）</option>
+        </select>
+      </div>
+      <div class="cfg-item" style="margin-bottom:0;">
         <button class="btn-primary" onclick="createToken()">➕ 生成新账号</button>
       </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>房间白名单 / Op 名单（阶段11）</h2>
+    <div style="font-size:12px;color:#7a8394;margin-bottom:10px;">
+      每行一个房间，格式 <code>房间名=昵称1,昵称2</code>。<b>白名单</b>非空时仅名单内昵称可创建/加入/切换到该房间；
+      <b>Op 名单</b>内的玩家在游戏内享有 host 级权限（切换模式 / 设定时间 / 重建世界）。留空（无等号行）= 该房间不启用。
+    </div>
+    <label style="font-size:13px;color:#aab3c2;">白名单（roomWhitelist）</label>
+    <textarea id="wl-text" rows="3" placeholder="builder世界=甲,乙&#10;生存服=丙"></textarea>
+    <label style="font-size:13px;color:#aab3c2;margin-top:8px;display:block;">Op 名单（roomOps）</label>
+    <textarea id="ops-text" rows="3" placeholder="builder世界=甲"></textarea>
+    <div style="margin-top:8px;">
+      <button class="btn-primary" onclick="saveWhitelist()">保存名单</button>
     </div>
   </div>
 
@@ -307,6 +334,19 @@
         expSec > 0 ? Math.max(0, Math.round((expSec - Date.now() / 1000) / 60)) : 0;
       // 接口正常 → 隐藏口令过期横幅
       document.getElementById('expired-banner').style.display = 'none';
+      // 阶段11：当前账号角色（面板 UI 适配 + 角色标签）
+      try {
+        const me = await api('/api/whoami');
+        applyRoleUi(me.role);
+      } catch (e2) { /* 401 已由 api() 处理 */ }
+      // 阶段11：白名单/Op 名单回显（textarea 聚焦编辑中时跳过，防 3s 轮询打断输入）
+      try {
+        const wl = await api('/api/whitelist');
+        const wlEl = document.getElementById('wl-text');
+        const opsEl = document.getElementById('ops-text');
+        if (document.activeElement !== wlEl) wlEl.value = fmtRoomLines(wl.roomWhitelist);
+        if (document.activeElement !== opsEl) opsEl.value = fmtRoomLines(wl.roomOps);
+      } catch (e2) { /* 401 已由 api() 处理 */ }
       renderRooms();
       renderAccounts(); // 阶段10：管理账号列表
       // 阶段6 操作日志（独立容错：日志接口异常不影响状态刷新）
@@ -327,6 +367,48 @@
       <tr><th>时间</th><th>操作</th><th>详情</th></tr>
       ${logs.map((l) => `<tr><td>${esc(new Date(l.time).toLocaleTimeString())}</td><td>${esc(l.op)}</td><td>${esc(l.detail)}</td></tr>`).join('')}
     </table>`;
+  }
+
+  // ===== 阶段11：角色 UI 适配 + 白名单/Op 名单 =====
+
+  // viewer 只读：body.viewer 隐藏所有写按钮（CSS），并显示角色标签
+  function applyRoleUi(role) {
+    const isViewer = role === 'viewer';
+    document.body.classList.toggle('viewer', isViewer);
+    document.getElementById('role-line').style.display = 'block';
+    const tag = document.getElementById('role-tag');
+    tag.textContent = isViewer ? 'viewer（只读）' : 'op（全权）';
+    tag.className = 'tag' + (isViewer ? ' tag-viewer' : ' tag-host');
+  }
+
+  // 名单文本 ↔ 对象：每行 `房间名=昵称1,昵称2`；空行/无等号行忽略
+  function parseRoomLines(text) {
+    const out = {};
+    for (const line of String(text || '').split('\n')) {
+      const t = line.trim();
+      if (!t) continue;
+      const i = t.indexOf('=');
+      if (i < 0) continue;
+      const room = t.slice(0, i).trim();
+      if (!room) continue;
+      out[room] = t.slice(i + 1).split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+    }
+    return out;
+  }
+
+  function fmtRoomLines(map) {
+    return Object.entries(map || {}).map(([room, names]) => `${room}=${(names || []).join(', ')}`).join('\n');
+  }
+
+  async function saveWhitelist() {
+    const body = {
+      roomWhitelist: parseRoomLines(document.getElementById('wl-text').value),
+      roomOps: parseRoomLines(document.getElementById('ops-text').value),
+    };
+    const r = await api('/api/whitelist', 'POST', body);
+    if (r.ok) toast('白名单/Op 名单已保存并生效');
+    else toast(r.error || '保存失败', true);
+    refresh();
   }
 
   async function saveConfig() {
@@ -388,11 +470,12 @@
       return;
     }
     el.innerHTML = `<table>
-      <tr><th>备注</th><th>口令</th><th>有效期</th><th>操作</th></tr>
+      <tr><th>备注</th><th>口令</th><th>角色</th><th>有效期</th><th>操作</th></tr>
       ${list.map((a) => `
         <tr>
           <td>${esc(a.label || '(未命名)')}</td>
           <td><code>${esc(a.token || '****')}</code></td>
+          <td>${a.role === 'viewer' ? '<span class="tag tag-viewer">viewer</span>' : '<span class="tag tag-host">op</span>'}</td>
           <td>${fmtAccountExpiry(a.expires)}</td>
           <td>
             <button class="btn-warn btn-sm" onclick="rotateToken('${esc(a.id)}')">轮换</button>
@@ -410,7 +493,8 @@
   async function createToken() {
     const label = document.getElementById('acc-label').value.trim();
     const minutes = Number(document.getElementById('acc-expiry').value) || 0;
-    const r = await api('/api/tokens', 'POST', { label, expiresMinutes: minutes });
+    const role = document.getElementById('acc-role').value === 'viewer' ? 'viewer' : 'op'; // 阶段11：角色
+    const r = await api('/api/tokens', 'POST', { label, expiresMinutes: minutes, role });
     if (r.ok) {
       document.getElementById('acc-label').value = '';
       revealSecret(r.label || label, r.token);
