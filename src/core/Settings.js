@@ -3,6 +3,7 @@
 // 平滑光照/AO 改动由调用方负责 world.markAllDirty()（见 VideoSettings 面板）。
 import { RenderQuality } from '../render/ChunkMesh.js';
 import { VoxelLightUniforms } from '../render/VoxelLight.js';
+import { audio } from '../audio/AudioEngine.js';
 
 const KEY = 'cubeworld-settings';
 
@@ -20,6 +21,8 @@ export const DEFAULT_SETTINGS = {
   gfxGodRays: true,    // 完整档子开关：体积光
   gfxWaterReflection: true, // 完整档子开关：平面真反射（L4-A，镜像相机二次渲染场景）
   gfxShadows: true,    // 完整档子开关：太阳阴影贴图（L4-B，节流 shadow pass）
+  sound: true,         // 音效总开关
+  volume: 60,          // 0..100 主音量
 };
 
 export const GFX_ORDER = ['off', 'basic', 'full'];
@@ -48,6 +51,8 @@ export function loadSettings() {
         if (saved.gfxGodRays !== undefined) s.gfxGodRays = !!saved.gfxGodRays;
         if (saved.gfxWaterReflection !== undefined) s.gfxWaterReflection = !!saved.gfxWaterReflection;
         if (saved.gfxShadows !== undefined) s.gfxShadows = !!saved.gfxShadows;
+        if (saved.sound !== undefined) s.sound = !!saved.sound;
+        if (saved.volume !== undefined) s.volume = clamp(Math.round(saved.volume), 0, 100);
       }
     }
   } catch { /* 损坏的设置按默认处理 */ }
@@ -103,6 +108,9 @@ export function applySettings(game) {
   const gfxOn = s.gfx === 'basic' || s.gfx === 'full';
   VoxelLightUniforms.uWaterFx.value = gfxOn ? 1 : 0;
   VoxelLightUniforms.uCloudShadow.value = gfxOn ? 1 : 0; // Game.update 每帧再与维度云显隐相与
+  // 音频（惰性引擎：ctx 未解锁时只记状态，unlock 后生效）
+  audio.setEnabled(s.sound);
+  audio.setVolume(s.volume / 100);
   // L2 后处理：完整档 EffectComposer（泛光/体积光子开关透传），失败自动回退直渲
   if (game.renderer && game.renderer.setGraphicsMode) {
     game.renderer.setGraphicsMode(s.gfx);

@@ -49,6 +49,7 @@ import { DEFAULT_BIOME_SCALE, safeBiomeScale } from '../world/biomes.js';
 import { FirstPersonHand } from '../render/FirstPersonHand.js';
 import { ParticleSystem } from '../render/ParticleSystem.js';
 import { loadSettings, applySettings, applyFogRange } from '../core/Settings.js';
+import { audio } from '../audio/AudioEngine.js';
 import { playerColorCss } from '../net/playerColor.js';
 
 // 工具挖掘速度倍率（按物品 tier；金质单独 9 倍——原版金工具挖得快但等级低）
@@ -271,6 +272,7 @@ export class Game {
     // 受击红屏：所有调用 player.hurt(amount, ..., true) 的源都触发
     this.player.onHurt = (amount, source) => {
       if (this.hud) this.hud.flashDamage(amount);
+      audio.hurt(amount); // 受击音（与红屏同源触发）
     };
     // 死亡屏的统一入口仍由 updateSurvival 末段处理，这里不重设 onDeath
     this.raycast = new Raycast(this.world);
@@ -1266,6 +1268,7 @@ export class Game {
       
       if (this.player.creative) {
         if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
+        audio.blockBreak(def);
         if (def.name === 'chest') this._breakChest(hit.block, false);
         if (def.name === 'shulker_box') this._breakShulkerBox(hit.block, false); // Idea-2C：创造也掉盒（内容跟随）
         if (def.name === 'furnace') this._breakFurnace(hit.block);
@@ -1294,9 +1297,11 @@ export class Game {
         if (this._miningPuffTimer >= 0.25 && this.particles) {
           this._miningPuffTimer = 0;
           this.particles.puffMining(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
+          audio.digHit(def); // 挖掘命中音（与碎粒同节奏，天然限频）
         }
         if (this.breakingProgress >= 1) {
           if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
+          audio.blockBreak(def);
           if (def.name === 'chest') this._breakChest(hit.block, true);
           if (def.name === 'shulker_box') this._breakShulkerBox(hit.block, true); // Idea-2C：内容跟随盒体
           if (def.name === 'furnace') this._breakFurnace(hit.block);
@@ -1365,6 +1370,7 @@ export class Game {
         if (itemDef && itemDef.food && this.player.food < this.player.maxFood) {
           if (this.player.eat(itemDef)) {
             this.hand.swing(); // 阶段10：进食挥动
+            audio.eat();
             this.inventory.removeSelected(1);
             this.hotbar.update();
             if (itemDef.name === 'chorus_fruit') this._chorusTeleport(); // 紫颂果随机短距传送
@@ -1481,6 +1487,7 @@ export class Game {
         if (blockDef) {
           this.hand.swing(); // 阶段10：放置方块挥动
           this.world.setBlock(placeX, placeY, placeZ, blockDef.id);
+          audio.blockPlace(blockDef);
           if (this.redstone) this.redstone.onBlockChange(placeX, placeY, placeZ);
           this._trySummonIronGolem(placeX, placeY, placeZ); // Idea-2E：铁傀儡召唤检测（南瓜/铁块完成 T 型）
           // Idea-2C：潜影盒放置——物品内容落入容器账本并整箱广播（远端账本一致）
@@ -1615,6 +1622,7 @@ export class Game {
     if (!hasArrow) return;
     if (!this.player.creative) this.inventory.removeItems('arrow', 1);
     const arrow = this._shootArrow(0.3 + 0.7 * charge, 2 + Math.round(charge * 6));
+    audio.bowShoot(charge);
     this.hand.swing();
     if (this.networkMode && this.net) this.net.sendArrowShot(arrow.pos, arrow.vel); // Idea-2B：初速广播
   }
@@ -1636,6 +1644,7 @@ export class Game {
         const mh = this.mobManager.findMobByRay(old, dirN, segLen + 0.2);
         if (mh && !mh.mob.dead) {
           if (!a.remote) this.mobManager.attackMob(old, dirN, segLen + 0.2, a.dmg || 6); // 伤害随蓄力；远端视觉箭不结算（射端权威）
+          audio.arrowHit(); // 命中音（远端视觉箭也响，纯客户端效果）
           this._despawnArrow(i);
           continue;
         }

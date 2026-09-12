@@ -39,3 +39,12 @@
 - `InventoryScreen`：每个 slot 通过 `_bindHover()` 挂载 mouseenter/mouseleave 悬浮 tooltip（显示 `displayName`）。`returnCursorItem()` / `hide()` 必须同时隐藏 tooltip。
 - **创造栏去重陷阱**：`renderCreative()` 用 `[...BlockRegistry.all(), ...ItemRegistry.all()]` 合并展示列表。部分方块名在两边都注册——`lever` / `stone_button` 既在 `BlockDefs.js` 作方块又在 `ItemDefs.js` 作物品注册——不去重会出现两个相同物品槽。修复：方块优先，同名物品在合并时跳过。新加"既是方块也是物品"的项目时务必检查是否双注册。
 - `PauseMenu` / `DeathScreen`：禁用 `controls.enabled` + `exitPointerLock`，hide 时恢复。`PauseMenu` 不要再自带 ESC 监听器（会与 Game 的 ESC 切换同一事件内既打开又关闭）。`Game._setupPauseOnUnlock()` 监听 `pointerlockchange` 在指针锁意外丢失时自动弹暂停菜单。
+
+### Idea-3A 音频底座批次备忘（防回退）
+
+- **`src/audio/AudioEngine.js` 模块级单例 `audio`**：WebAudio 程序化合成（零资产，延续 SVG 纹理思路），总线 sfx/music → master（音量+静音统一控制）。**所有发声入口 `if (!this.ctx) return` 静默早退**——headless/未解锁环境零副作用。
+- **自动播放策略**：AudioContext 必须首次真实用户手势后创建——`main.js` 调 `audio.installUnlock()` 在 document capture 挂 pointerdown/keydown，`unlock()` 幂等（无 ctx 则建 + suspended 则 resume）。eval 里 `document.body.click()` 这类**合成事件不解锁**，必须 agent-browser 真实 `click`。
+- **设置面**：`Settings.js` 新增 `sound: true` / `volume: 60`（clamp 0-100），`applySettings` 实时套 `audio.setEnabled/setVolume`；VideoSettings 面板加「音量」(步进 10 循环)、「音效」两行。**unlock 前改设置也不丢**——volume/enabled 记在实例字段，`_buildGraph()` 时回放。
+- **材质分路**：`blockCategory(def)` 按名称启发式把方块归 9 类（stone/wood/gravel/grass/glass/metal/cloth/snow/liquid），`CATEGORY_PARAMS` 定滤波器/时长/增益，未命中回退 stone。新方块若音色怪，先查是否被启发式误分类。
+- **接线锚点（全在 Game.js）**：挖掘命中音挂 **0.25s 挖掘碎粒定时器**（`_miningPuffTimer`，天然限频勿另加节流）；创造/生存破坏、放置、`player.onHurt`（与 flashDamage 同源）、食用（`player.eat` 成功分支）、`_releaseBow`、箭命中（`_updateArrows`，远端视觉箭也响）。
+- **验证口径**：headless 听不到声，断言走引擎内部——eval 动态 `import('/src/audio/AudioEngine.js')`（与 Game.js 同模块实例，`window.__ae` 缓存）→ 包一层 `_noise/_tone` 计数 → 直调 7 个事件方法断言调用数/滤波频率；真实路径抽 3 条（创造挖掘/放置/生存长按）用同一计数探针验证。**headless 帧极慢**，生存长按 0.6s 可能攒不满 0.25s 碎粒节拍——延长按住时间再断言。

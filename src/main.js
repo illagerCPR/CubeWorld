@@ -7,6 +7,10 @@ import { MenuScreen } from './ui/MenuScreen.js';
 import { NetworkManager } from './net/NetworkManager.js';
 import { Panorama } from './render/Panorama.js';
 import { VideoSettings } from './ui/VideoSettings.js';
+import { audio } from './audio/AudioEngine.js';
+
+// 音频解锁：首次用户手势后创建 AudioContext（自动播放策略规避，幂等）
+audio.installUnlock();
 
 const app = document.getElementById('app');
 const game = new Game(app);

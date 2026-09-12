@@ -104,6 +104,17 @@ export class VideoSettings {
       s.sensitivity = s.sensitivity >= 200 ? 30 : s.sensitivity + 10;
       this._apply();
     });
+    // 音量（主音量，步进 10）
+    mkRow('volume').addEventListener('click', () => {
+      const s = this.game.settings;
+      s.volume = s.volume >= 100 ? 0 : s.volume + 10;
+      this._apply();
+    });
+    // 音效总开关
+    mkRow('sound').addEventListener('click', () => {
+      this.game.settings.sound = !this.game.settings.sound;
+      this._apply();
+    });
     // 光照增强（三档一键：关闭 / 基础=水面反射+云影 / 完整=再加后处理）
     mkRow('gfx').addEventListener('click', () => {
       const s = this.game.settings;
@@ -171,6 +182,8 @@ export class VideoSettings {
     this.rows.smoothLighting.textContent = `平滑光照: ${s.smoothLighting ? '开' : '关'}`;
     this.rows.viewBobbing.textContent = `视角摇晃: ${s.viewBobbing ? '开' : '关'}`;
     this.rows.sensitivity.textContent = `鼠标灵敏度: ${s.sensitivity}%`;
+    this.rows.volume.textContent = `音量: ${s.volume}%`;
+    this.rows.sound.textContent = `音效: ${s.sound ? '开' : '关'}`;
     this.rows.gfx.textContent = `光照增强: ${GFX_LABELS[s.gfx] || '关闭'}`;
     const subHint = s.gfx === 'full' ? '' : '（完整档生效）';
     this.rows.gfxBloom.textContent = `泛光: ${s.gfxBloom ? '开' : '关'}${subHint}`;
