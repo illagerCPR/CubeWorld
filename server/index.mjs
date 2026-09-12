@@ -13,6 +13,7 @@ import { Room } from './room.js';
 import { MSG } from './protocol.js';
 import * as store from './store.js';
 import * as config from './config.js';
+import { tierOf, createConnectionLimiters } from './ratelimit.js';
 
 const PORT = Number(process.env.PORT) || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -395,6 +396,38 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 200, { ok: true, room: roomName, settings: entry });
         return;
       }
+      // Idea-4B：世界备份导出（op 权限——viewer 对 GET 也 403，导出属敏感读）
+      const bm = p.match(/^\/api\/room\/([^/]+)\/backup$/);
+      if (bm && req.method === 'GET') {
+        if (auth.role !== 'op') {
+          logAdmin('auth-fail', `viewer 账号尝试下载世界备份（已拒绝）`);
+          sendJson(res, 403, { error: 'viewer 账号为只读权限，无权导出世界备份' });
+          return;
+        }
+        const roomName = decodeURIComponent(bm[1]);
+        let body = null;
+        const room = rooms.get(roomName);
+        if (room && room.seed !== null) {
+          body = JSON.stringify(store.roomSnapshot(room), null, 2);
+        } else {
+          // 房间不在内存：回读磁盘存档（服务器重启后未触碰的房间）
+          try {
+            const f = path.join(path.dirname(fileURLToPath(import.meta.url)), 'world', store.roomFileName(roomName) + '.json');
+            if (fs.existsSync(f)) body = fs.readFileSync(f, 'utf8');
+          } catch { /* 读盘失败按 404 处理 */ }
+        }
+        if (body === null) { sendJson(res, 404, { error: '房间不存在（无内存世界也无磁盘存档）' }); return; }
+        const ts = Date.now();
+        // Content-Disposition 头只放 ASCII：房间名再过滤一遍非 \w- 字符
+        const asciiName = store.roomFileName(roomName).replace(/[^\w-]/g, '_') || 'room';
+        res.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Disposition': `attachment; filename="backup-${asciiName}-${ts}.json"`,
+        });
+        res.end(body);
+        logAdmin('backup', `导出房间「${roomName}」世界备份（${body.length} 字节）`);
+        return;
+      }
       // /api/room/<name>/<action>
       const m = p.match(/^\/api\/room\/([^/]+)\/(clear-drops|delete)$/);
       if (m && req.method === 'POST') {
@@ -464,6 +497,51 @@ const profileSweep = setInterval(() => {
   }
 }, 10000);
 
+// Idea-4B：自动备份 sweep（每分钟检查；backupIntervalMinutes=0 关闭；只备份内存中已建世界的房间）
+// 每房间保留 backupKeep 份（超出删最旧）；备份动作写 adminLog（间隔分钟级不会刷屏）
+const lastBackupAt = new Map(); // 房间名 -> 上次备份 ms
+function runAutoBackupOnce() {
+  const intervalMs = (serverConfig.backupIntervalMinutes || 0) * 60000;
+  if (!(intervalMs > 0)) return;
+  const keep = serverConfig.backupKeep || 10;
+  const now = Date.now();
+  for (const r of rooms.values()) {
+    if (r.seed === null) continue;
+    const last = lastBackupAt.get(r.name) || 0;
+    if (now - last < intervalMs) continue;
+    try {
+      const file = store.backupRoom(r);
+      const removed = store.pruneBackups(r.name, keep);
+      lastBackupAt.set(r.name, now);
+      logAdmin('auto-backup', `房间「${r.name}」自动备份 ${file}${removed.length ? `（清理旧备份 ${removed.length} 份）` : ''}`);
+      console.log(`[备份] 房间「${r.name}」自动备份 ${file}`);
+    } catch (e) {
+      console.error(`[备份] 房间「${r.name}」自动备份失败: ${e.message}`);
+    }
+  }
+}
+const backupSweep = setInterval(runAutoBackupOnce, 60000);
+
+// Idea-4C：限速丢包聚合日志（10s 一批增量，防刷爆 200 条环形缓冲）
+const _rateReported = new WeakMap(); // player -> {chat,block,state} 已上报快照
+const rateReportSweep = setInterval(() => {
+  for (const r of rooms.values()) {
+    for (const p of r.players.values()) {
+      const d = p.dropped;
+      if (!d || !Object.keys(d).length) continue;
+      const seen = _rateReported.get(p) || {};
+      const parts = [];
+      for (const k of ['chat', 'block', 'state']) {
+        const delta = (d[k] || 0) - (seen[k] || 0);
+        if (delta > 0) parts.push(`${k}+${delta}`);
+      }
+      if (!parts.length) continue;
+      _rateReported.set(p, { ...d });
+      logAdmin('rate-limit', `房间「${r.name}」玩家 ${p.name} 限速丢包 ${parts.join(' ')}`);
+    }
+  }
+}, 10000);
+
 // 优雅退出：全部房间世界落盘（重启不丢）
 function shutdown() {
   console.log('正在保存所有房间世界...');
@@ -473,6 +551,8 @@ function shutdown() {
   }
   clearInterval(dropSweep);
   clearInterval(profileSweep);
+  clearInterval(backupSweep);
+  clearInterval(rateReportSweep);
   process.exit(0);
 }
 process.on('SIGINT', shutdown);
@@ -507,9 +587,18 @@ wss.on('connection', (ws, req) => {
       // 首条必须是 hello；此时尚未分配房间（welcome 不带玩家列表，进房后由 joinRoom 回放）
       if (msg.t === MSG.HELLO) {
         player = { id: nextPlayerId++, ws, name: String(msg.name || '玩家').slice(0, 16) };
+        player.rate = createConnectionLimiters(serverConfig); // Idea-4C：连接级限速器（阈值活读 config）
         send(ws, { t: MSG.WELCOME, selfId: player.id, players: [] });
         console.log(`[*] ${player.name} 已连接 (id=${player.id})`);
       }
+      return;
+    }
+
+    // Idea-4C：分级限速（chat/block/state 令牌桶，超限丢包+计数；其余消息与心跳豁免）
+    const tier = tierOf(msg.t, MSG);
+    if (tier && !player.rate[tier].allow()) {
+      player.dropped = player.dropped || {};
+      player.dropped[tier] = (player.dropped[tier] || 0) + 1;
       return;
     }
 

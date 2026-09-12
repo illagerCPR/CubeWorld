@@ -21,6 +21,13 @@ const DEFAULTS = {
   roomWhitelist: {},     // 阶段11：房间白名单 {<房间名>: [昵称...]}；名单非空时仅名单内昵称可进
   roomOps: {},           // 阶段11：房间 op 名单 {<房间名>: [昵称...]}；名单内玩家享 host 级游戏权限（改模式/设时间/重建世界）
   roomSettings: {},      // Idea-4A：房间开关 {<房间名>: {pvp,mobs}}；缺省/缺字段 = 开（true）
+  backupIntervalMinutes: 0, // Idea-4B：自动备份间隔分钟（0=关闭）
+  backupKeep: 10,        // Idea-4B：每房间保留备份份数
+  rateLimits: {          // Idea-4C：消息速率限制（每分钟次数，0=不限制）
+    chat: 30,            //   聊天/命令（人工节奏）
+    block: 900,          //   block_set（挖放峰值 ~15/s）
+    state: 1800,         //   player_state（客户端 20Hz=1200/min，留余量）
+  },
 };
 
 // 数字配置的合法范围（防止管理面板提交脏值）
@@ -29,7 +36,12 @@ const RANGES = {
   heartbeatMs: [2000, 60000],       // 2s ~ 60s
   maxPlayersPerRoom: [1, 64],       // 1 ~ 64
   adminTokenExpires: [0, 4102444800], // Unix 秒，0=永不过期 ~ 2100 年
+  backupIntervalMinutes: [0, 14400],  // Idea-4B：0=关闭 ~ 10 天
+  backupKeep: [1, 50],              // Idea-4B：1 ~ 50 份
 };
+
+// Idea-4C：速率限制每分钟次数的合法范围（0=不限制）
+const RATE_LIMITS_MAX = 100000;
 
 // 字符串配置的最大长度（如管理口令）
 const STRING_MAX = { adminToken: 64 };
@@ -94,6 +106,21 @@ export function sanitizeRoomSettings(raw) {
   return out;
 }
 
+// Idea-4C：校验速率限制表（{chat,block,state} 每分钟次数，仅认三项，0=不限制）
+// 缺省项回落当前值（applyConfig 传入 current）或默认值；非法数字忽略该项
+export function sanitizeRateLimits(raw, current = null) {
+  const base = current || DEFAULTS.rateLimits;
+  if (raw === undefined || raw === null) return { ...base };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out = {};
+  for (const key of ['chat', 'block', 'state']) {
+    const src = raw[key] !== undefined ? raw[key] : base[key];
+    const n = Number(src);
+    out[key] = Number.isFinite(n) && n >= 0 && n <= RATE_LIMITS_MAX ? Math.round(n) : base[key];
+  }
+  return out;
+}
+
 // 找 default 兼容账号（旧 adminToken 等价物）
 function findDefaultAccount(accounts) {
   return accounts.find((a) => a.label === 'default') || null;
@@ -105,7 +132,7 @@ export function loadConfig() {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const data = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-      for (const key of ['dropTtlMs', 'heartbeatMs', 'maxPlayersPerRoom', 'adminTokenExpires']) {
+      for (const key of ['dropTtlMs', 'heartbeatMs', 'maxPlayersPerRoom', 'adminTokenExpires', 'backupIntervalMinutes', 'backupKeep']) {
         const range = RANGES[key];
         const n = Number(data[key]);
         if (Number.isFinite(n) && n >= range[0] && n <= range[1]) cfg[key] = Math.round(n);
@@ -124,6 +151,8 @@ export function loadConfig() {
       if (ops) cfg.roomOps = ops;
       const settings = sanitizeRoomSettings(data.roomSettings);
       if (settings) cfg.roomSettings = settings;
+      const rl = sanitizeRateLimits(data.rateLimits);
+      if (rl) cfg.rateLimits = rl;
     }
   } catch (e) {
     console.error(`[配置] 读取 ${CONFIG_PATH} 失败: ${e.message}`);
@@ -135,7 +164,7 @@ export function loadConfig() {
 // adminAccounts 为主接口；旧字段 adminToken/adminTokenExpires 作为 default 账号的兼容读写
 export function applyConfig(current, patch) {
   const next = { ...current, adminAccounts: [...(current.adminAccounts || [])] };
-  for (const key of ['dropTtlMs', 'heartbeatMs', 'maxPlayersPerRoom', 'adminTokenExpires']) {
+  for (const key of ['dropTtlMs', 'heartbeatMs', 'maxPlayersPerRoom', 'adminTokenExpires', 'backupIntervalMinutes', 'backupKeep']) {
     if (!(key in patch)) continue;
     const range = RANGES[key];
     const n = Number(patch[key]);
@@ -162,6 +191,11 @@ export function applyConfig(current, patch) {
   if ('roomSettings' in patch) {
     const settings = sanitizeRoomSettings(patch.roomSettings);
     if (settings) next.roomSettings = settings;
+  }
+  // Idea-4C：速率限制（逐项合并进当前值，整体为垃圾时保持不变）
+  if ('rateLimits' in patch) {
+    const rl = sanitizeRateLimits(patch.rateLimits, next.rateLimits);
+    if (rl) next.rateLimits = rl;
   }
   // 兼容语义：adminToken 变更同步到 default 账号（空=移除 default 账号；其余账号不受影响）
   if ('adminToken' in patch) {

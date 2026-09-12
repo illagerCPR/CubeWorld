@@ -70,3 +70,13 @@
 - **下发与热更**：`WORLD_INFO` 携带 `settings` 字段（createRoom/joinRoom/resetWorld 三出口都带；客户端 `_handle` 的 WORLD_INFO case 顶部统一更新——**勿在该 case 中间插 break**，曾把原 restart/重连逻辑切成不可达代码）；管理面板/API 改动后 `ROOM_SETTINGS {room,pvp,mobs}` 只向该房间在线玩家广播（异房间不串扰），客户端按 `msg.room === this.room` 收敛。
 - **API**：`GET /api/settings`（全表，viewer 可读）；`POST /api/room/<name>/settings {pvp?,mobs?}`（字段**只认 boolean 否则 400**、至少一项、房间名 ≤32；落盘 + 内存房间热广播 + logAdmin）。面板房间卡 checkbox 数据源是 `Room.info().settings`（status 轮询直出），onchange 即保存；房间名注入 onclick 走 `attrRoom()`（先 JS 转义 `\`/`'`，再 HTML 转义 `"`/`&`，顺序勿换——HTML 解码后得到的就是 JS 字符串字面量）。
 - **测试**：`server/test-idea4.mjs`（22-23 断言，已入 run-all-tests.sh，跑批中位于 test-profile 后——**前序套件遗留 adminAccounts**，op/viewer token 从 config.json 读；单独裸跑且只建 viewer 账号时 op 调用全 403 属预期假象非 bug）。
+
+### Idea-4B/4C 世界备份 + 消息速率限制批次备忘（防回退）
+
+- **备份（store.js）**：`roomSnapshot(room)` 从 saveRoom 抽出（快照结构与落盘**逐字段一致**，勿分叉两套序列化）；`backupRoom/listBackups/pruneBackups` 落 `<world>/backups/<房间名>-<毫秒ts>.json`，list 按 ts **降序**（最新在前），prune 删 keep 之外的旧份。毫秒 ts 天然排序且防同名；房间名经 `roomFileName` 清洗（中文保留）。
+- **备份 API**：`GET /api/room/<name>/backup`（**op 专属**——viewer 对 GET 也 403，须在路由内显式判 `auth.role !== 'op'`，全局 viewer 拦截只管非 GET）；内存有世界用 `roomSnapshot` 直出（比磁盘新），不在内存回读 `<world>/<safe>.json`，都没有 → 404。**Content-Disposition 头只放 ASCII**：房间名要再过一遍 `[^\w-]` → `_`（中文直接进 header 会抛 invalid character）。
+- **自动备份**：`backupIntervalMinutes`（0=关闭，默认）/`backupKeep`（1-50，默认 10）进 RANGES；60s sweep 只备份**内存中已建世界**的房间（磁盘存档本身就是备份源），lastBackupAt 是内存 Map（重启重新计时，接受）；每次备份写 adminLog（分钟级节奏不刷屏）。
+- **限速（`server/ratelimit.js`）**：`RateLimiter` lazy-refill 令牌桶——**getLimit 闭包每次 allow() 现取 config.rateLimits**（面板改配置即时生效，tokens 超新容量自动收敛，勿缓存容量值）；限额=次数/分钟，refill=limit/60000/ms。`tierOf` 只认 chat/block/state 三档（CHAT 含 '/' 命令同走 chat 档），**未列出消息与 PING/PONG/HELLO 天然豁免**（心跳绝不丢）。限速钩子在 index.mjs ws.on('message') 的 pong/HELLO 判定之后、所有 dispatch 之前；超限丢包计数 `player.dropped[tier]++`。
+- **可见性**：`Room.info()` 玩家带 `dropped`（status 3s 轮询直出面板「限速丢包」列）；聚合日志走 10s sweep + **WeakMap 增量快照**（`_rateReported`），只对增量>0 的玩家写一条 `rate-limit` 日志——勿逐包写（200 条环形缓冲瞬间刷爆）。
+- **默认阈值锚定实测**：player_state 20Hz=1200/min → state 1800；挖放峰值 ~15/s → block 900；人工聊天 → chat 30。0=不限制。测试把三档收紧到 3 再还原；**收尾必须 POST /config 还原默认**（rateLimits/backup*/roomSettings 清空）防污染后续套件。
+- **测试**：test-idea4.mjs 增至 42 断言（跑批中含鉴权 viewer 403 两条）；备份/限速 API 全部过 op token。

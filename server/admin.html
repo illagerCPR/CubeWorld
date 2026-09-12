@@ -71,6 +71,14 @@
         <button class="btn-primary" onclick="saveConfig()">保存配置</button>
       </div>
       <div class="cfg-item">
+        <label>自动备份间隔分钟 (backupIntervalMinutes) <span style="color:#7a8394">（0=关闭）</span></label>
+        <input id="cfg-backupMins" type="number" min="0" step="1">
+      </div>
+      <div class="cfg-item">
+        <label>备份保留份数 (backupKeep) <span style="color:#7a8394">（每房间）</span></label>
+        <input id="cfg-backupKeep" type="number" min="1" step="1">
+      </div>
+      <div class="cfg-item">
         <label>管理口令 (adminToken) <span style="color:#7a8394">（留空=关闭鉴权）</span></label>
         <input id="cfg-adminToken" type="password" placeholder="留空则关闭鉴权">
       </div>
@@ -281,6 +289,31 @@
     return `${r(pos.x)}, ${r(pos.y)}, ${r(pos.z)}`;
   }
 
+  // Idea-4C：限速丢包计数展示（无丢包显示 '-'）
+  function fmtDropped(dropped) {
+    const keys = Object.keys(dropped || {}).filter((k) => (dropped[k] || 0) > 0);
+    if (!keys.length) return '<span style="color:#7a8394;">-</span>';
+    return keys.map((k) => `${k}:${dropped[k]}`).join(' ');
+  }
+
+  // Idea-4B：下载房间世界备份（fetch blob 带 Bearer，避免附件链接无法携带鉴权头）
+  async function downloadBackup(room) {
+    const opt = { headers: {} };
+    const tk = getToken();
+    if (tk) opt.headers['Authorization'] = 'Bearer ' + tk;
+    const r = await fetch('/api/room/' + encodeURIComponent(room) + '/backup', opt);
+    if (!r.ok) { toast(`备份下载失败 (${r.status})`, true); return; }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'backup-' + room + '-' + Date.now() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+    toast('世界备份已下载');
+  }
+
   // 房间名注入 onclick 属性：先 JS 字符串转义（反斜杠/单引号），再 HTML 属性转义（双引号/&）
   function attrRoom(name) {
     return String(name).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
@@ -300,13 +333,14 @@
         <span class="tag">掉落物 ${room.drops}</span>
       </div>
       ${room.players.length ? `<table>
-        <tr><th>玩家</th><th>模式</th><th>生命/饥饿</th><th>位置</th><th></th></tr>
+        <tr><th>玩家</th><th>模式</th><th>生命/饥饿</th><th>位置</th><th>限速丢包</th><th></th></tr>
         ${room.players.map((p) => `
           <tr>
             <td>${p.name}${p.host ? '<span class="tag tag-host">HOST</span>' : ''}</td>
             <td>${p.mode}</td>
             <td>${p.health}/${p.food}</td>
             <td>${fmtPos(p.pos)}</td>
+            <td>${fmtDropped(p.dropped)}</td>
             <td><button class="btn-danger btn-sm" onclick="kick(${p.id})">踢出</button></td>
           </tr>`).join('')}
       </table>` : '<div class="empty">房间内暂无玩家在线</div>'}
@@ -322,6 +356,7 @@
         </label>
       </div>
       <div style="margin-top:8px;">
+        <button class="btn-warn btn-sm" onclick="downloadBackup('${attrRoom(room.name)}')">⬇ 下载备份</button>
         <button class="btn-warn btn-sm" onclick="clearDrops('${attrRoom(room.name)}')">清空掉落物</button>
         <button class="btn-danger btn-sm" onclick="deleteRoom('${attrRoom(room.name)}')">删除房间（重置世界）</button>
       </div>
@@ -351,6 +386,9 @@
       document.getElementById('cfg-dropTtlMs').value = status.config.dropTtlMs;
       document.getElementById('cfg-heartbeatMs').value = status.config.heartbeatMs;
       document.getElementById('cfg-maxPlayers').value = status.config.maxPlayersPerRoom;
+      // Idea-4B：自动备份配置回显
+      document.getElementById('cfg-backupMins').value = status.config.backupIntervalMinutes ?? 0;
+      document.getElementById('cfg-backupKeep').value = status.config.backupKeep ?? 10;
       // adminToken 返回掩码 '****'：设为输入框值；用户不改则不提交（见 saveConfig）
       const tkEl = document.getElementById('cfg-adminToken');
       tkEl.value = status.config.adminToken === '****' ? '****' : '';
@@ -444,6 +482,9 @@
       dropTtlMs: Number(document.getElementById('cfg-dropTtlMs').value),
       heartbeatMs: Number(document.getElementById('cfg-heartbeatMs').value),
       maxPlayersPerRoom: Number(document.getElementById('cfg-maxPlayers').value),
+      // Idea-4B：自动备份（间隔 0=关闭）
+      backupIntervalMinutes: Number(document.getElementById('cfg-backupMins').value) || 0,
+      backupKeep: Number(document.getElementById('cfg-backupKeep').value) || 10,
     };
     // adminToken：值为 '****'（未改动，保持原样）时不提交；否则提交（新口令或清空关闭）
     const tk = document.getElementById('cfg-adminToken').value.trim();

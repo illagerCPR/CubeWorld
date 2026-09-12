@@ -16,15 +16,14 @@ function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-// 将房间世界写入磁盘 <dir>/<房间名>.json
+// 房间世界快照（纯数据，saveRoom 与 Idea-4B 备份导出共用）
 // 快照 V2（M4）：blocks/containers 按维度分桶 {dim: [entries]}；旧格式由 Room.restore 迁移
-export function saveRoom(room, dir = DEFAULT_DIR) {
-  ensureDir(dir);
+export function roomSnapshot(room) {
   const dimensionBlocks = {};
   for (const [dim, m] of room.dimensionBlocks) dimensionBlocks[dim] = [...m.entries()];
   const dimensionContainers = {};
   for (const [dim, m] of room.dimensionContainers) dimensionContainers[dim] = [...m.entries()];
-  const data = {
+  return {
     name: room.name,
     seed: room.seed,
     biomeScale: room.biomeScale || null, // 群系规模档位（旧快照无字段 → restore 回落 null→small）
@@ -36,6 +35,12 @@ export function saveRoom(room, dir = DEFAULT_DIR) {
     drops: [...room.drops.entries()].map(([id, d]) => ({ id, ...d })),
     savedAt: Date.now(),
   };
+}
+
+// 将房间世界写入磁盘 <dir>/<房间名>.json
+export function saveRoom(room, dir = DEFAULT_DIR) {
+  ensureDir(dir);
+  const data = roomSnapshot(room);
   fs.writeFileSync(path.join(dir, roomFileName(room.name) + '.json'), JSON.stringify(data, null, 2), 'utf8');
 }
 
@@ -83,4 +88,47 @@ export function savePlayerProfiles(roomName, profiles, dir = DEFAULT_DIR) {
 
 export function deletePlayerProfiles(roomName, dir = DEFAULT_DIR) {
   try { fs.unlinkSync(path.join(dir, 'players', roomFileName(roomName) + '.players.json')); } catch {}
+}
+
+// ---- Idea-4B：世界备份（<dir>/backups/<房间名>-<毫秒时间戳>.json）----
+
+const BACKUP_TS_RE = /-(\d+)\.json$/;
+
+// 备份目录路径（懒建）
+function backupsDir(dir) {
+  const d = path.join(dir, 'backups');
+  if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+  return d;
+}
+
+// 将房间当前世界快照写入备份目录，返回备份文件名（<safe>-<ts>.json）
+export function backupRoom(room, dir = DEFAULT_DIR) {
+  const ts = Date.now();
+  const file = `${roomFileName(room.name)}-${ts}.json`;
+  fs.writeFileSync(path.join(backupsDir(dir), file), JSON.stringify(roomSnapshot(room), null, 2), 'utf8');
+  return file;
+}
+
+// 列出某房间的备份（按时间戳降序，最新在前），项 {file, ts}
+export function listBackups(roomName, dir = DEFAULT_DIR) {
+  const prefix = roomFileName(roomName) + '-';
+  const d = path.join(dir, 'backups');
+  if (!fs.existsSync(d)) return [];
+  const out = [];
+  for (const f of fs.readdirSync(d)) {
+    if (!f.startsWith(prefix) || !f.endsWith('.json')) continue;
+    const m = f.match(BACKUP_TS_RE);
+    if (m) out.push({ file: f, ts: Number(m[1]) });
+  }
+  return out.sort((a, b) => b.ts - a.ts);
+}
+
+// 修剪备份：只保留最新 keep 份，返回删除的文件名数组
+export function pruneBackups(roomName, keep, dir = DEFAULT_DIR) {
+  const list = listBackups(roomName, dir);
+  const removed = [];
+  for (let i = keep; i < list.length; i++) {
+    try { fs.unlinkSync(path.join(dir, 'backups', list[i].file)); removed.push(list[i].file); } catch {}
+  }
+  return removed;
 }

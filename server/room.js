@@ -319,6 +319,7 @@ export class Room {
       players: [...this.players.values()].map((p) => ({
         id: p.id, name: p.name, mode: p.mode, dim: p.dim,
         health: p.health, food: p.food, pos: p.pos, host: p.id === this.hostId,
+        dropped: p.dropped || {}, // Idea-4C：限速丢包计数（管理面板展示）
       })),
     };
   }

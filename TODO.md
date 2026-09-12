@@ -122,21 +122,19 @@ A（小，手感补课）→ B（中，联机体验补课）→ E（中，村庄
 
 ## Idea-4: 服务器运维池 —— 房间开关 / 世界备份 / 速率限制
 
-- **状态**：A（房间配置开关）已交付（2026-09-12，`test-idea4.mjs` 并入跑批）；B（世界备份导出）/ C（消息速率限制）进行中。单项工作量均小，可在任意批次间隙插入。
+- **状态**：**完成（2026-09-12）**——A 房间配置开关、B 世界备份导出（手动下载 + 可选自动备份保留 N 份）、C 消息速率限制（chat/block/state 三档令牌桶，超限丢包计数 + 面板可见 + 聚合日志）全部交付，`test-idea4.mjs` 42 断言并入跑批。
 
 ### A. 房间配置开关（已交付）
 
 - ~~现状：房间级只有白名单/op；PvP 伤害、怪物生成全局恒开。~~
 - 已实现：`config.roomSettings: {房间名: {pvp, mobs}}`（缺省全开）；服务器权威过滤（`onAttack`/`onMobSpawn` 短路+系统提示）+ 客户端闸门（`WORLD_INFO.settings` 下发 + `room_settings` 热广播，`sendMobSpawn` 发送口短路零漂移）；面板房间卡 checkbox；`GET /api/settings` + `POST /api/room/<n>/settings`（viewer 403）。防回退见 `docs/agent-notes/multiplayer.md` Idea-4A 节。
 
-### B. 世界备份导出
+### B. 世界备份导出（已交付）
 
-- 现状：`server/world/*.json` 只能手工拷贝。
-- 方案：`GET /api/room/<name>/backup`（op 权限）导出 JSON 附件，可选周期自动备份保留 N 份。
+- 已实现：`store.roomSnapshot` 与落盘共用序列化；`GET /api/room/<name>/backup`（op 专属，附件下载，内存直出/磁盘回读/404）；自动备份 `backupIntervalMinutes`（默认 0=关闭）+ `backupKeep`（默认 10），60s sweep + adminLog；面板房间卡「⬇ 下载备份」+ 配置卡两行。防回退见 multiplayer.md Idea-4B/4C 节。
 
-### C. 消息速率限制
+### C. 消息速率限制（已交付）
 
-- 现状：局域网信任场景无限制。
-- 方案：按连接令牌桶（chat/set_block/player_state 分级阈值），超限丢包+内存日志计数，管理面板可见。
+- 已实现：`server/ratelimit.js` lazy-refill 令牌桶（getLimit 闭包活读配置热生效），`config.rateLimits = {chat:30, block:900, state:1800}` 每分钟次数（0=不限）；PING/PONG/握手豁免；超限丢包 `player.dropped` 计数 → status/面板「限速丢包」列 + 10s 聚合 adminLog（WeakMap 增量防刷屏）。防回退见 multiplayer.md Idea-4B/4C 节。
 
 
