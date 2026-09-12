@@ -50,7 +50,7 @@ function waitFor(p, pred, timeout = 3000) {
     const hit = p.inbox.find(pred);
     if (hit) return resolve(hit);
     const t = setTimeout(() => resolve(null), timeout);
-    p.waiters.push((m) => { if (pred(m)) { clearTimeout(t); resolve(true); return true; } return false; });
+    p.waiters.push((m) => { if (pred(m)) { clearTimeout(t); resolve(m); return true; } return false; });
   });
 }
 
