@@ -47,8 +47,8 @@
 ### P3 批次备忘（防回退）—— 桶（舀/倒） / 弓射击
 
 - **桶**：Raycast.cast 加第 4 参 `includeFluid`（空桶手持时 updateRaycast 传入 → 准星可命中水/岩浆；其他物品准星仍穿透流体——勿全局开）。空桶对流体=舀取（setBlock 0 + 槽换满桶）；满桶对面=倒出邻格（必须空气，非空气静默拒）+ 槽换空桶。**槽位替换直接写 `inventory.slots[hotbarSelected]`**（不是 remove+add，防落到别的槽）。本作水体静态无流动模拟——舀水留洞/倒水不成流属设计边界。岩浆倒出经 LightEngine 自动给光 15。创造模式：世界可编辑但槽位不变。
-- **弓**：右键射箭（消耗 arrow×1，`removeItems`；创造不耗）；箭 = 本地投射物 `{mesh,pos,vel(28m/s),life:8,stuck}`，重力 -12；命中怪=整段位移作射线走 `findMobByRay`→`attackMob(…,6)`（击退/掉落/XP 全链复用）；命中实体块=钉住至寿命尽。几何/材质**模块级共享不 dispose**（`Game._arrowGeo/_arrowMat` 惰性单例），despawn 只 scene.remove。`arrows` 数组在 start() **无条件初始化**（曾漏——首启 undefined 在 update 里 `this.arrows.length` 直接炸循环）。
-- **右键分支顺序**：villager→furnace→床→crafting→红石→frame→(hit 内)桶/打火石/末影眼框→放置 `if (sel && hit)`→(hit 外)弓→掷眼。弓/掷眼分支不依赖命中（对空可用）。
+- **弓**：Idea-2A 改**按住蓄力、松手发射**（原右键即射已废）——初速 `28×(0.3+0.7c)`、伤害 `2+round(6c)`（`_shootArrow(power,dmg)`，箭对象带 `dmg`，`_updateArrows` 用 `a.dmg||6`）。蓄力通道**独立于右键单击分支**：`Game._bowCharging/_bowCharge`，handleMouseInput **顶部**先于 UI 早退处理（松手检测必须在 UI 早退之前，否则 mouseup 漏检）；蓄力中吞掉全部右键分支防中途误触；换手持物/开 UI（背包/箱/熔炉/交易）/暂停(loop else 分支)/进观战四路取消（`_cancelBowCharge`）。对准可交互物时单击分支仍优先（走到弓分支才起蓄力）。**对空蓄力依赖 handleMouseInput 未命中早退的放宽**：`!(mouseRight && bowLikeHeld)`（bow/ender_eye）——勿回退该守卫。第一人称拉弓姿态 `FirstPersonHand.bowDraw`（`setBowDraw(0..1|null)`，满蓄轻微颤动）。消耗 arrow×1 移到 `_releaseBow`（创造不耗）。headless 软渲染下 charge 走帧 dt，墙钟慢 3-4 倍属环境帧率问题非 bug。箭本体仍是本地投射物 `{mesh,pos,vel,life:8,stuck,dmg}` 重力 -12，命中怪走 `findMobByRay`→`attackMob`（击退/掉落/XP 复用）、命中实体块钉住至寿命尽；几何/材质模块级共享不 dispose；`arrows` 数组 start() 无条件初始化（曾漏而炸循环）。
+- **右键分支顺序**：villager→furnace→床→crafting→红石→frame→(hit 内)桶/打火石/末影眼框→放置 `if (sel && hit)`→(hit 外)弓（蓄力起点）→掷眼。弓/掷眼分支不依赖命中（对空可用——依赖守卫放宽，见上）。
 
 ### P3 批次备忘（防回退）—— 耕种（锄地/播种/生长/收获） + Raycast cross 命中修复
 

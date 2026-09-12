@@ -109,6 +109,8 @@ export class Game {
     this.selectedBlock = null;
     this.breakingProgress = 0;
     this._miningActive = false; // 阶段11：本端正在挖掘（联机随 player_state 广播 mine 标志）
+    this._bowCharging = false;  // Idea-2A：弓蓄力中（右键按住期间，独立于单击分支）
+    this._bowCharge = 0;        // 蓄力进度 0..1（1 秒满蓄）
     this.lastTime = 0;
     this.running = false;
     this.frame = 0;
@@ -394,6 +396,8 @@ export class Game {
       for (const a of this.arrows) this.renderer.scene.remove(a.mesh);
     }
     this.arrows = [];
+    this._bowCharging = false; // 存档切换：清掉上一存档的蓄力状态
+    this._bowCharge = 0;
     if (loadData && loadData.inventory) {
       this.inventory.deserialize(loadData.inventory);
     } else if (mode === 'creative') {
@@ -603,6 +607,7 @@ export class Game {
     this.lastTime = now;
     this.frame++;
     if (!this.paused) this.update(dt);
+    else if (this._bowCharging) this._cancelBowCharge(); // 暂停/死亡：蓄力作废（防恢复后误射）
     this.renderer.render();
     requestAnimationFrame(this.loop);
   };
@@ -855,6 +860,7 @@ export class Game {
     
     // 鼠标交互（观战模式不操作方块/物品）
     if (this.spectating) {
+      if (this._bowCharging) this._cancelBowCharge(); // 进入观战：蓄力作废
       this.controls.mouseLeft = false;
       this.controls.mouseRight = false;
       this.breakingProgress = 0;
@@ -1167,11 +1173,38 @@ export class Game {
 
   handleMouseInput(dt) {
     this._miningActive = false; // 默认非挖掘（早退分支自然复位）
+    // 弓蓄力通道（Idea-2A）：独立于下方单击分支——蓄力中吞掉全部右键语义防中途误触，
+    // 松手在此检测（mouseup 后 controls.mouseRight 变 false，下方 mouseRight 块不会再进）。
+    if (this._bowCharging) {
+      const uiOpen = (this.inventoryScreen && this.inventoryScreen.visible) ||
+        (this.chestScreen && this.chestScreen.visible) ||
+        (this.furnaceScreen && this.furnaceScreen.visible) ||
+        (this.tradeScreen && this.tradeScreen.visible);
+      if (uiOpen) {
+        this._cancelBowCharge();
+      } else if (!this.controls.mouseRight) {
+        this._releaseBow();
+      } else {
+        const sel = this.inventory.getSelected();
+        if (!sel || sel.name !== 'bow') {
+          this._cancelBowCharge();
+          this.controls.mouseRight = false; // 中途换手持物：本次按住作废，不触发其它分支
+        } else {
+          this._bowCharge = Math.min(1, this._bowCharge + dt); // 1 秒满蓄
+          this.hand.setBowDraw(this._bowCharge);
+          return;
+        }
+      }
+    }
     if (this.inventoryScreen && this.inventoryScreen.visible) return;
     if (this.chestScreen && this.chestScreen.visible) return;
     if (this.furnaceScreen && this.furnaceScreen.visible) return;
     if (this.tradeScreen && this.tradeScreen.visible) return;
-    if (!this.selectedBlock && !(this.controls.mouseLeft && this.mobManager)) return;
+    // 对空可持弓/掷眼（分支不依赖命中）——放宽未命中早退
+    const heldNow = this.inventory.getSelected();
+    const bowLikeHeld = !!heldNow && (heldNow.name === 'bow' || heldNow.name === 'ender_eye');
+    if (!this.selectedBlock && !(this.controls.mouseLeft && this.mobManager) &&
+        !(this.controls.mouseRight && bowLikeHeld)) return;
     
     if (this.controls.mouseLeft) {
       // 联机互殴：先检测远端玩家（射线命中优先于怪物）
@@ -1430,15 +1463,17 @@ export class Game {
           }
         }
       }
-      // 弓：右键射箭（消耗 1 支箭；命中怪复用 attackMob 链→击退/掉落/经验全通）
+      // 弓：按住蓄力，松手发射（初速/伤害随 charge 插值；命中怪复用 attackMob 链）
+      // 对准可交互物时上方单击分支优先，只有走到这里才进入蓄力——单击语义不误触。
       if (sel && sel.name === 'bow') {
         const hasArrow = this.player.creative || this.inventory.slots.some(s => s && s.name === 'arrow');
         if (hasArrow) {
-          if (!this.player.creative) this.inventory.removeItems('arrow', 1);
-          this._shootArrow();
-          this.hand.swing();
+          this._bowCharging = true; // 不消耗 mouseRight：按住期间由顶部蓄力通道累计，松手在顶部检测
+          this._bowCharge = 0;
+          this.hand.setBowDraw(0);
+        } else {
+          this.controls.mouseRight = false; // 无箭：维持原行为（不射）
         }
-        this.controls.mouseRight = false;
         return;
       }
       // 掷末影之眼：不依赖命中（对空掷出——原版手势）；嵌入框架分支已在上方 return
@@ -1496,7 +1531,8 @@ export class Game {
   }
 
   // 射箭：箭矢为本地投射物（几何/材质模块级共享），重力下坠、命中怪复用 attackMob 链
-  _shootArrow() {
+  // power = 初速系数（0.3~1 蓄力插值），dmg = 命中伤害（2~8 蓄力插值）
+  _shootArrow(power = 1, dmg = 6) {
     const dir = new THREE.Vector3();
     this.renderer.camera.getWorldDirection(dir);
     const start = this.player.position.clone();
@@ -1508,7 +1544,26 @@ export class Game {
     mesh.position.copy(start);
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
     this.renderer.scene.add(mesh);
-    this.arrows.push({ mesh, pos: start, vel: dir.multiplyScalar(28), life: 8, stuck: false });
+    this.arrows.push({ mesh, pos: start, vel: dir.multiplyScalar(28 * power), life: 8, stuck: false, dmg });
+  }
+
+  _cancelBowCharge() {
+    this._bowCharging = false;
+    this._bowCharge = 0;
+    this.hand.setBowDraw(null);
+  }
+
+  // 松手发射：charge→初速/伤害插值（vel=28×(0.3+0.7c)、dmg=2+round(6c)，即 8.4~28 m/s、2~8）
+  _releaseBow() {
+    const charge = this._bowCharge;
+    this._cancelBowCharge();
+    const sel = this.inventory.getSelected();
+    if (!sel || sel.name !== 'bow') return; // 蓄力中途换了物品：只取消不射
+    const hasArrow = this.player.creative || this.inventory.slots.some(s => s && s.name === 'arrow');
+    if (!hasArrow) return;
+    if (!this.player.creative) this.inventory.removeItems('arrow', 1);
+    this._shootArrow(0.3 + 0.7 * charge, 2 + Math.round(charge * 6));
+    this.hand.swing();
   }
 
   _updateArrows(dt) {
@@ -1527,7 +1582,7 @@ export class Game {
         const dirN = seg.clone().normalize();
         const mh = this.mobManager.findMobByRay(old, dirN, segLen + 0.2);
         if (mh && !mh.mob.dead) {
-          this.mobManager.attackMob(old, dirN, segLen + 0.2, 6);
+          this.mobManager.attackMob(old, dirN, segLen + 0.2, a.dmg || 6); // 伤害随蓄力（Idea-2A）
           this._despawnArrow(i);
           continue;
         }

@@ -37,6 +37,7 @@ export class FirstPersonHand {
     this.miningPeriod = 0.3;      // 阶段11：挖掘挥动周期（秒）——由 Game 按方块硬度/工具速度写入
     this.bobPhase = 0;
     this._autoSwingCd = 0;        // 按住左键的自动挥动冷却
+    this.bowDraw = null;          // Idea-2A：拉弓蓄力姿态（null=未拉弓；0..1=蓄力进度）
     this.visible = false;         // 默认隐藏（主菜单不显示第一人称手臂），Game.start 里 setVisible(true)
     this.group.visible = false;
   }
@@ -44,6 +45,11 @@ export class FirstPersonHand {
   setVisible(v) {
     this.visible = v;
     this.group.visible = v;
+  }
+
+  // 弓蓄力姿态开关（Game 蓄力通道每帧写入；松手/取消传 null 复位）
+  setBowDraw(v) {
+    this.bowDraw = (v === null || v === undefined) ? null : Math.min(1, Math.max(0, v));
   }
 
   // 切换手持物（异步构建；重复调用以最后一次为准）
@@ -97,7 +103,15 @@ export class FirstPersonHand {
       this._autoSwingCd = 0;
     }
 
-    this.group.position.set(this.basePos.x + bobX, this.basePos.y + bobY - swDown * 0.10, this.basePos.z - swDown * 0.16);
-    this.group.rotation.set(-swRot * 0.85, -0.35 + swRot * 0.3, 0.05);
+    // 拉弓蓄力（Idea-2A）：手持物向中心回拉 + 略抬，满蓄轻微颤动
+    const draw = this.bowDraw == null ? 0 : this.bowDraw;
+    const tremble = (this.bowDraw != null && this.bowDraw >= 1) ? Math.sin(this.bobPhase * 12) * 0.0022 : 0;
+
+    this.group.position.set(
+      this.basePos.x + bobX - draw * 0.12,
+      this.basePos.y + bobY - swDown * 0.10 + draw * 0.04 + tremble,
+      this.basePos.z - swDown * 0.16 + draw * 0.14
+    );
+    this.group.rotation.set(-swRot * 0.85 - draw * 0.15, -0.35 + swRot * 0.3 + draw * 0.25, 0.05);
   }
 }
