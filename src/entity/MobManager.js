@@ -87,6 +87,7 @@ export class MobManager {
     this.onBlockDestroyed = null; // 爆炸销毁方块回调 (x,y,z,def)，由 Game 注入（碎屑粒子）
     this.spawnedVillages = new Set(); // 已生成村民的村庄锚点 key "ax,az"（本会话去重，死亡不重生）
     this.spawnedEndCities = new Set(); // 已生成潜影贝的末地城锚点 key（同上惯例）
+    this.villageGolemSeen = new Map(); // Idea-2E：村庄铁傀儡最后存活时刻 key "ax,az"（死亡 60s 后补员）
   }
 
   // 异步初始化：mob 用私有 skin atlas，不再注入全局 atlas
@@ -270,11 +271,11 @@ export class MobManager {
     }
   }
 
-  // 被动动物计数（不含村民——村民由村庄生成系统单独管理）
+  // 被动动物计数（不含村民——村民由村庄生成系统单独管理；不含铁傀儡——村庄护卫单独补员）
   _passiveCount() {
     let n = 0;
     for (const m of this.mobs) {
-      if (m.type && m.type.passive && m.typeName !== 'villager' && !m.dead) n++;
+      if (m.type && m.type.passive && m.typeName !== 'villager' && m.typeName !== 'iron_golem' && !m.dead) n++;
     }
     return n;
   }
@@ -366,9 +367,11 @@ export class MobManager {
     const dz = victim.position.z - attacker.position.z;
     const d = Math.sqrt(dx * dx + dz * dz);
     if (d > 0.001) {
-      victim.knockback.x += (dx / d) * 6;
-      victim.knockback.z += (dz / d) * 6;
-      victim.knockback.y += 3;
+      // Idea-2E：铁傀儡大击退（原版把怪打上天）——水平/垂直都加倍
+      const golem = attacker.typeName === 'iron_golem';
+      victim.knockback.x += (dx / d) * (golem ? 12 : 6);
+      victim.knockback.z += (dz / d) * (golem ? 12 : 6);
+      victim.knockback.y += golem ? 7 : 3;
     }
     if (victim.health <= 0) victim.dead = true;
   }
@@ -410,28 +413,57 @@ export class MobManager {
             this.spawnMob(mob);
           }
         }
+
+        // Idea-2E：村庄护卫（铁傀儡）——存活村民≥5 且该村庄无存活护卫时补员；
+        // 死亡后 60s 补员（villageGolemSeen 记录最后存活时刻），村庄卸载清记录立即补员
+        const golemAlive = this.mobs.some(m =>
+          m.typeName === 'iron_golem' && !m.dead && !m.dyingAnim &&
+          m.home && m.home.x === rec.ax && m.home.z === rec.az);
+        if (golemAlive) {
+          this.villageGolemSeen.set(rec.ax + ',' + rec.az, performance.now() / 1000);
+        } else {
+          const villagersHere = this.mobs.filter(m =>
+            m.typeName === 'villager' && !m.dead && m.home &&
+            m.home.x === rec.ax && m.home.z === rec.az).length;
+          const seen = this.villageGolemSeen.get(rec.ax + ',' + rec.az) || 0;
+          if (villagersHere >= 5 && performance.now() / 1000 - seen >= 60) {
+            const gs = rec.meta.villagerSpawns || [];
+            if (gs.length) {
+              const [gx, gy, gz] = gs[0];
+              if (this.mobNet) {
+                this.mobNet.sendMobSpawn('iron_golem', gx + 2, gy + 0.1, gz);
+              } else {
+                const golem = new Mob('iron_golem', this.world);
+                golem.position.set(gx + 2, gy + 0.1, gz);
+                golem.home = { x: rec.ax, z: rec.az, radius: 24 };
+                this.spawnMob(golem);
+              }
+            }
+          }
+        }
       }
     }
 
     // 随村清扫：村庄卸载（玩家离开 ~120 格）→ 其村民一并移除并解除生成标记，
-    // 回村时随区块重载重新生成（村庄生命周期 = 区块生命周期）
+    // 回村时随区块重载重新生成（村庄生命周期 = 区块生命周期）；村庄铁傀儡同款
     for (let i = this.mobs.length - 1; i >= 0; i--) {
       const m = this.mobs[i];
-      if (m.typeName !== 'villager' || !m.home) continue;
+      if ((m.typeName !== 'villager' && m.typeName !== 'iron_golem') || !m.home) continue;
       const hd = Math.hypot(m.home.x - player.position.x, m.home.z - player.position.z);
       if (hd > 120) {
         this._removeMobResources(m);
         this.mobs.splice(i, 1);
         this.spawnedVillages.delete(m.home.x + ',' + m.home.z);
+        if (m.typeName === 'iron_golem') this.villageGolemSeen.delete(m.home.x + ',' + m.home.z);
       }
     }
 
-    // 远端创建的村民补挂 home（mob_spawn 回执创建时村庄记录可能尚未缓存；记录确定性一致，
+    // 远端创建的村民/铁傀儡补挂 home（mob_spawn 回执创建时村庄记录可能尚未缓存；记录确定性一致，
     // 各端最终收敛到同一锚点）
     if (this.mobs.length > 0) {
       const nearRecs = sm.recordsAround('village', player.position.x, player.position.z);
       for (const m of this.mobs) {
-        if (m.typeName !== 'villager' || m.home || m.dead) continue;
+        if ((m.typeName !== 'villager' && m.typeName !== 'iron_golem') || m.home || m.dead) continue;
         const rec = nearRecs.find(r =>
           Math.hypot(r.ax - m.position.x, r.az - m.position.z) < 96);
         if (rec) m.home = { x: rec.ax, z: rec.az, radius: 24 };
@@ -1042,6 +1074,11 @@ export class MobManager {
             m.aggroTimer = 25;
           }
         }
+      }
+      // Idea-2E：铁傀儡被玩家攻击 → 激怒追击攻击者（20s，guardian AI 消费）
+      if (closest.type && closest.type.guardian) {
+        closest.aggro = true;
+        closest.aggroTimer = 20;
       }
       // 受击红光
       closest.hitFlash = HIT_FLASH_DURATION;

@@ -90,7 +90,10 @@ export class Mob extends Entity {
       return;
     }
 
-    if (this.type.passive) {
+    if (this.type.guardian) {
+      // Idea-2E：铁傀儡护卫——索敌反击敌对怪/激怒追玩家，无敌情时村庄绳拴游荡
+      this.updateGuardianAI(dt, player, physics, mobManager);
+    } else if (this.type.passive) {
       // 村民等被动生物：游荡/注视/逃离，永不索敌
       this.updatePassiveAI(dt, player, physics, mobManager);
     } else if (this.neutral && !this.aggro) {
@@ -209,9 +212,44 @@ export class Mob extends Entity {
     this.attackCooldown = 2.5;
   }
 
-  // 被动 AI（村民）：8 格内敌对怪 → 背向逃离；4 格内玩家 → 注视；否则绳拴游荡
-  updatePassiveAI(dt, player, physics, mobManager) {
+  // 护卫 AI（铁傀儡 Idea-2E）：敌对怪进入索敌范围 → 追击（chase 的 isMob 分支走
+  // mobAttackMob）；被玩家攻击激怒（aggro 由 MobManager.attackMob 设置）→ 死追攻击者；
+  // 无敌情 → 村庄绳拴游荡（有 home）/ 普通游荡。不逃跑、不注视玩家。
+  updateGuardianAI(dt, player, physics, mobManager) {
     this.target = null;
+    let target = null;
+    let targetDist = Infinity;
+
+    // 被玩家攻击的激怒期：追击玩家（比普通索敌优先级低——敌对怪仍是主目标）
+    if (this.aggro && player && !player.dead) {
+      const dp = this.position.distanceTo(player.position);
+      if (dp < 24) { target = player; targetDist = dp; }
+    }
+
+    // 护卫索敌：最近的敌对怪（非被动且具攻击力）进入 detectionRange → 反击
+    //（护卫在村内巡逻，"接近村民"由地缘覆盖；苦力怕也纳入——拦在玩家/村民前）
+    if (mobManager) {
+      for (const m of mobManager.mobs) {
+        if (m === this || m.dead || m.dyingAnim || m.type.passive) continue;
+        if (m.attackDamage <= 0) continue;
+        const d = this.position.distanceTo(m.position);
+        if (d < this.detectionRange && d < targetDist) { target = m; targetDist = d; }
+      }
+    }
+
+    if (target) {
+      this.target = target;
+      this.aiState = 'chase';
+      this.chase(dt, target, physics, mobManager);
+      return;
+    }
+    this.aiState = 'idle';
+    if (this.home) this.wanderVillage(dt, physics);
+    else this.wander(dt, physics);
+  }
+
+  // 被动 AI（村民）：8 格内敌对怪 → 背向逃离；4 格内玩家 → 注视；否则绳拴游荡
+  updatePassiveAI(dt, player, physics, mobManager) {    this.target = null;
 
     let threat = null;
     let threatDist = Infinity;

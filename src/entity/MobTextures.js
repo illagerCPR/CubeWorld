@@ -155,6 +155,9 @@ const C = {
   gTrim: [226, 184, 92], gEye: [86, 158, 255], gWing: [204, 222, 248], gWingD: [158, 182, 220],
   // 牛:棕底白斑 + 粉吻
   cowBrown: [122, 86, 62], cowBrownD: [94, 64, 46], cowWhite: [232, 228, 220], cowMuzzle: [222, 178, 168], cowHorn: [226, 218, 198],
+  // 铁傀儡：白铁 + 藤蔓绿 + 铜鼻（原版铁傀儡配色）
+  iIron: [214, 216, 218], iIronD: [168, 172, 178], iIronDD: [118, 122, 130], iIronHi: [238, 240, 244],
+  iVine: [96, 128, 64], iVineD: [68, 96, 46], iNose: [188, 158, 112],
   // 羊:蓬松白毛 + 粉褐脸
   wool: [234, 232, 226], woolD: [206, 202, 194], sheepFace: [214, 186, 168], sheepHoof: [120, 108, 98],
   // 鸡:白羽 + 黄喙红髯
@@ -783,6 +786,62 @@ function aetherGuardSkinSVG() {
   return buildSkinSVG(cells);
 }
 
+// ── 铁傀儡（Idea-2E：村庄护卫）────────────────────────────────────
+// 铁傀儡皮肤：白铁底 + 斑驳锈点 + 藤蔓爬痕； stern 脸（重眉/暗眼/长铜鼻/闭嘴线）
+function ironGolemSkinSVG() {
+  const ironBase = noisy(C.iIron, 10, 341);
+  const ironLeg = noisy(C.iIronD, 8, 344);
+
+  // 斑驳锈点：确定性哈希散布
+  const rust = (x, y, s) => (hash01(x, y, s) < 0.10 ? C.iIronD : null);
+  // 藤蔓：斜向爬痕（身体/手臂）
+  const vine = (x, y, s) => (hash01(x, y, s) < 0.07 ? C.iVine : (hash01(x, y, s + 7) < 0.03 ? C.iVineD : null));
+
+  // 脸：重眉 + 暗眼 + 长铜鼻（中央竖条，比村民更宽更铁色）+ 闭嘴线
+  const headFront = (x, y) => {
+    if (y === 4 && x >= 3 && x <= 12) return C.iIronDD;                 // 重眉
+    if (y >= 6 && y <= 7 && ((x >= 4 && x <= 5) || (x >= 10 && x <= 11))) return C.iIronDD; // 暗眼
+    if (y >= 8 && y <= 13 && x >= 7 && x <= 8) return C.iNose;          // 长铜鼻
+    if (y === 14 && x >= 6 && x <= 9) return C.iIronDD;                 // 嘴
+    return rust(x, y, 342);
+  };
+  const headSide = (x, y) => (y <= 4 ? C.iIronD : rust(x, y, 343));     // 颅顶护沿
+  const headTop = () => C.iIronHi;
+  const headBot = () => C.iIronDD;
+
+  // 躯干：胸前竖纹 + 藤蔓爬痕
+  const bodyFront = (x, y) => {
+    if (x === 5 || x === 10) return C.iIronD;                           // 甲缝
+    if (y >= 13) return C.iIronDD;                                      // 腰缘
+    return vine(x, y, 345) || rust(x, y, 346);
+  };
+  const bodySide = (x, y) => (y >= 13 ? C.iIronDD : vine(x, y, 347));
+  const bodyTop = () => C.iIronHi;
+  const bodyBot = () => C.iIronDD;
+
+  // 长臂：垂放体侧 + 藤蔓
+  const armAll = (x, y) => vine(x, y, 348) || rust(x, y, 349);
+  const armBot = () => C.iIronDD;
+
+  const cells = [
+    ...partCells(0, ironBase, { front: headFront, back: headSide, left: headSide, right: headSide, top: headTop, bot: headBot }),
+    ...partCells(1, ironBase, { front: bodyFront, back: bodySide, left: bodySide, right: bodySide, top: bodyTop, bot: bodyBot }),
+    ...partCells(2, ironBase, { front: armAll, back: armAll, left: armAll, right: armAll, top: armBot, bot: armBot }),
+    ...partCells(3, ironLeg, { front: null, top: null, bot: ironLeg }),
+  ];
+  return buildSkinSVG(cells);
+}
+
+// 铁傀儡模型：高大窄躯干 + 长臂垂放 + 短腿（总高 2.7，原版比例）
+const IRON_GOLEM_PARTS = [
+  { name: 'head',  row: 0, box: [-0.30, 2.10, -0.30,  0.30, 2.70, 0.30] },
+  { name: 'body',  row: 1, box: [-0.30, 0.75, -0.15,  0.30, 2.10, 0.15] },
+  { name: 'armR',  row: 2, box: [-0.55, 0.75, -0.12, -0.30, 2.05, 0.12] },
+  { name: 'armL',  row: 2, box: [ 0.30, 0.75, -0.12,  0.55, 2.05, 0.12] },
+  { name: 'legR',  row: 3, box: [-0.28, 0,    -0.14, -0.02, 0.75, 0.14] },
+  { name: 'legL',  row: 3, box: [ 0.02, 0,    -0.14,  0.28, 0.75, 0.14] },
+];
+
 // ── 被动动物 + 末影人（P3-2）────────────────────────────────────────
 // 牛：四足，头前伸、白斑棕底
 const COW_PARTS = [
@@ -909,6 +968,7 @@ export function generateMobSkinSVGs() {
     sheep:             sheepSkinSVG(),
     chicken:           chickenSkinSVG(),
     enderman:          endermanSkinSVG(),
+    iron_golem:        ironGolemSkinSVG(),
   };
 }
 
@@ -1213,6 +1273,25 @@ export const MobTypes = {
     model: { parts: ENDERMAN_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'ender_pearl', min: 0, max: 1 },
+    ],
+  },
+  iron_golem: {
+    name: 'iron_golem',
+    displayName: '铁傀儡',
+    width: 0.9,
+    height: 2.7,
+    health: 100,
+    damage: 12,          // 高伤害（两拳放倒僵尸）
+    speed: 2.8,          // 追击能咬住僵尸/骷髅（2.5）
+    attackRange: 2.2,    // 长臂横扫
+    detectionRange: 12,  // 护卫索敌：敌对怪进入 12 格即反击
+    burningInDay: false,
+    passive: true,       // 不占敌对 MAX_MOBS/动物 MAX_PASSIVE 名额；被动族互不威胁（村民不逃铁傀儡）
+    guardian: true,      // Idea-2E：护卫分支——索敌反击敌对怪 + 被玩家攻击时激怒
+    xp: 0,               // 原版铁傀儡无经验
+    model: { parts: IRON_GOLEM_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'iron_ingot', min: 3, max: 5 },
     ],
   },
 };

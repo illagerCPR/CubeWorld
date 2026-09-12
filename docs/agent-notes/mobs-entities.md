@@ -61,3 +61,12 @@
 - **原版化皮肤**：僵尸无发 + 青衫 + **HUMANOID_PARTS 手臂沿 +Z 前伸**（box y 1.28..1.50，z 0.14..0.89）；骷髅用 **SKELETON_PARTS**（细肢 0.14 宽，MobTypes.skeleton 引用）+ 全骨白；苦力怕经典脸（眼 4×4 @ rows4-7，嘴上窄中宽下分叉）；蜘蛛头前红眼。改皮肤时保持 6 面 partCells 结构。
 - **天空盒跟随（防"远处纯黑"）**：`Sky.update()` 必须 `skyMesh.position.set(playerPos)` + 构造时 `frustumCulled = false`。天空球半径 500 固定在原点时，玩家离原点 >far(1000)−500 后球面被远裁剪面裁掉露出黑色 clearColor。
 - **验证**：agent-browser 冒烟——atlas 96×64 断言（`mobTextures.get('zombie').image.width===96`）、top-cell UV 使用断言（u∈[0.667,0.833]）、4 怪正午特写截图（脸在头正面/手臂前伸/经典脸/蜘蛛红眼）、传送 (2500,95,2500) 天空蓝天无黑。拍摄技巧：`spawnEnabled=false` + `detectionRange=0` + `burningInDay=false` 防走位/爆炸/燃烧干扰；旁观模式瞬移后相机有平滑，需置 `_specSmoothed/_specSmoothYaw/_specSmoothPitch = null`。
+
+### Idea-2E 批次备忘（防回退）—— 铁傀儡（村庄护卫）
+
+- **类型定义**：`MobTypes.iron_golem`（passive:true + guardian:true 双标记）——passive 使其不占敌对 MAX_MOBS/动物 MAX_PASSIVE 名额（`_passiveCount` 已排除）且被动族互不威胁（村民不逃铁傀儡、僵尸不猎铁傀儡）；guardian 驱动专属 AI 分支（先于 passive 分支判断）。血 100/伤 12/速 2.8（须能咬住 2.5 的僵尸骷髅）/xp:0。
+- **护卫 AI（`Mob.updateGuardianAI`）**：敌对怪（非 passive 且 attackDamage>0）进入 detectionRange(12) → `chase()`（chase 的 `target.isMob` 分支自动走 `mobAttackMob`，勿另写攻击路径）；被玩家攻击 → `attackMob` 里 guardian 分支设 aggro(20s) 死追攻击者（复用中立 aggro 计时衰减，该衰减块对任意 mob 生效）；无敌情 → 有 home 走 `wanderVillage`，无则 `wander`。
+- **大击退**：`mobAttackMob` 按 attacker.typeName==='iron_golem' 加倍击退（水平 12/垂直 7）——勿改成通用参数化（会动到僵尸咬村民的手感）。
+- **村庄自动补员**：挂 `updateVillageSpawns` 的 spawnEnabled 块内（**必须在 for(rec) 循环体内**，曾插错作用域引用不到 rec）；门控 = 存活村民(home 匹配)≥5 且无存活护卫；冷却 = `villageGolemSeen` Map 记录"最后存活时刻"，死亡后 60s 补员，村庄卸载清记录（卸载即补）；生成点 = `meta.villagerSpawns[0] + x偏2`（确定性，两端一致）；联机走 `_spawnAt`→mob_spawn 回执（与村民同惯例，勿本地直接 spawnMob）。home 补挂与随村清扫两个循环都已扩到 iron_golem（清扫时同步删 seen 记录）。
+- **手工召唤（`Game._trySummonIronGolem`）**：只在**本地放置成功路径**调用（放置分支内）——联机远端 block_set 不检测，防多端重复召唤；T 型 = 南瓜头 + 2 格铁柱 + 双臂（头/柱底/柱中三个完成入口都识别）；命中后 5 块 setBlock(0)（自动广播账本）+ `_spawnAt` 就地召唤。**验证教训**：agent-browser 瞄准放置精确格位不可行（mouse move 是绝对坐标制、movement=相邻两次差，且指针锁瞄准本就不可靠）——方法体用 eval 补块后直调 `_trySummonIronGolem` 走真实代码路径验证，钩子布线靠代码审查（单行、坐标即放置坐标）。
+- **实测锚点**：索敌 chase+targetIsZombie、一拳 20→6.9、追至 0.81、击杀后回 idle；死亡掉落 iron_ingot 3-5；白天燃烧的亡灵尸体堆属正常现象（sky.time=0.5 引发，非 bug）。

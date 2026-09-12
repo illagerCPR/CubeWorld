@@ -1457,6 +1457,7 @@ export class Game {
           this.hand.swing(); // 阶段10：放置方块挥动
           this.world.setBlock(placeX, placeY, placeZ, blockDef.id);
           if (this.redstone) this.redstone.onBlockChange(placeX, placeY, placeZ);
+          this._trySummonIronGolem(placeX, placeY, placeZ); // Idea-2E：铁傀儡召唤检测（南瓜/铁块完成 T 型）
           if (this.player.survival) {
             this.inventory.removeSelected(1);
             this.hotbar.update();
@@ -1622,6 +1623,38 @@ export class Game {
     const a = this.arrows[i];
     this.renderer.scene.remove(a.mesh); // 几何/材质为模块级共享，不 dispose
     this.arrows.splice(i, 1);
+  }
+
+  // Idea-2E：铁傀儡召唤检测——南瓜头 + 2 格铁块身柱 + 双臂铁块（原版 T 型）。
+  // 只在本地放置成功路径调用（联机远端方块变更不检测，防多端重复召唤）；
+  // 命中则移除 5 块（走 setBlock 自动广播）并就地召唤护卫（联机经 mob_spawn 回执全端创建）。
+  _trySummonIronGolem(x, y, z) {
+    if (!this.world || !this.mobManager) return false;
+    const IRON = BlockRegistry.getId('iron_block');
+    const PUMPKIN = BlockRegistry.getId('pumpkin');
+    if (!IRON || !PUMPKIN) return false;
+    const get = (bx, by, bz) => this.world.getBlock(bx, by, bz);
+    // 推定南瓜头位置：本次放的是头 / 柱底（头在其上 2 格）/ 柱中或臂（头在其上 1 格）
+    const placed = get(x, y, z);
+    let hx = x, hy = y, hz = z;
+    if (placed === PUMPKIN) {
+      // 本次放的是头
+    } else if (placed === IRON && get(x, y + 1, z) === IRON && get(x, y + 2, z) === PUMPKIN) {
+      hy = y + 2;
+    } else if (placed === IRON && get(x, y - 1, z) === IRON && get(x, y + 1, z) === PUMPKIN) {
+      hy = y + 1;
+    } else {
+      return false;
+    }
+    // 身柱 2 格 + 双臂各 1（臂与身上段同层）
+    if (get(hx, hy - 1, hz) !== IRON || get(hx, hy - 2, hz) !== IRON) return false;
+    if (get(hx - 1, hy - 1, hz) !== IRON || get(hx + 1, hy - 1, hz) !== IRON) return false;
+    for (const [bx, by, bz] of [[hx, hy, hz], [hx, hy - 1, hz], [hx, hy - 2, hz], [hx - 1, hy - 1, hz], [hx + 1, hy - 1, hz]]) {
+      this.world.setBlock(bx, by, bz, 0);
+    }
+    this.mobManager._spawnAt('iron_golem', hx + 0.5, hy - 2 + 0.1, hz + 0.5);
+    if (this.chatBox) this.chatBox.add('铁傀儡从方块中苏醒了…', '#cfc');
+    return true;
   }
 
   // 打火石点火传送门：点击框体 → 内部候选格 = 点击面外邻格 → 框校验 → 填充门方块。
