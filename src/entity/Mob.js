@@ -4,6 +4,7 @@ import { Entity } from './Entity.js';
 import { MobTypes } from './MobTextures.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { updateDragonAI } from './DragonAI.js';
+import { audio } from '../audio/AudioEngine.js';
 
 export class Mob extends Entity {
   constructor(typeName, world) {
@@ -58,6 +59,14 @@ export class Mob extends Entity {
     this.aiTimer -= dt;
     this.attackCooldown -= dt;
     this.wanderTimer -= dt;
+
+    // A-②：环境叫声（随机计时 + 引擎全局限频 + 距离衰减；dragon/shulker 早退分支之前）
+    this._voiceTimer = (this._voiceTimer ?? 4 + Math.random() * 8) - dt;
+    if (this._voiceTimer <= 0) {
+      this._voiceTimer = 7 + Math.random() * 9;
+      const dist = player ? this.position.distanceTo(player.position) : 99;
+      if (dist < 24) audio.mobIdle(this.typeName, dist);
+    }
 
     // 燃烧判定（日光下）
     if (this.burningInDay && sky && sky.isDay() && this.isExposedToSky()) {

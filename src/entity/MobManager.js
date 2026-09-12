@@ -8,6 +8,7 @@ import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
 import { CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from '../core/Chunk.js';
 import { villagerTradeSeed } from '../world/loot.js';
+import { audio } from '../audio/AudioEngine.js';
 
 const MAX_MOBS = 20;
 const MAX_PASSIVE = 12; // 被动动物上限（不含村民——村庄系统单独管理）
@@ -526,8 +527,11 @@ export class MobManager {
     }
     // 位置校正：向攻击者端位置对齐
     mob.position.set(x, y, z);
+    const dist = this._playerPos ? this._playerPos.distanceTo(mob.position) : 10;
+    audio.mobHurt(mob.typeName, dist); // A-②：远端同步伤害也播受击音
     if (mob.health <= 0) {
       mob.dead = true;
+      audio.mobDeath(mob.typeName, dist);
       // 远端攻击致死：死亡广播与掉落由攻击端负责，本端只播死亡动画
       mob.diedHandled = true;
       mob.remoteDeath = true;
@@ -634,6 +638,7 @@ export class MobManager {
 
   // 更新所有怪物
   update(dt, player, sky) {
+    this._playerPos = player ? player.position : null; // A-②：怪物音效距离衰减用
     this.frame++;
     this.spawnTimer -= dt;
     const isNight = sky ? sky.isNight() : false;
@@ -1084,6 +1089,10 @@ export class MobManager {
       }
       // 受击红光
       closest.hitFlash = HIT_FLASH_DURATION;
+      // A-②：受击/死亡音（死亡在扣血处判）
+      const sndDist = this._playerPos ? this._playerPos.distanceTo(closest.position) : 10;
+      audio.mobHurt(closest.typeName, sndDist);
+      if (closest.dead) audio.mobDeath(closest.typeName, sndDist);
       // 显示头顶血条 + 立即刷新
       if (closest.healthBarSprite) {
         closest.healthBarFadeTimer = HEALTH_BAR_FADE;

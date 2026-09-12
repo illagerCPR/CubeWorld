@@ -424,7 +424,9 @@ export class Game {
     if (loadData && loadData.sky && this.sky) {
       this.sky.time = loadData.sky.time || 0.35;
     }
-    
+    // A-②：环境音调度相位随世界重置（避免新存档继承上一局节拍）
+    audio.resetAmbient();
+
     this.hotbar = new Hotbar(this.inventory);
     await this.hotbar.update();
     this.inventoryScreen = new InventoryScreen(this.inventory, this.player, this);
@@ -940,6 +942,10 @@ export class Game {
     // 弓箭投射物
     if (this.arrows.length) this._updateArrows(dt);
     this.updatePortalParticles(dt);
+
+    // A-② 音频：脚步/落地（距离驱动步频）+ 环境风声/BGM 计划调度
+    this._updateFootsteps(dt);
+    audio.tickAmbient(dt, this.sky ? this.sky.getLightLevel() : 0.8);
 
     // 自动保存（联机模式不自动保存，避免覆盖本地槽位）
     if (!this.networkMode) {
@@ -1664,6 +1670,43 @@ export class Game {
     const a = this.arrows[i];
     this.renderer.scene.remove(a.mesh); // 几何/材质为模块级共享，不 dispose
     this.arrows.splice(i, 1);
+  }
+
+  // A-② 脚步/落地音：水平位移累计达步长触发（走速 4.3m/s ≈ 每 0.5s 一步），涉水步长更短播水花；
+  // 落地 = 上一帧下落速度 >8m/s 且本帧触地（inWater 落水不播闷响）
+  _updateFootsteps(dt) {
+    const p = this.player;
+    if (!p || !p.velocity) return;
+    if (p.onGround && !this._wasOnGround && this._prevFallSpeed > 8 && !p.inWater) {
+      const def = this._blockUnderFoot();
+      if (def) audio.land(def);
+    }
+    this._wasOnGround = p.onGround;
+    this._prevFallSpeed = Math.max(0, -p.velocity.y);
+    if (!p.onGround && !p.inWater) { this._stepDist = 0; return; }
+    const dx = p.position.x - (this._stepLastX ?? p.position.x);
+    const dz = p.position.z - (this._stepLastZ ?? p.position.z);
+    this._stepLastX = p.position.x;
+    this._stepLastZ = p.position.z;
+    this._stepDist = (this._stepDist || 0) + Math.hypot(dx, dz);
+    if (this._stepDist >= (p.inWater ? 1.6 : 2.1)) {
+      this._stepDist = 0;
+      if (p.inWater) audio.splash();
+      else {
+        const def = this._blockUnderFoot();
+        if (def) audio.step(def);
+      }
+    }
+  }
+
+  // 脚下方块（优先贴脚格，其次脚下半格内；流体不算脚步材质）
+  _blockUnderFoot() {
+    const p = this.player;
+    const x = Math.floor(p.position.x), z = Math.floor(p.position.z);
+    let id = this.world.getBlock(x, Math.floor(p.position.y - 0.15), z);
+    if (!id) id = this.world.getBlock(x, Math.floor(p.position.y - 0.6), z);
+    const def = BlockRegistry.getById(id);
+    return def && !def.fluid ? def : null;
   }
 
   // Idea-2E：铁傀儡召唤检测——南瓜头 + 2 格铁块身柱 + 双臂铁块（原版 T 型）。

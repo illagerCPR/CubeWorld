@@ -48,3 +48,12 @@
 - **材质分路**：`blockCategory(def)` 按名称启发式把方块归 9 类（stone/wood/gravel/grass/glass/metal/cloth/snow/liquid），`CATEGORY_PARAMS` 定滤波器/时长/增益，未命中回退 stone。新方块若音色怪，先查是否被启发式误分类。
 - **接线锚点（全在 Game.js）**：挖掘命中音挂 **0.25s 挖掘碎粒定时器**（`_miningPuffTimer`，天然限频勿另加节流）；创造/生存破坏、放置、`player.onHurt`（与 flashDamage 同源）、食用（`player.eat` 成功分支）、`_releaseBow`、箭命中（`_updateArrows`，远端视觉箭也响）。
 - **验证口径**：headless 听不到声，断言走引擎内部——eval 动态 `import('/src/audio/AudioEngine.js')`（与 Game.js 同模块实例，`window.__ae` 缓存）→ 包一层 `_noise/_tone` 计数 → 直调 7 个事件方法断言调用数/滤波频率；真实路径抽 3 条（创造挖掘/放置/生存长按）用同一计数探针验证。**headless 帧极慢**，生存长按 0.6s 可能攒不满 0.25s 碎粒节拍——延长按住时间再断言。
+
+### Idea-3A-② 怪物音/脚步/BGM 批次备忘（防回退）
+
+- **怪物语音**：`AudioEngine` 内 `VOICE_PRESETS` 按typeName 预设合成参数（tones+noise，音量克制 0.05~0.16），`_mobVoice(typeName, dist, mode)` mode=idle/hurt/death 决定音高（×1.35/×0.75）时长增益倍率；距离衰减 `att = 1 - dist/28`，>28 格全静音。**全局限频 `_gate('voice', 0.3)` 只门 idle**——受击/死亡是反馈音必须即时。新怪类型若不匹配预设回退 VOICE_DEFAULT；新增怪时在 VOICE_PRESETS 补一行。
+- **钩子位置**：环境叫声在 `Mob.update` 顶部（dragon/shulker 早退分支**之前**，`_voiceTimer` 4-12s 随机）；受击/死亡在 `MobManager.attackMob`（扣血处判 dead）与 `applyRemoteMobAttack`（远端同步伤害也响）两处；距离用 `MobManager._playerPos`（update(dt,player,sky) 开头存）。**怪 vs 怪（mobAttackMob 链）不播受击音**——避免混战噪音，防回退勿加。
+- **脚步/落地**：`Game._updateFootsteps(dt)` 在 Game.update 末段调用——**距离驱动步频**（累计水平位移 ≥2.1m，涉水 1.6m 播 splash），`_blockUnderFoot()` 贴脚格→脚下 0.45m 兜底（流体不算材质）；落地 = 上一帧 `_prevFallSpeed > 8` 且本帧 onGround 且不在水中。跨帧状态 `_wasOnGround/_prevFallSpeed/_stepDist` 是 Game 共享型字段，构造函数无需重置（数值型零值无害）。
+- **环境音/BGM**：`audio.tickAmbient(dt, daylight)` 每帧由 Game.update 驱动——**计划式调度**（风声 swell 9-23s 随机 + BGM 和弦垫 4.6s 节拍 C-G-Am-F 低音区），无常驻节点，**暂停时 update 停止调用即自然静默**；全部走 music 分轨。`audio.resetAmbient()` 必须在 `Game.start` 调（sky.time 重置旁）——新存档继承上一局调度相位会显得"闹鬼"。
+- **music 设置**：Settings `music: true` → `applySettings` 调 `audio.setMusicEnabled`（music 分轨 gain 0/0.5），VideoSettings 面板第三行「音乐」。
+- **⚠️ eval 探针的 Vite HMR 实例分裂陷阱（重要）**：页面开着时编辑过某模块后，Vite 会给 importer 的 import 规格永久加 `?t=<时间戳>`（dev server 生命周期内不消失）——**动态 `import('/src/xxx.js')` 裸 URL 会拿到与页面不同的模块实例**，探针量的是假实例（单例字段如 `_unlockWired`/patch 计数全对不上）。正确姿势：先 `fetch('/src/main.js')` 提取页面实际 import 的 URL（含 ?t=）再 import 同一 URL。生产 build 无此问题（单 bundle）。

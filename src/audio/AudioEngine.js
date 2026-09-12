@@ -36,6 +36,7 @@ class AudioEngine {
     this.music = null;     // BGM 分轨（A-② 使用，预留）
     this.enabled = true;
     this.volume = 0.6;
+    this.musicEnabled = true;
     this.noiseBuf = null;  // 1s 白噪声缓存
     this._unlockWired = false;
   }
@@ -89,8 +90,8 @@ class AudioEngine {
     if (this.master && this.enabled) this.master.gain.value = this.volume;
   }
 
-  // 滤波噪声 burst：挖掘/放置/脚步类的基础粒子
-  _noise({ when = 0, dur = 0.15, filter = 'lowpass', freq = 800, q = 1, gain = 0.5, rate = 1 } = {}) {
+  // 滤波噪声 burst：挖掘/放置/脚步类的基础粒子（bus 可选 music 轨供环境音）
+  _noise({ when = 0, dur = 0.15, filter = 'lowpass', freq = 800, q = 1, gain = 0.5, rate = 1, attack = 0.006, bus = null } = {}) {
     if (!this.ctx || !this.sfx) return;
     const ctx = this.ctx;
     const t = ctx.currentTime + when;
@@ -104,15 +105,15 @@ class AudioEngine {
     bq.Q.value = q;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(gain, t + 0.006);
+    g.gain.linearRampToValueAtTime(gain, t + attack);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(bq).connect(g).connect(this.sfx);
+    src.connect(bq).connect(g).connect(bus || this.sfx);
     src.start(t, Math.random());
     src.stop(t + dur + 0.02);
   }
 
-  // 振荡器音：包络 + 可选下滑（exponentialRamp 需正频率）
-  _tone({ when = 0, dur = 0.15, from = 220, to = 0, type = 'sine', gain = 0.3, attack = 0.008 } = {}) {
+  // 振荡器音：包络 + 可选下滑（exponentialRamp 需正频率；bus 可选 music 轨）
+  _tone({ when = 0, dur = 0.15, from = 220, to = 0, type = 'sine', gain = 0.3, attack = 0.008, bus = null } = {}) {
     if (!this.ctx || !this.sfx) return;
     const ctx = this.ctx;
     const t = ctx.currentTime + when;
@@ -124,7 +125,7 @@ class AudioEngine {
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(gain, t + attack);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    osc.connect(g).connect(this.sfx);
+    osc.connect(g).connect(bus || this.sfx);
     osc.start(t);
     osc.stop(t + dur + 0.02);
   }
@@ -185,6 +186,145 @@ class AudioEngine {
     if (!this.ctx) return;
     this._noise({ dur: 0.05, filter: 'highpass', freq: 1800, gain: 0.3, rate: 1.6 });
   }
+
+  // —— 怪物语音（A-②）：按类型预设合成，距离衰减，引擎全局限频 ——
+
+  // 全局限频门（key + 最小间隔秒）：群怪同屏时叫声不至于糊成一团
+  _gate(key, interval) {
+    if (!this.ctx) return false;
+    this._gates = this._gates || new Map();
+    const now = this.ctx.currentTime;
+    const last = this._gates.get(key) || -Infinity;
+    if (now - last < interval) return false;
+    this._gates.set(key, now);
+    return true;
+  }
+
+  // 语音核心：mode 决定音高/时长/增益倍率（idle 常态叫 / hurt 受击尖 / death 死亡沉）
+  _mobVoice(typeName, dist, mode) {
+    if (!this.ctx) return;
+    const preset = VOICE_PRESETS[typeName] || VOICE_DEFAULT;
+    const pitchMul = mode === 'hurt' ? 1.35 : (mode === 'death' ? 0.75 : 1);
+    const durMul = mode === 'hurt' ? 0.7 : (mode === 'death' ? 1.5 : 1);
+    const gainMul = mode === 'hurt' ? 1.4 : (mode === 'death' ? 1.3 : 1);
+    const att = dist == null ? 1 : Math.max(0, 1 - dist / 28);
+    if (att <= 0) return;
+    for (const t of preset.tones || []) {
+      this._tone({
+        when: (t.when || 0) * durMul, dur: t.dur * durMul,
+        from: t.from * pitchMul, to: Math.max(20, (t.to || t.from * 0.8) * pitchMul),
+        type: t.type, gain: t.gain * att * gainMul,
+      });
+    }
+    const n = preset.noise;
+    if (n) {
+      this._noise({
+        when: (n.when || 0) * durMul, dur: n.dur * durMul, filter: n.filter,
+        freq: n.freq * pitchMul, q: n.q || 1, gain: n.gain * att * gainMul,
+      });
+    }
+  }
+
+  // 环境叫声（随机计时驱动，全局限频 0.3s）
+  mobIdle(typeName, dist) {
+    if (!this._gate('voice', 0.3)) return;
+    this._mobVoice(typeName, dist, 'idle');
+  }
+
+  // 受击 / 死亡（反馈音不受限频门）
+  mobHurt(typeName, dist) { this._mobVoice(typeName, dist, 'hurt'); }
+  mobDeath(typeName, dist) { this._mobVoice(typeName, dist, 'death'); }
+
+  // —— 脚步（A-②）：距离驱动步频，材质变调 ——
+
+  step(def) {
+    if (!this.ctx) return;
+    const p = CATEGORY_PARAMS[blockCategory(def)];
+    this._noise({ dur: p.dur * 0.45, filter: p.filter, freq: p.freq * 1.2, q: p.q, gain: 0.09 * p.gain, rate: 0.85 + Math.random() * 0.3 });
+  }
+
+  // 高处落地：闷响 + 低频冲击
+  land(def) {
+    if (!this.ctx) return;
+    const p = CATEGORY_PARAMS[blockCategory(def)];
+    this._noise({ dur: p.dur * 1.2, filter: p.filter, freq: p.freq * 0.9, q: p.q, gain: 0.2 * p.gain, rate: 0.8 });
+    this._tone({ dur: 0.09, from: 68, to: 50, type: 'sine', gain: 0.14 });
+  }
+
+  // 涉水脚步：水花
+  splash() {
+    if (!this.ctx) return;
+    this._noise({ dur: 0.16, filter: 'highpass', freq: 1100, gain: 0.1, rate: 1.2 });
+  }
+
+  // —— 环境音 / BGM（A-②）：wind swells + 和弦垫，全部计划式调度（无常驻节点，
+  //    暂停时 Game.update 停止调用即自然静默），走 music 分轨 ——
+
+  setMusicEnabled(v) {
+    this.musicEnabled = !!v;
+    if (this.music) this.music.gain.value = this.musicEnabled ? 0.5 : 0;
+  }
+
+  // 世界启动时复位相位（避免新存档继承上一局的调度节拍）
+  resetAmbient() {
+    this._windT = 5 + Math.random() * 6;
+    this._bgmT = 2.5;
+    this._bgmIndex = 0;
+  }
+
+  // 每帧驱动（Game.update 调用；daylight 0..1 调风声强弱）
+  tickAmbient(dt, daylight = 0.8) {
+    if (!this.ctx || !this.musicEnabled) return;
+    this._windT = (this._windT ?? 5) - dt;
+    if (this._windT <= 0) {
+      this._windT = 9 + Math.random() * 14;
+      this._noise({
+        dur: 4 + Math.random() * 2, filter: 'lowpass', freq: 300 + Math.random() * 250,
+        q: 0.5, gain: 0.018 + 0.022 * daylight, rate: 0.5, attack: 1.4, bus: this.music,
+      });
+    }
+    this._bgmT = (this._bgmT ?? 2.5) - dt;
+    if (this._bgmT <= 0) {
+      this._bgmT = 4.6;
+      this._bgmChord();
+    }
+  }
+
+  // 一组和弦垫：C-G-Am-F 低音区循环（正弦 + 微失谐，慢起音）
+  _bgmChord() {
+    const roots = [130.81, 98.0, 110.0, 87.31];
+    const root = roots[this._bgmIndex % roots.length];
+    this._bgmIndex = (this._bgmIndex + 1) % roots.length;
+    const notes = [root, root * 1.5, root * 2.52];
+    for (const f of notes) {
+      this._tone({
+        dur: 4.4, from: f * (1 + (Math.random() - 0.5) * 0.002), to: f,
+        type: 'sine', gain: 0.026, attack: 1.2, bus: this.music,
+      });
+    }
+  }
 }
+
+// 怪物语音预设：tones（振荡器组）+ noise（可选），音量克制（0.05~0.16）
+const VOICE_PRESETS = {
+  villager: { tones: [{ from: 150, to: 120, type: 'sine', dur: 0.28, gain: 0.1 }] },
+  cow: { tones: [{ from: 95, to: 68, type: 'sawtooth', dur: 0.45, gain: 0.1 }] },
+  sheep: { tones: [{ from: 330, to: 285, type: 'triangle', dur: 0.18, gain: 0.09 }, { when: 0.2, from: 320, to: 280, type: 'triangle', dur: 0.16, gain: 0.08 }] },
+  chicken: { tones: [{ from: 620, to: 470, type: 'square', dur: 0.07, gain: 0.05 }, { when: 0.09, from: 580, to: 430, type: 'square', dur: 0.07, gain: 0.05 }] },
+  zombie: { tones: [{ from: 98, to: 66, type: 'sawtooth', dur: 0.55, gain: 0.12 }] },
+  zombified_piglin: { tones: [{ from: 140, to: 88, type: 'sawtooth', dur: 0.3, gain: 0.11 }] },
+  skeleton: { noise: { filter: 'highpass', freq: 1400, dur: 0.16, gain: 0.1 } },
+  wither_skeleton: { tones: [{ from: 80, to: 55, type: 'sawtooth', dur: 0.4, gain: 0.11 }], noise: { filter: 'bandpass', freq: 700, dur: 0.3, gain: 0.06 } },
+  creeper: { noise: { filter: 'highpass', freq: 2800, dur: 0.35, gain: 0.07 } },
+  spider: { noise: { filter: 'bandpass', freq: 1900, dur: 0.22, gain: 0.09 } },
+  blaze: { tones: [{ from: 210, to: 160, type: 'triangle', dur: 0.35, gain: 0.07 }], noise: { filter: 'bandpass', freq: 900, dur: 0.3, gain: 0.05 } },
+  enderman: { tones: [{ from: 170, to: 260, type: 'sine', dur: 0.35, gain: 0.08 }, { when: 0.36, from: 250, to: 150, type: 'sine', dur: 0.4, gain: 0.07 }] },
+  iron_golem: { tones: [{ from: 62, to: 48, type: 'sine', dur: 0.6, gain: 0.14 }] },
+  dragon: { tones: [{ from: 75, to: 42, type: 'sawtooth', dur: 0.9, gain: 0.16 }], noise: { filter: 'lowpass', freq: 400, dur: 0.8, gain: 0.1 } },
+  shulker: { tones: [{ from: 640, to: 520, type: 'square', dur: 0.12, gain: 0.06 }] },
+  wisp: { tones: [{ from: 540, to: 680, type: 'sine', dur: 0.3, gain: 0.06 }] },
+  aether_guard: { tones: [{ from: 480, to: 600, type: 'triangle', dur: 0.35, gain: 0.07 }] },
+};
+const VOICE_DEFAULT = { tones: [{ from: 220, to: 180, type: 'triangle', dur: 0.25, gain: 0.07 }] };
 
 export const audio = new AudioEngine();

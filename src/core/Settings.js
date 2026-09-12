@@ -23,6 +23,7 @@ export const DEFAULT_SETTINGS = {
   gfxShadows: true,    // 完整档子开关：太阳阴影贴图（L4-B，节流 shadow pass）
   sound: true,         // 音效总开关
   volume: 60,          // 0..100 主音量
+  music: true,         // 音乐（BGM/环境风声）开关
 };
 
 export const GFX_ORDER = ['off', 'basic', 'full'];
@@ -53,6 +54,7 @@ export function loadSettings() {
         if (saved.gfxShadows !== undefined) s.gfxShadows = !!saved.gfxShadows;
         if (saved.sound !== undefined) s.sound = !!saved.sound;
         if (saved.volume !== undefined) s.volume = clamp(Math.round(saved.volume), 0, 100);
+        if (saved.music !== undefined) s.music = !!saved.music;
       }
     }
   } catch { /* 损坏的设置按默认处理 */ }
@@ -111,6 +113,7 @@ export function applySettings(game) {
   // 音频（惰性引擎：ctx 未解锁时只记状态，unlock 后生效）
   audio.setEnabled(s.sound);
   audio.setVolume(s.volume / 100);
+  audio.setMusicEnabled(s.music);
   // L2 后处理：完整档 EffectComposer（泛光/体积光子开关透传），失败自动回退直渲
   if (game.renderer && game.renderer.setGraphicsMode) {
     game.renderer.setGraphicsMode(s.gfx);
