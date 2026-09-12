@@ -195,6 +195,8 @@ agent-browser（本机 0.35.2，`npm i -g agent-browser`）是本项目的**第�
 
 LAN 联机阶段 0-11 已全部完成（`https://github.com/illagerCPR/CubeWorld.git`，原 Web-MC 已改名 CubeWorld，localStorage 前缀 `project-mc-save-` 为兼容保留）。各阶段交付内容与提交号用 `git log --oneline` 查看，设计细节见 `docs/lan-multiplayer-design.md`（v1.1）。
 
+**交付约定（2026-09-12 起）**：每完成一个阶段性批次即 `git push origin master`，并用 `gh run watch <runId> --repo illagerCPR/CubeWorld --exit-status` 确认 CI 绿后再收尾汇报；不积压未推送的本地提交。
+
 后续候选（见 `docs/lan-multiplayer-design.md` §11 阶段 12）：Tab 玩家列表面板、远端盔甲外观同步、服务器性能面板（消息速率图表）、房间私聊/队伍分组。
 
 ## 批次备忘索引（按需必读，防回退）
