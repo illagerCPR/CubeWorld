@@ -70,3 +70,8 @@
 - **村庄自动补员**：挂 `updateVillageSpawns` 的 spawnEnabled 块内（**必须在 for(rec) 循环体内**，曾插错作用域引用不到 rec）；门控 = 存活村民(home 匹配)≥5 且无存活护卫；冷却 = `villageGolemSeen` Map 记录"最后存活时刻"，死亡后 60s 补员，村庄卸载清记录（卸载即补）；生成点 = `meta.villagerSpawns[0] + x偏2`（确定性，两端一致）；联机走 `_spawnAt`→mob_spawn 回执（与村民同惯例，勿本地直接 spawnMob）。home 补挂与随村清扫两个循环都已扩到 iron_golem（清扫时同步删 seen 记录）。
 - **手工召唤（`Game._trySummonIronGolem`）**：只在**本地放置成功路径**调用（放置分支内）——联机远端 block_set 不检测，防多端重复召唤；T 型 = 南瓜头 + 2 格铁柱 + 双臂（头/柱底/柱中三个完成入口都识别）；命中后 5 块 setBlock(0)（自动广播账本）+ `_spawnAt` 就地召唤。**验证教训**：agent-browser 瞄准放置精确格位不可行（mouse move 是绝对坐标制、movement=相邻两次差，且指针锁瞄准本就不可靠）——方法体用 eval 补块后直调 `_trySummonIronGolem` 走真实代码路径验证，钩子布线靠代码审查（单行、坐标即放置坐标）。
 - **实测锚点**：索敌 chase+targetIsZombie、一拳 20→6.9、追至 0.81、击杀后回 idle；死亡掉落 iron_ingot 3-5；白天燃烧的亡灵尸体堆属正常现象（sky.time=0.5 引发，非 bug）。
+
+### Idea-2D-① 备忘 —— 凋零骷髅头颅
+
+- `wither_skeleton_skull` 物品（焦黑颅骨图标，stack 64）；凋零骷髅 drops 增 10% 掉率（原版 2.5%+抢夺，本作无附魔取 10%，200 次采样实测 8.5%）。凋零骷髅本身早已全挂钩生成表（`pickNetherSpawn` 纯函数：要塞 10%/灵魂沙峡谷 45%/其余 15%，有单测）——本批只补头颅。
+- **凋灵 Boss + 信标维持独立立项**（TODO.md D 节）：召唤检测复用 `_trySummonIronGolem`/`detectEndRing` 套路，Boss 三段血条可参考 DragonAI + BossBar，玩家 buff 系统是 Player 状态机新领域——立项时先评审。

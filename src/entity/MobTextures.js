@@ -1104,6 +1104,8 @@ export const MobTypes = {
     drops: [
       { name: 'coal', min: 0, max: 1 },
       { name: 'bone', min: 0, max: 2 },
+      // Idea-2D-①：头颅稀有掉落（凋灵召唤备料；原版 2.5%+抢夺，本作无附魔取 10%）
+      { name: 'wither_skeleton_skull', min: 1, max: 1, chance: 0.10 },
     ],
   },
   blaze: {

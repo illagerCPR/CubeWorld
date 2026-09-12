@@ -19,6 +19,7 @@ const P = {
   red:    ['rgb(255,90,80)', 'rgb(205,40,35)', 'rgb(130,18,15)'],
   white:  ['rgb(255,255,255)', 'rgb(236,236,230)', 'rgb(180,180,172)'],
   bone:   ['rgb(252,252,244)', 'rgb(230,228,214)', 'rgb(180,178,162)'],
+  witherSkull: ['rgb(64,64,70)', 'rgb(44,44,50)', 'rgb(22,22,26)'],
   clay:   ['rgb(178,183,198)', 'rgb(158,164,182)', 'rgb(118,124,142)'],
   charcoalP: ['rgb(84,64,46)', 'rgb(56,42,28)', 'rgb(34,25,16)'],
   coalP:  ['rgb(72,72,76)', 'rgb(44,44,48)', 'rgb(20,20,22)'],
@@ -254,6 +255,7 @@ const ItemCN = {
   iron_nugget: '铁粒', gold_nugget: '金粒', diamond_nugget: '钻石粒',
   clay_ball: '粘土球', brick: '红砖', nether_brick: '下界砖',
   string: '线', feather: '羽毛', leather: '皮革', bone: '骨头', bone_meal: '骨粉',
+  wither_skeleton_skull: '凋零骷髅头颅',
   gunpowder: '火药', slime_ball: '粘液球',
   iron_ingot_raw: '粗铁', gold_ingot_raw: '粗金', copper_ingot_raw: '粗铜', dye: '染料',
   apple: '苹果', golden_apple: '金苹果', bread: '面包',
@@ -388,6 +390,20 @@ reg('bone', { stack: 64 }, art(g => {
   g.r(11, 2, 3, 3, P.bone[0]); g.s(11, 2, P.bone[2]); g.s(13, 4, P.bone[2]);
 }));
 reg('bone_meal', { stack: 64 }, dustPileArt(P.bone[0], P.bone[2], 31));
+// 凋零骷髅头颅（Idea-2D-①）：凋零骷髅稀有掉落，未来凋灵召唤材料（3 头 + 灵魂沙 T 型）
+reg('wither_skeleton_skull', { stack: 64 }, art(g => {
+  g.d(8, 7, 5, 5, P.witherSkull[1]);   // 焦黑颅骨
+  g.d(8, 6, 4, 4, P.witherSkull[0]);
+  g.r(4, 8, 8, 4, P.witherSkull[0]);   // 面部
+  g.r(5, 8, 2, 2, P.witherSkull[2]);   // 左眼窝
+  g.r(9, 8, 2, 2, P.witherSkull[2]);   // 右眼窝
+  g.s(8, 11, P.witherSkull[2]);        // 鼻腔
+  g.s(6, 12, P.witherSkull[1]);        // 牙缝
+  g.s(8, 12, P.witherSkull[1]);
+  g.s(10, 12, P.witherSkull[1]);
+  g.s(4, 3, P.witherSkull[2]);         // 颅角暗点
+  g.s(12, 3, P.witherSkull[2]);
+}));
 reg('gunpowder', { stack: 64 }, dustPileArt('rgb(88,88,88)', 'rgb(48,48,48)', 41));
 reg('slime_ball', { displayName: '粘液球', stack: 64 }, art(g => {
   g.d(8, 8, 4, 4, 'rgb(110,190,70)');
