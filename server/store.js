@@ -59,3 +59,28 @@ export function loadRooms(dir = DEFAULT_DIR) {
 export function deleteRoomFile(name, dir = DEFAULT_DIR) {
   try { fs.unlinkSync(path.join(dir, roomFileName(name) + '.json')); } catch {}
 }
+
+// ---- Idea-3C：玩家档案（server/world/players/<房间名>.players.json）----
+// 独立目录存储：档案高频写（每 10s 脏刷新 + 退房即写），与房间世界快照分离避免写放大。
+// 结构：{ 昵称: { inventory, position, dim, health, food, saturation, xp, xpLevel, savedAt } }
+
+export function loadPlayerProfiles(roomName, dir = DEFAULT_DIR) {
+  const file = path.join(dir, 'players', roomFileName(roomName) + '.players.json');
+  try {
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+  } catch {
+    return {}; // 不存在/损坏 → 空档案（首次进房即建档）
+  }
+}
+
+export function savePlayerProfiles(roomName, profiles, dir = DEFAULT_DIR) {
+  const playersDir = path.join(dir, 'players');
+  if (!fs.existsSync(playersDir)) fs.mkdirSync(playersDir, { recursive: true });
+  const file = path.join(playersDir, roomFileName(roomName) + '.players.json');
+  fs.writeFileSync(file, JSON.stringify(profiles, null, 2), 'utf8');
+}
+
+export function deletePlayerProfiles(roomName, dir = DEFAULT_DIR) {
+  try { fs.unlinkSync(path.join(dir, 'players', roomFileName(roomName) + '.players.json')); } catch {}
+}

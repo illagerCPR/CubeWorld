@@ -53,3 +53,12 @@
 - **data 通道协议**：`drop_spawn`/`player_died.drops`/`container_set` 全部可选携带 data；服务器 `sanitizeItemData`（模块级）校验：≤27 槽、槽=null 或 {name,count}、**任一槽带嵌套 data（盒中盒）→ 整体拒绝降级普通物品**（all-or-nothing，勿改逐槽丢弃）；`Room.sanitizeStack` 同步扩展（曾只回 {name,count} 静默剥掉容器内盒子的 data）。服务器 drops 账本为会话内存（重启清空，与既有行为一致）。
 - **客户端机制**：带 data 物品**不堆叠**（`Inventory.add` 堆叠条件加 `!s.data && !data`——漏了会串内容）；放置：`setContainer` 落账本 + 联机 `sendContainerSet` 整箱广播；破坏：`_breakShulkerBox` 内容不散落、单一掉落带 data（空盒 data=null），生存直入背包/创造与联机走实体掉落；`_blockDrops` 对 shulker_box 返回 []（防双掉落）；`onPickup(name,count,data)` 透传入包；容器 UI 复用 ChestScreen（分支条件扩 shulker_box）。
 - **验证教训**：①eval 直调 `chestScreen.show()/hide()` 会把 `paused` 留成 true（真实 UI 流程管理该标志），后续掉落 age 不走全卡住——冒烟卡住先查 paused；②比对拾取结果时 data 是**补齐 27 槽**的版本，勿与原始短数组比；③指针锁精确放置依旧不可行，放置钩子靠代码审查（一行、坐标=放置坐标）+ 其余链路真实代码路径实测。
+
+### Idea-3C 服务器玩家档案批次备忘（防回退）
+
+- **存储布局**：`server/world/players/<房间名>.players.json`（独立目录，`store.js` 新增 loadPlayerProfiles/savePlayerProfiles/deletePlayerProfiles），结构 `{昵称: {inventory, position, dim, health, food, saturation, xp, xpLevel, savedAt}}`。**inventory 直接复用客户端 SaveSystem 的 serialize() V2 紧凑格式 `{slots:[{n,c,d}], armor:[{n,c,d}]}`**——槽内 d（潜影盒内容）是**容器格式 `{name,count}`**（与外层 {n,c} 不同名！sanitize 分两套：外层 profileNum/typeof 强校验，d 过 sanitizeItemData）。
+- **校验器（room.js sanitizePlayerProfile）**：**全部数值字段 typeof number 强校验**——JSON 的 NaN/Infinity 序列化为 null，若走 Number(null)=0 强转会被洗成合法值（Idea-2B 同款陷阱复现）；任一字段非法 → **整体拒绝**（防半套档案污染）；坐标范围 ±3e7/y∈[-300,1000]、health/food/saturation∈[0,20]。
+- **协议与节拍**：C2S `profile_save {profile}`（客户端 15s 周期 + NetworkManager.update 驱动，观战期间也发——死亡掉落流程随后覆盖 last-write-wins）；S2C `player_profile {profile}` **仅发给本人**（joinRoom 尾部查 playerProfiles）。服务器收录只进内存 + `_profilesDirty` 标脏，**10s profileSweep 节流落盘 + removePlayer 立即 saveProfiles()**（防丢包窗口放大）；shutdown 全刷。
+- **客户端应用（NetworkManager.applyPlayerProfile）**：进房消息到达时世界未就绪 → `_pendingProfile` 缓存，`onWorldStarted()` 应用；**位置仅同维度应用**（异维档案坐标无意义，只恢复背包/状态）；应用包 try/catch 不阻断游戏。
+- **管理 API**：`GET /api/room/<name>/players`（列表）+ `DELETE /api/room/<name>/players/<nick>`（清除伪造档案）；admin.html 房间卡片加「玩家档案」按钮（展开列表+清除，`btoa(unescape(encodeURIComponent()))` 做 DOM id 转义）。
+- **⚠️ 测试陷阱**：test-profile.mjs 文件内有 `const URL = 'ws://...'` **遮蔽全局 URL 类**——校验器里 `new URL(...)` 会抛 "URL is not a constructor" 且被 catch 吞成"无鉴权"（batch 401 假失败）。读路径用 `fileURLToPath(import.meta.url)` + path.join。**跑批中前序 test-admin/stage11 会留下 adminAccounts（含 viewer 角色）**——管理 API 断言必须带 Bearer 头（测试从 config.json 读未过期账号），否则 401 假阴性。stage11 结尾不清理账号（残留即鉴权开启态）。

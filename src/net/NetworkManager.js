@@ -43,6 +43,9 @@ export class NetworkManager {
     // M4 维度同步：本端在服务器侧的当前维度 + 远端玩家维度表（id -> dim）
     this.dim = 'overworld';
     this._remoteDims = new Map();
+    // Idea-3C：玩家档案——15s 周期上报；进房下发的档案世界未就绪时先缓存
+    this._profileTimer = 15;
+    this._pendingProfile = null;
   }
 
   on(type, fn) { this._handlers.set(type, fn); }
@@ -137,6 +140,50 @@ export class NetworkManager {
     this._pendingDrops = [];
     for (const m of this._pendingMobs) this._spawnMob(m);
     this._pendingMobs = [];
+    // Idea-3C：世界就绪后应用进房下发的档案（换机/重连恢复）
+    if (this._pendingProfile) {
+      const prof = this._pendingProfile;
+      this._pendingProfile = null;
+      this.applyPlayerProfile(prof);
+    }
+  }
+
+  // Idea-3C：把服务器档案应用到本地（inventory 走 SaveSystem 同款 serialize 格式）。
+  // 位置仅在同维度时应用（异维档案的坐标无意义）；死亡掉落等后续流程按 last-write-wins 覆盖。
+  applyPlayerProfile(prof) {
+    const g = this.game;
+    if (!g.running || !g.player || !g.inventory) return;
+    try {
+      if (prof.inventory) g.inventory.deserialize(prof.inventory);
+      const p = g.player;
+      if (typeof prof.health === 'number') p.health = Math.min(20, Math.max(0, prof.health));
+      if (typeof prof.food === 'number') p.food = Math.min(20, Math.max(0, prof.food));
+      if (typeof prof.saturation === 'number') p.saturation = Math.min(20, Math.max(0, prof.saturation));
+      if (typeof prof.xp === 'number') p.xp = Math.max(0, prof.xp);
+      if (typeof prof.xpLevel === 'number') p.xpLevel = Math.max(0, prof.xpLevel);
+      if (prof.position && g.world && prof.dim === g.world.dimension) {
+        p.position.set(prof.position.x, prof.position.y, prof.position.z);
+        p.velocity.set(0, 0, 0);
+      }
+      if (g.hotbar) g.hotbar.update();
+    } catch { /* 档案应用失败不阻断游戏 */ }
+  }
+
+  // Idea-3C：采集当前状态为档案（与 SaveSystem 的 inventory.serialize() 同格式）
+  buildProfile() {
+    const g = this.game;
+    if (!g.running || !g.player || !g.inventory || !g.world) return null;
+    const p = g.player;
+    return {
+      inventory: g.inventory.serialize(),
+      position: { x: p.position.x, y: p.position.y, z: p.position.z },
+      dim: g.world.dimension,
+      health: p.health,
+      food: p.food,
+      saturation: p.saturation,
+      xp: p.xp,
+      xpLevel: p.xpLevel,
+    };
   }
 
   _addRemote(info) {
@@ -215,6 +262,13 @@ export class NetworkManager {
       case MSG.PLAYER_JOIN:
         this._queueOrAdd(msg);
         this._emit('system', { parts: [{ text: msg.name, color: playerColorCss(msg.id) }, { text: ' 加入了游戏' }] });
+        break;
+      case MSG.PLAYER_PROFILE:
+        // Idea-3C：进房下发档案——世界已就绪立即应用，否则缓存到 onWorldStarted
+        if (msg.profile) {
+          if (this._ready) this.applyPlayerProfile(msg.profile);
+          else this._pendingProfile = msg.profile;
+        }
         break;
       case MSG.PLAYER_LEAVE:
         this._remoteDims.delete(msg.id);
@@ -423,6 +477,13 @@ export class NetworkManager {
   // 每帧调用：节流上报本地玩家状态 + RTT 直测
   update(dt) {
     if (!this.connected || !this.game.world) return;
+    // Idea-3C：15s 周期档案上报（观战/死亡期间也发——死亡掉落流程随后覆盖，last-write-wins）
+    this._profileTimer -= dt;
+    if (this._profileTimer <= 0) {
+      this._profileTimer = 15;
+      const prof = this.buildProfile();
+      if (prof) this._send(MSG.PROFILE_SAVE, { profile: prof });
+    }
     if (this.game.spectating) return; // 观战中不上报位置（避免观战者被吸附到目标处广播出去）
     // 阶段10：RTT 直测——发 ping（带本地时间戳），服务器回显 ts，PONG 分支计算平滑 RTT
     this._pingTimer -= dt;

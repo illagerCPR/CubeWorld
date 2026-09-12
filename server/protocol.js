@@ -51,6 +51,10 @@ export const MSG = {
   RESPAWN: 'respawn',
   GAMEMODE: 'gamemode',
 
+  // 玩家档案（Idea-3C：服务器侧持久化，按 房间+昵称 键；last-write-wins）
+  PROFILE_SAVE: 'profile_save',       // C2S {profile}：客户端定期上报（背包/位置/状态）
+  PLAYER_PROFILE: 'player_profile',   // S2C {profile}：进房后下发该昵称已有档案（仅发给本人）
+
   // 世界
   SET_TIME: 'set_time',
   TIME: 'time',

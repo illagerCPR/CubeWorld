@@ -31,6 +31,8 @@ function getRoom(name) {
   let room = rooms.get(key);
   if (!room) {
     room = new Room(key, (r) => store.saveRoom(r), serverConfig);
+    room.playerProfiles = store.loadPlayerProfiles(key); // Idea-3C：档案随房间装入内存
+    room.onSaveProfiles = (r) => store.savePlayerProfiles(r.name, r.playerProfiles);
     const snap = store.loadRooms().find((s) => s.name === key);
     if (snap) {
       room.restore(snap);
@@ -381,6 +383,29 @@ const server = http.createServer(async (req, res) => {
           return;
         }
       }
+      // Idea-3C：玩家档案管理——GET 列表 / DELETE 清除（伪造昵称覆盖他人档案的清理入口）
+      const pm = p.match(/^\/api\/room\/([^/]+)\/players(\/([^/]+))?$/);
+      if (pm && (req.method === 'GET' || (req.method === 'DELETE' && pm[3]))) {
+        const roomName = decodeURIComponent(pm[1]);
+        const room = rooms.get(roomName);
+        const profiles = room ? room.playerProfiles : store.loadPlayerProfiles(roomName);
+        if (req.method === 'GET') {
+          const list = Object.entries(profiles).map(([nick, pr]) => ({
+            nick, dim: pr.dim, savedAt: pr.savedAt,
+            health: pr.health, xpLevel: pr.xpLevel,
+          }));
+          sendJson(res, 200, { ok: true, room: roomName, players: list });
+          return;
+        }
+        const nick = decodeURIComponent(pm[3]);
+        if (!(nick in profiles)) { sendJson(res, 404, { error: '该房间无此玩家档案' }); return; }
+        delete profiles[nick];
+        if (room) room._profilesDirty = false; // 内存已改，直接落盘
+        store.savePlayerProfiles(roomName, profiles);
+        logAdmin('profile-delete', `删除房间「${roomName}」玩家「${nick}」档案`);
+        sendJson(res, 200, { ok: true, room: roomName, nick });
+        return;
+      }
       sendJson(res, 404, { error: '未知接口' });
     } catch (e) {
       sendJson(res, 500, { error: String(e && e.message || e) });
@@ -397,10 +422,22 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 // 掉落物过期清理：所有房间每 10s 扫一次，过期的广播 drop_taken
 const dropSweep = setInterval(() => { for (const r of rooms.values()) r.expireDrops(); }, 10000);
 
+// Idea-3C：玩家档案脏刷新（10s 节流落盘；退房时另有立即刷）
+const profileSweep = setInterval(() => {
+  for (const r of rooms.values()) {
+    if (r._profilesDirty) r.saveProfiles();
+  }
+}, 10000);
+
 // 优雅退出：全部房间世界落盘（重启不丢）
 function shutdown() {
   console.log('正在保存所有房间世界...');
-  for (const r of rooms.values()) store.saveRoom(r);
+  for (const r of rooms.values()) {
+    store.saveRoom(r);
+    r.saveProfiles(); // Idea-3C：退出前刷全部脏档案
+  }
+  clearInterval(dropSweep);
+  clearInterval(profileSweep);
   process.exit(0);
 }
 process.on('SIGINT', shutdown);
@@ -469,6 +506,9 @@ wss.on('connection', (ws, req) => {
         if (player.room.isOperator(player)) player.room.resetWorld();
         else player.room.sendTo(player, MSG.CHAT, { from: '系统', fromId: 0, text: '只有房主(HOST)/op 可以重建世界' });
       }
+    } else if (msg.t === MSG.PROFILE_SAVE) {
+      // Idea-3C：玩家档案上报（校验通过才收录，10s 节流落盘）
+      if (player.room) player.room.onProfileSave(player, msg);
     } else if (msg.t === MSG.CHAT && String(msg.text || '').startsWith('/')) {
       // 服务器聊天命令：/rooms /seed /room /rebuild /help
       handleCommand(player, String(msg.text || '').slice(0, 120));

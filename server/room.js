@@ -33,6 +33,60 @@ function sanitizeItemData(v) {
   return out;
 }
 
+// Idea-3C：玩家档案校验——整体通过才收录（任一字段非法 → 整体拒绝，防半套档案污染）。
+// 数值一律 typeof number 强校验：JSON 的 NaN/Infinity 序列化为 null，若走 Number(null)=0
+// 强转会被洗成合法值（Idea-2B 同款陷阱），这里直接拒绝。
+function sanitizeSlotArray(v, maxSlots) {
+  if (v === undefined || v === null) return null;
+  if (!Array.isArray(v) || v.length > maxSlots) return null;
+  const out = [];
+  for (let i = 0; i < maxSlots; i++) {
+    const s = v[i];
+    if (!s) { out.push(null); continue; }
+    if (typeof s !== 'object' || typeof s.n !== 'string') return null;
+    if (typeof s.c !== 'number' || !Number.isInteger(s.c) || s.c < 1 || s.c > 64) return null;
+    const slot = { n: s.n.slice(0, 64), c: s.c };
+    if (s.d != null) {
+      const d = sanitizeItemData(s.d);
+      if (d === null) return null; // 嵌套 data 等非法 → 整档拒绝
+      slot.d = d;
+    }
+    out.push(slot);
+  }
+  return out;
+}
+
+function profileNum(v, lo, hi) {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < lo || v > hi) return null;
+  return v;
+}
+
+export function sanitizePlayerProfile(v) {
+  if (!v || typeof v !== 'object') return null;
+  const inv = v.inventory && typeof v.inventory === 'object' ? v.inventory : {};
+  const slots = sanitizeSlotArray(inv.slots, 36);
+  const armor = sanitizeSlotArray(inv.armor, 4);
+  if (slots === null || armor === null) return null;
+  const pos = v.position && typeof v.position === 'object' ? v.position : {};
+  const px = profileNum(pos.x, -30000000, 30000000);
+  const py = profileNum(pos.y, -300, 1000);
+  const pz = profileNum(pos.z, -30000000, 30000000);
+  if (px === null || py === null || pz === null) return null;
+  const health = profileNum(v.health, 0, 20);
+  const food = profileNum(v.food, 0, 20);
+  const saturation = profileNum(v.saturation, 0, 20);
+  const xp = profileNum(v.xp, 0, 30000000);
+  const xpLevel = profileNum(v.xpLevel, 0, 1000);
+  if (health === null || food === null || saturation === null || xp === null || xpLevel === null) return null;
+  return {
+    inventory: { slots, armor },
+    position: { x: px, y: py, z: pz },
+    dim: typeof v.dim === 'string' && v.dim ? v.dim.slice(0, 16) : 'overworld',
+    health, food, saturation, xp, xpLevel,
+    savedAt: Date.now(),
+  };
+}
+
 export class Room {
   // name: 房间名（同名房间共享同一世界）；onSave: (room) => void 世界变更落盘回调（index.mjs 注入）
   // config: 服务器配置引用（读取 dropTtlMs 等），管理面板可实时改
@@ -52,6 +106,9 @@ export class Room {
     this.time = 0.35;
     this.hostId = null;
     this.nextId = 1;
+    // Idea-3C：玩家档案（房间→昵称 键；index.mjs 从磁盘装入 + 注入 onSaveProfiles 落盘回调）
+    this.playerProfiles = {};
+    this._profilesDirty = false;
   }
 
   // 取（或建）指定维度的账本桶
@@ -211,6 +268,8 @@ export class Room {
     if (!p) return;
     this.players.delete(id);
     this.broadcast(MSG.PLAYER_LEAVE, { id, name: p.name });
+    // Idea-3C：退房立即刷档案（丢包窗口最小化；断线重连同昵称直接恢复）
+    this.saveProfiles();
     if (this.hostId === id) {
       this.hostId = this.players.size ? this.players.keys().next().value : null;
     }
@@ -306,7 +365,24 @@ export class Room {
       this.sendTo(player, MSG.DROP_SPAWN, back);
     }
     this.broadcast(MSG.PLAYER_JOIN, { id: player.id, name: player.name, mode: player.mode, pos: player.pos }, player.id);
+    // Idea-3C：进房下发该昵称已有档案（仅发本人；客户端在世界就绪后应用）
+    const prof = this.playerProfiles[player.name];
+    if (prof) this.sendTo(player, MSG.PLAYER_PROFILE, { profile: prof });
     console.log(`[+] ${player.name} 加入房间「${this.name}」seed=${this.seed} (${this.players.size}人)`);
+  }
+
+  // Idea-3C：档案上报（last-write-wins；只存内存+标脏，10s 扫描节流落盘）
+  onProfileSave(player, msg) {
+    const prof = sanitizePlayerProfile(msg.profile);
+    if (!prof) return; // 非法档案静默丢弃（信任场景下的最低防线）
+    this.playerProfiles[player.name] = prof;
+    this._profilesDirty = true;
+  }
+
+  // Idea-3C：档案落盘（退房即刷 + 10s 脏扫描共用）；无回调时只清脏标记
+  saveProfiles() {
+    this._profilesDirty = false;
+    if (this.onSaveProfiles) this.onSaveProfiles(this);
   }
 
   modeOfHost() {
