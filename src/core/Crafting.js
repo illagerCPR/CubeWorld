@@ -130,6 +130,8 @@ addShaped('furnace', 1, ['cobblestone','cobblestone','cobblestone','cobblestone'
 // 床（原版式）：3 羊毛 x 3 木板（2x3 图形）
 addShaped('white_bed', 1, ['white_wool','white_wool','white_wool','oak_planks','oak_planks','oak_planks']);
 addShaped('chest', 1, ['oak_planks','oak_planks','oak_planks','oak_planks', null,'oak_planks','oak_planks','oak_planks','oak_planks']);
+// 潜影盒（Idea-2C）：壳/箱/壳 竖排（原版式）
+addShaped('shulker_box', 1, [['shulker_shell'],['chest'],['shulker_shell']]);
 addShaped('tnt', 1, ['gunpowder','gunpowder','gunpowder','sand','sand','sand','sand','sand','sand']);
 
 // 红石

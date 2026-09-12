@@ -846,11 +846,12 @@ export class MobManager {
     }
   }
 
-  spawnDrop(pos, name, count) {
+  spawnDrop(pos, name, count, data = null) {
     const drop = {
       id: null, // 联机掉落物才有服务器分配的 id
       name,
       count,
+      data, // Idea-2C：内容跟随物品（潜影盒 27 槽数组；普通物品 null）
       position: pos.clone().add(new THREE.Vector3(0, 0.5, 0)),
       velocity: new THREE.Vector3(
         (Math.random() - 0.5) * 2,
@@ -868,12 +869,13 @@ export class MobManager {
 
   // 由服务器广播 drop_spawn 创建掉落物：id 服务器唯一；速度由 id 确定性派生，各端运动一致
   // 阶段10：owner/ownerLockMs = 死亡掉落归属锁（锁定期内仅 owner 本人可拾取）
-  spawnRemoteDrop(id, x, y, z, name, count, owner = null, ownerLockMs = 0) {
+  spawnRemoteDrop(id, x, y, z, name, count, owner = null, ownerLockMs = 0, data = null) {
     if (this.droppedItems.some(d => d.id === id)) return; // 去重（重连回放可能重复广播）
     const drop = {
       id,
       name,
       count,
+      data, // Idea-2C：内容跟随物品
       position: new THREE.Vector3(x, y, z),
       velocity: new THREE.Vector3(
         (this._hashRand(id) - 0.5) * 2,
@@ -1012,7 +1014,7 @@ export class MobManager {
         if (drop.lockedUntil && Date.now() < drop.lockedUntil && drop.owner !== selfId) continue;
         if (this.onPickup) {
           // onPickup 返回未放入的剩余数量（0 = 全部拾取）
-          const remaining = this.onPickup(drop.name, drop.count);
+          const remaining = this.onPickup(drop.name, drop.count, drop.data);
           drop.count = remaining;
           if (remaining <= 0) {
             // 全部拾取

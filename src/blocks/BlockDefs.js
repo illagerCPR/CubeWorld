@@ -1375,6 +1375,24 @@ reg('chest', { textures: { top: 'chest_top', side: 'chest_side', bottom: 'chest_
     chest_bottom: chestTex(963, false),
   });
 
+// 潜影盒（Idea-2C）：27 槽随身容器方块，物品形态内容跟随（槽位 data 字段）
+function shulkerBoxTex(seed) {
+  const px = makeTex();
+  const base = [172, 136, 200]; // 潜影紫
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb(base, 0.9 + hash2(x, y, seed) * 0.18);
+  }
+  fillRect(px, 0, 0, 15, 0, rgb([124, 94, 154]));
+  fillRect(px, 0, 15, 15, 15, rgb([98, 74, 126]));
+  fillRect(px, 0, 0, 0, 15, rgb([124, 94, 154]));
+  fillRect(px, 15, 0, 15, 15, rgb([98, 74, 126]));
+  fillRect(px, 1, 5, 14, 5, rgb([112, 84, 142])); // 盖缝
+  fillRect(px, 1, 1, 14, 1, rgb(base, 1.14));     // 盖板受光
+  fillRect(px, 7, 3, 8, 6, 'rgb(158,148,172)');   // 中央扣饰
+  return pixelSvg(px);
+}
+reg('shulker_box', { displayName: '潜影盒', hardness: 2 }, { shulker_box: shulkerBoxTex(977) });
+
 // --- 耕种（P3-4）：耕地 / 小麦作物 8 阶段 / 草丛（种子来源） ---
 // 湿土：比 dirt 深 + 水渍暗斑 + 两条犁沟
 function farmlandTex(seed) {

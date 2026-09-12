@@ -46,3 +46,10 @@
 - **服务器脏包校验必须先 typeof 再 isFinite**：`JSON.stringify(NaN)` 序列化成 **null**，`Number(null)=0` 会混过 `[...].map(Number).every(Number.isFinite)` 转换式校验（测试真踩：NaN 弹丸被静默放行为 x=0）；正确写法 `raw.every(v => typeof v === 'number' && Number.isFinite(v))`。
 - **远端箭命中本地模拟的怪会即时消失**（设计行为）——冒烟时"没收到箭"先排除弹道撞怪再怀疑链路（曾误判丢包，ws.send 探针 + 复测定位）。
 - **测试**：`server/test-idea2.mjs`（7/7，已入 run-all-tests.sh）：转发字段一致/携带射者 id/无回声/三类脏包（字符串、缺字段、NaN→null）全丢弃。
+
+### Idea-2C 关键实现备忘（防回退）—— 潜影盒内容跟随物品
+
+- **评审结论（"存档 V3 风险"解除）**：背包序列化 V2 本就带 `d`（data）字段、`Inventory.add(name,count,data)` 与 ChestScreen 游标早已支持 data、World/服务器容器账本 items 数组原样 JSON 序列化——**存档侧零改动**；真正要扩的只有掉落与容器两条协议 + 方块注册。
+- **data 通道协议**：`drop_spawn`/`player_died.drops`/`container_set` 全部可选携带 data；服务器 `sanitizeItemData`（模块级）校验：≤27 槽、槽=null 或 {name,count}、**任一槽带嵌套 data（盒中盒）→ 整体拒绝降级普通物品**（all-or-nothing，勿改逐槽丢弃）；`Room.sanitizeStack` 同步扩展（曾只回 {name,count} 静默剥掉容器内盒子的 data）。服务器 drops 账本为会话内存（重启清空，与既有行为一致）。
+- **客户端机制**：带 data 物品**不堆叠**（`Inventory.add` 堆叠条件加 `!s.data && !data`——漏了会串内容）；放置：`setContainer` 落账本 + 联机 `sendContainerSet` 整箱广播；破坏：`_breakShulkerBox` 内容不散落、单一掉落带 data（空盒 data=null），生存直入背包/创造与联机走实体掉落；`_blockDrops` 对 shulker_box 返回 []（防双掉落）；`onPickup(name,count,data)` 透传入包；容器 UI 复用 ChestScreen（分支条件扩 shulker_box）。
+- **验证教训**：①eval 直调 `chestScreen.show()/hide()` 会把 `paused` 留成 true（真实 UI 流程管理该标志），后续掉落 age 不走全卡住——冒烟卡住先查 paused；②比对拾取结果时 data 是**补齐 27 槽**的版本，勿与原始短数组比；③指针锁精确放置依旧不可行，放置钩子靠代码审查（一行、坐标=放置坐标）+ 其余链路真实代码路径实测。

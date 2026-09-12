@@ -21,10 +21,10 @@ export class Inventory {
   // 添加物品，返回剩余未放入数量
   add(name, count = 1, data = null) {
     let remaining = count;
-    // 先堆叠到已有
+    // 先堆叠到已有（带 data 的物品不堆叠——潜影盒等内容跟随物品，混叠会串内容）
     for (let i = 0; i < this.size && remaining > 0; i++) {
       const s = this.slots[i];
-      if (s && s.name === name && s.count < 64) {
+      if (s && s.name === name && s.count < 64 && !s.data && !data) {
         const add = Math.min(64 - s.count, remaining);
         s.count += add;
         remaining -= add;

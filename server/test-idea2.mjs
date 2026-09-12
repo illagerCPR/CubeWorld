@@ -85,6 +85,56 @@ function waitFor(p, pred, timeout = 3000) {
   a.ws.close(); b.ws.close();
 }
 
+// --- 用例：内容跟随物品（Idea-2C 潜影盒）——掉落/容器 data 通道 ---
+{
+  const room = `i2-shulker-${Date.now()}`;
+  const a = await connect('i2-甲2');
+  const b = await connect('i2-乙2');
+
+  send(a, 'create_room', { room, seed: 20260913, mode: 'survival' });
+  await waitFor(a, (m) => m.t === 'room_created');
+  send(b, 'join_room', { room });
+  await waitFor(b, (m) => m.t === 'welcome');
+  await sleep(200);
+  b.inbox.length = 0; a.inbox.length = 0;
+
+  const CONTENT = [null, { name: 'diamond', count: 3 }, null, { name: 'iron_ingot', count: 5 }];
+
+  // 带内容的盒体掉落 → data 原样透传
+  send(a, 'drop_spawn', { x: 1.5, y: 70, z: 1.5, name: 'shulker_box', count: 1, data: CONTENT });
+  const got = await waitFor(b, (m) => m.t === 'drop_spawn' && m.name === 'shulker_box');
+  assert('盒体掉落 data 原样透传', !!got && JSON.stringify(got.data) === JSON.stringify(CONTENT),
+    got ? `slots=${JSON.stringify(got.data)}` : '');
+  assert('盒体掉落账本带 data（回执含）', !!got && Array.isArray(got.data) && got.data.length === 4);
+
+  // 嵌套 data（盒中盒）→ 服务器拒绝，降级为普通掉落（无 data 字段）
+  b.inbox.length = 0;
+  send(a, 'drop_spawn', { x: 1.5, y: 70, z: 1.5, name: 'shulker_box', count: 1,
+    data: [null, { name: 'shulker_box', count: 1, data: [null] }] });
+  await sleep(400);
+  const nested = b.inbox.filter((m) => m.t === 'drop_spawn' && m.name === 'shulker_box');
+  const bad = nested.find((m) => m.data);
+  assert('嵌套 data 被拒（降级普通掉落）', nested.length >= 1 && !bad, `n=${nested.length}`);
+
+  // 容器整箱同步带 data
+  b.inbox.length = 0;
+  send(a, 'container_set', { x: 5, y: 70, z: 5, items: CONTENT.map((s) => s ? { name: s.name, count: s.count, data: null } : null).concat(new Array(23).fill(null)) });
+  const cs = await waitFor(b, (m) => m.t === 'container_set');
+  assert('容器整箱同步到达', !!cs && Array.isArray(cs.items) && cs.items.length === 27);
+
+  // 容器内潜影盒（data）经 sanitizeStack 保留
+  const withBox = new Array(27).fill(null);
+  withBox[3] = { name: 'shulker_box', count: 1, data: CONTENT };
+  b.inbox.length = 0;
+  send(a, 'container_set', { x: 6, y: 70, z: 6, items: withBox });
+  const cs2 = await waitFor(b, (m) => m.t === 'container_set' && m.x === 6);
+  const box = cs2 ? cs2.items[3] : null;
+  assert('容器内盒体 data 保留', !!box && box.name === 'shulker_box' && JSON.stringify(box.data) === JSON.stringify(CONTENT),
+    box ? JSON.stringify(box).slice(0, 80) : 'missing');
+
+  a.ws.close(); b.ws.close();
+}
+
 const failed = results.filter(([, ok]) => !ok);
 console.log(`\nIdea-2 回归：${results.length - failed.length}/${results.length} 通过`);
 if (failed.length) { console.log('失败项：'); for (const [name] of failed) console.log('  - ' + name); process.exit(1); }

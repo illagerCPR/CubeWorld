@@ -167,7 +167,8 @@ export class NetworkManager {
   _spawnDrop(msg) {
     if (!this.game.mobManager) return;
     // 阶段10：透传归属锁（死亡掉落物：ownerLock 毫秒内仅 owner 本人可拾取）
-    this.game.mobManager.spawnRemoteDrop(msg.id, msg.x, msg.y, msg.z, msg.name, msg.count, msg.owner, msg.ownerLock);
+    // Idea-2C：透传 data（潜影盒等内容跟随物品）
+    this.game.mobManager.spawnRemoteDrop(msg.id, msg.x, msg.y, msg.z, msg.name, msg.count, msg.owner, msg.ownerLock, msg.data ?? null);
   }
 
   _takeDrop(msg) {
@@ -386,7 +387,12 @@ export class NetworkManager {
   sendBlock(x, y, z, id) { this._send(MSG.BLOCK_SET, { x, y, z, id }); }
 
   // 本地发起掉落物生成（联机挖矿等）；实体由服务器广播 drop_spawn 回执后创建
-  sendDropSpawn(x, y, z, name, count) { this._send(MSG.DROP_SPAWN, { x, y, z, name, count }); }
+  // Idea-2C：data = 潜影盒等内容跟随物品（普通掉落 null）
+  sendDropSpawn(x, y, z, name, count, data = null) {
+    const payload = { x, y, z, name, count };
+    if (data) payload.data = data;
+    this._send(MSG.DROP_SPAWN, payload);
+  }
   // 本地拾取掉落物，通知服务器移除并广播
   sendDropTaken(id) { this._send(MSG.DROP_TAKEN, { id }); }
 
@@ -409,7 +415,8 @@ export class NetworkManager {
 
   // T5：容器整箱上报（箱子内容改动；服务器记账本 + 广播其他端）
   sendContainerSet(x, y, z, items) {
-    const packed = items.map((s) => (s ? { name: s.name, count: s.count } : null));
+    // Idea-2C：容器物品带 data（潜影盒内容跟随）
+    const packed = items.map((s) => (s ? { name: s.name, count: s.count, data: s.data ?? null } : null));
     this._send(MSG.CONTAINER_SET, { x, y, z, items: packed });
   }
 
@@ -458,10 +465,10 @@ export class NetworkManager {
     const p = this.game.player;
     const drops = [];
     for (const s of this.game.inventory.slots) {
-      if (s) drops.push({ name: s.name, count: s.count });
+      if (s) drops.push({ name: s.name, count: s.count, data: s.data ?? null });
     }
     for (const s of this.game.inventory.armor) {
-      if (s) drops.push({ name: s.name, count: s.count });
+      if (s) drops.push({ name: s.name, count: s.count, data: s.data ?? null });
     }
     this._send(MSG.PLAYER_DIED, { x: p.position.x, y: p.position.y, z: p.position.z, drops });
   }

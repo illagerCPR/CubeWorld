@@ -15,6 +15,23 @@ function safeNum(v, fallback = 0) {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
+// Idea-2C：内容跟随物品（潜影盒）——27 槽数组，槽 = null 或 {name,count}；
+// 嵌套 data（盒中盒，原版同样禁止）或任一槽非法 → 整体拒绝（视为普通物品）
+function sanitizeItemData(v) {
+  if (v === undefined || v === null) return null;
+  if (!Array.isArray(v) || v.length === 0 || v.length > 27) return null;
+  const out = [];
+  for (let i = 0; i < v.length; i++) {
+    const s = v[i];
+    if (!s) { out.push(null); continue; }
+    if (typeof s !== 'object' || !s.name || s.data != null) return null;
+    const name = String(s.name).slice(0, 32);
+    const count = safeInt(s.count, 1);
+    if (count < 1) return null;
+    out.push({ name, count: Math.min(64, count) });
+  }
+  return out;
+}
 
 export class Room {
   // name: 房间名（同名房间共享同一世界）；onSave: (room) => void 世界变更落盘回调（index.mjs 注入）
@@ -124,7 +141,10 @@ export class Room {
     if (!s || typeof s !== 'object' || !s.name) return null;
     const count = safeInt(s.count, 1);
     if (count < 1) return null;
-    return { name: String(s.name).slice(0, 32), count: Math.min(64, count) };
+    const out = { name: String(s.name).slice(0, 32), count: Math.min(64, count) };
+    const data = sanitizeItemData(s.data); // Idea-2C：内容跟随物品（容器内潜影盒）
+    if (data) out.data = data;
+    return out;
   }
 
   // 房间是否已满（管理面板配置 maxPlayersPerRoom）
@@ -382,10 +402,15 @@ export class Room {
     const count = Math.min(64, Math.max(1, safeInt(msg.count, 1)));
     const name = String(msg.name || '').slice(0, 32);
     if (!name) return;
+    // Idea-2C：内容跟随物品（潜影盒），校验失败整体丢弃（视为普通掉落）
+    const data = sanitizeItemData(msg.data);
     const id = this.nextDropId++;
     const dim = player.dim;
-    this.drops.set(id, { x, y, z, name, count, dim, spawnedAt: Date.now() });
-    this.broadcastDim(MSG.DROP_SPAWN, { id, x, y, z, name, count, d: dim }, dim);
+    const entry = { x, y, z, name, count, dim, spawnedAt: Date.now() };
+    const back = { id, x, y, z, name, count, d: dim };
+    if (data) { entry.data = data; back.data = data; }
+    this.drops.set(id, entry);
+    this.broadcastDim(MSG.DROP_SPAWN, back, dim);
     this.save();
     console.log(`[掉落] ${player.name} 生成 ${name}x${count} @(${x},${y},${z}) id=${id} [${dim}]`);
   }
@@ -559,6 +584,8 @@ export class Room {
       const name = String(d.name || '').slice(0, 32);
       const count = Math.min(64, Math.max(1, safeInt(d.count, 1)));
       if (!name) continue;
+      // Idea-2C：死亡掉落透传内容跟随物品（潜影盒），校验失败视为普通掉落
+      const data = sanitizeItemData(d.data);
       // 掉落位置做微小确定性偏移，避免整叠重叠成一点
       const ox = ((i % 5) - 2) * 0.3;
       const oz = ((Math.floor(i / 5) % 5) - 2) * 0.3;
@@ -567,8 +594,11 @@ export class Room {
       const ownerLockMs = 3000;
       const ownerUntil = Date.now() + ownerLockMs;
       const dim = player.dim; // M4：死亡掉落落在死者当前维度
-      this.drops.set(id, { x: x + ox, y, z: z + oz, name, count, dim, spawnedAt: Date.now(), owner: player.id, ownerUntil });
-      this.broadcastDim(MSG.DROP_SPAWN, { id, x: x + ox, y, z: z + oz, name, count, owner: player.id, ownerLock: ownerLockMs, d: dim }, dim);
+      const entry = { x: x + ox, y, z: z + oz, name, count, dim, spawnedAt: Date.now(), owner: player.id, ownerUntil };
+      const back = { id, x: x + ox, y, z: z + oz, name, count, owner: player.id, ownerLock: ownerLockMs, d: dim };
+      if (data) { entry.data = data; back.data = data; }
+      this.drops.set(id, entry);
+      this.broadcastDim(MSG.DROP_SPAWN, back, dim);
       n++;
     }
     if (n) this.save();

@@ -891,8 +891,8 @@ export class Game {
 
     // 怪物系统
     if (this.mobManager) {
-      this.mobManager.onPickup = (name, count) => {
-        const remaining = this.inventory.add(name, count);
+      this.mobManager.onPickup = (name, count, data) => {
+        const remaining = this.inventory.add(name, count, data ?? null);
         this.hotbar.update();
         return remaining; // 返回未放入的剩余数量（0 = 全部拾取）
       };
@@ -1051,6 +1051,29 @@ export class Game {
           new THREE.Vector3(block.x + 0.5, block.y + 0.5, block.z + 0.5), s.name, s.count);
       }
     }
+  }
+
+  // Idea-2C：潜影盒破坏——内容不散落，跟随盒体成单一掉落（data 通道）
+  // toInventory：单机生存直接入背包（与普通方块掉落同惯例）；联机/创造走实体掉落
+  _breakShulkerBox(block, toInventory) {
+    const items = this.world.getContainer(block.x, block.y, block.z);
+    this.world.removeContainer(block.x, block.y, block.z);
+    if (this.chestScreen && this.chestScreen.visible && this.chestScreen.pos &&
+        this.chestScreen.pos.x === block.x && this.chestScreen.pos.y === block.y &&
+        this.chestScreen.pos.z === block.z) {
+      this.chestScreen._changed = false; // 容器已销毁，hide 不再上报
+      this.chestScreen.hide();
+    }
+    const data = (items && items.some(s => s)) ? items : null; // 空盒不带 data
+    if (this.networkMode && this.net) {
+      this.net.sendDropSpawn(block.x + 0.5, block.y + 0.5, block.z + 0.5, 'shulker_box', 1, data);
+    } else if (toInventory && this.player.survival) {
+      this.inventory.add('shulker_box', 1, data);
+    } else if (this.mobManager) {
+      this.mobManager.spawnDrop(
+        new THREE.Vector3(block.x + 0.5, block.y + 0.5, block.z + 0.5), 'shulker_box', 1, data);
+    }
+    if (this.hotbar) this.hotbar.update();
   }
 
   // T5：容器修改上报出口（ChestScreen 每次改动调用）；联机整箱广播，单机 noop
@@ -1244,6 +1267,7 @@ export class Game {
       if (this.player.creative) {
         if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
         if (def.name === 'chest') this._breakChest(hit.block, false);
+        if (def.name === 'shulker_box') this._breakShulkerBox(hit.block, false); // Idea-2C：创造也掉盒（内容跟随）
         if (def.name === 'furnace') this._breakFurnace(hit.block);
         if (def.name === 'end_crystal') this._breakCrystal(hit.block.x, hit.block.y, hit.block.z);
         this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
@@ -1274,6 +1298,7 @@ export class Game {
         if (this.breakingProgress >= 1) {
           if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
           if (def.name === 'chest') this._breakChest(hit.block, true);
+          if (def.name === 'shulker_box') this._breakShulkerBox(hit.block, true); // Idea-2C：内容跟随盒体
           if (def.name === 'furnace') this._breakFurnace(hit.block);
           if (def.name === 'end_crystal') this._breakCrystal(hit.block.x, hit.block.y, hit.block.z);
           this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
@@ -1380,8 +1405,8 @@ export class Game {
           this.controls.mouseRight = false;
           return;
         }
-        // T5：右键箱子打开容器界面（创造/生存都可；旁观不可）
-        if (targetDef && targetDef.name === 'chest' && this.chestScreen && !this.player.spectator) {
+        // T5：右键箱子/潜影盒打开容器界面（创造/生存都可；旁观不可）
+        if (targetDef && (targetDef.name === 'chest' || targetDef.name === 'shulker_box') && this.chestScreen && !this.player.spectator) {
           this.chestScreen.show(hit.block.x, hit.block.y, hit.block.z);
           this.controls.mouseRight = false;
           return;
@@ -1458,6 +1483,13 @@ export class Game {
           this.world.setBlock(placeX, placeY, placeZ, blockDef.id);
           if (this.redstone) this.redstone.onBlockChange(placeX, placeY, placeZ);
           this._trySummonIronGolem(placeX, placeY, placeZ); // Idea-2E：铁傀儡召唤检测（南瓜/铁块完成 T 型）
+          // Idea-2C：潜影盒放置——物品内容落入容器账本并整箱广播（远端账本一致）
+          if (blockDef.name === 'shulker_box') {
+            const items = Array.isArray(sel.data) ? sel.data.slice(0, 27) : [];
+            while (items.length < 27) items.push(null);
+            this.world.setContainer(placeX, placeY, placeZ, items);
+            if (this.networkMode && this.net) this.net.sendContainerSet(placeX, placeY, placeZ, items);
+          }
           if (this.player.survival) {
             this.inventory.removeSelected(1);
             this.hotbar.update();
@@ -1967,6 +1999,8 @@ export class Game {
 
   // 掉落列表化（耕种 P3-4）：作物/草丛多样掉落；其余复用 _blockDropName 单项掉落
   _blockDrops(def) {
+    // Idea-2C：潜影盒不走通用掉落（_breakShulkerBox 已产出内容跟随盒体的单一掉落）
+    if (def.name === 'shulker_box') return [];
     // 小麦成熟：小麦×1 + 种子 1-3（原版式）；未熟：仅种子×1
     if (def.name === `wheat_crop_${CROP_MAX_STAGE}`) {
       return [
