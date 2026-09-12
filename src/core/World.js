@@ -29,6 +29,9 @@ export class World {
     this.onCropBlockChange = null;   // 作物方块增删回调 (x,y,z,oldId,newId)，由 Game 注册（生长登记表维护）
     this.cropMap = new Map();        // 作物生长登记表 key "x,y,z" -> {x,y,z}（setBlock 钩子 + 区块重载扫描维护）
     this.lightEngine = new LightEngine(this); // 体素光照（纯客户端视觉，不进存档/协议）
+    // B-①：地形 Worker 客户端（由 Game.start 注入，仅主世界；null = 全部走同步路径）
+    this.terrainWorker = null;
+    this._pendingChunks = new Map(); // "cx,cz" -> 在途 Promise
   }
 
   // 取（或建）当前维度的账本桶
@@ -78,28 +81,59 @@ export class World {
     if (!c) {
       c = new Chunk(cx, cz);
       this.generator.generateChunk(c);
-      // 应用修改
-      this.applyModifications(c);
       this.chunks.set(k, c);
-      // 光照初始化（含从已加载邻居导入边界光，改动的邻居会被标 dirty）
-      this.lightEngine.initChunkLight(c);
-      // 作物重载扫描：存档载入/区块重载后，把田里现存作物登记回生长表
-      //（作物阶段本身是方块 id 随存档持久化，登记表是易失的运行期加速结构）
-      if (this.onCropBlockChange) {
-        const baseX = cx * CHUNK_SIZE, baseZ = cz * CHUNK_SIZE;
-        for (let y = 0; y < CHUNK_HEIGHT; y++) {
-          for (let z = 0; z < CHUNK_SIZE; z++) {
-            for (let x = 0; x < CHUNK_SIZE; x++) {
-              const id = c.blocks[Chunk.index(x, y, z)];
-              if (id !== 0 && isCropId(id)) {
-                this.onCropBlockChange(baseX + x, y, baseZ + z, 0, id);
-              }
+      this._finalizeChunk(c);
+    }
+    return c;
+  }
+
+  // 区块就绪后的公共收尾（同步 ensureChunk 与 worker 回执两路共用，顺序勿变：
+  // 先应用修改再初始化光照，最后作物重载扫描——与 LightEngine 邻居导入语义耦合）
+  _finalizeChunk(c) {
+    // 应用修改
+    this.applyModifications(c);
+    // 光照初始化（含从已加载邻居导入边界光，改动的邻居会被标 dirty）
+    this.lightEngine.initChunkLight(c);
+    // 作物重载扫描：存档载入/区块重载后，把田里现存作物登记回生长表
+    //（作物阶段本身是方块 id 随存档持久化，登记表是易失的运行期加速结构）
+    if (this.onCropBlockChange) {
+      const { cx, cz } = c;
+      const baseX = cx * CHUNK_SIZE, baseZ = cz * CHUNK_SIZE;
+      for (let y = 0; y < CHUNK_HEIGHT; y++) {
+        for (let z = 0; z < CHUNK_SIZE; z++) {
+          for (let x = 0; x < CHUNK_SIZE; x++) {
+            const id = c.blocks[Chunk.index(x, y, z)];
+            if (id !== 0 && isCropId(id)) {
+              this.onCropBlockChange(baseX + x, y, baseZ + z, 0, id);
             }
           }
         }
       }
     }
-    return c;
+  }
+
+  // B-①：异步预取区块（worker 生成，Transferable 回传）。
+  // 返回 true = 已有/已在途；false = 当前不可用（非主世界/worker 失败）→ 调用方回退 ensureChunk 同步路径。
+  requestChunk(cx, cz) {
+    const k = this.key(cx, cz);
+    if (this.chunks.has(k)) return true;
+    if (!this.terrainWorker || this.terrainWorker.broken) return false;
+    if (this._pendingChunks.has(k)) return true;
+    const p = this.terrainWorker.generate(cx, cz, this.generator.seed, this.generator.biomeScale || null)
+      .then(({ blocks }) => {
+        this._pendingChunks.delete(k);
+        if (this.chunks.has(k)) return; // 同步路径抢先建好：丢弃 worker 结果
+        const c = new Chunk(cx, cz);
+        c.blocks.set(blocks);
+        this.chunks.set(k, c);
+        this._finalizeChunk(c);
+      })
+      .catch(() => {
+        this._pendingChunks.delete(k);
+        if (this.terrainWorker) this.terrainWorker.broken = true; // 失败即回退同步生成
+      });
+    this._pendingChunks.set(k, p);
+    return true;
   }
 
   applyModifications(chunk) {

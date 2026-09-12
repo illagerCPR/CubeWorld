@@ -50,6 +50,7 @@ import { FirstPersonHand } from '../render/FirstPersonHand.js';
 import { ParticleSystem } from '../render/ParticleSystem.js';
 import { loadSettings, applySettings, applyFogRange } from '../core/Settings.js';
 import { audio } from '../audio/AudioEngine.js';
+import { TerrainWorkerClient } from '../workers/TerrainWorkerClient.js';
 import { playerColorCss } from '../net/playerColor.js';
 
 // 工具挖掘速度倍率（按物品 tier；金质单独 9 倍——原版金工具挖得快但等级低）
@@ -173,6 +174,8 @@ export class Game {
   // 清理旧世界所有 Three.js 资源和 UI DOM，防止切换存档时残留"幽灵方块"等
   _disposeWorld() {
     const scene = this.renderer.scene;
+    // B-①：地形 Worker 随世界销毁（新建型资源，跨存档/换维必须 terminate）
+    if (this.world && this.world.terrainWorker) this.world.terrainWorker.dispose();
     // 旧区块网格
     if (this.world && this.world.chunks) {
       for (const chunk of this.world.chunks.values()) {
@@ -255,6 +258,8 @@ export class Game {
     // 维度：存档携带（V2）或新建默认主世界；世界与天空档案按维度装配
     const dimension = (loadData && loadData.dimension) || 'overworld';
     this.world = new World(seed, dimension, { biomeScale: this.biomeScale });
+    // B-①：主世界注入地形 Worker（其余维度生成器类不同，走同步路径）
+    if (dimension === 'overworld') this.world.terrainWorker = new TerrainWorkerClient(2);
     this.world.dragonDefeated = !!(loadData && loadData.dragonDefeated); // 末影龙击败标记（存档恢复）
     if (this.sky) this.sky.applyDimensionProfile(this.world.dimDef);
     // L4-B 太阳阴影：shadow 相机挂在 sunLight 上（Sky 跨存档共享，幂等），target 需入场景
@@ -978,7 +983,8 @@ export class Game {
       const t0 = performance.now();
       let made = 0;
       for (const [cx, cz] of missing) {
-        this.world.ensureChunk(cx, cz);
+        // B-①：优先 worker 异步预取（立即返回不卡帧）；不可用回退同步生成分帧
+        if (!this.world.requestChunk(cx, cz)) this.world.ensureChunk(cx, cz);
         made++;
         // 至少 1 块保证推进（首次进入世界也按预算渐次补齐）；超 8ms 停手让出帧
         if (made >= 1 && performance.now() - t0 > 8) break;

@@ -57,3 +57,11 @@
 - **环境音/BGM**：`audio.tickAmbient(dt, daylight)` 每帧由 Game.update 驱动——**计划式调度**（风声 swell 9-23s 随机 + BGM 和弦垫 4.6s 节拍 C-G-Am-F 低音区），无常驻节点，**暂停时 update 停止调用即自然静默**；全部走 music 分轨。`audio.resetAmbient()` 必须在 `Game.start` 调（sky.time 重置旁）——新存档继承上一局调度相位会显得"闹鬼"。
 - **music 设置**：Settings `music: true` → `applySettings` 调 `audio.setMusicEnabled`（music 分轨 gain 0/0.5），VideoSettings 面板第三行「音乐」。
 - **⚠️ eval 探针的 Vite HMR 实例分裂陷阱（重要）**：页面开着时编辑过某模块后，Vite 会给 importer 的 import 规格永久加 `?t=<时间戳>`（dev server 生命周期内不消失）——**动态 `import('/src/xxx.js')` 裸 URL 会拿到与页面不同的模块实例**，探针量的是假实例（单例字段如 `_unlockWired`/patch 计数全对不上）。正确姿势：先 `fetch('/src/main.js')` 提取页面实际 import 的 URL（含 ?t=）再 import 同一 URL。生产 build 无此问题（单 bundle）。
+
+### Idea-3B-0/B-① 地形 Worker 化批次备忘（防回退）
+
+- **B-0 探针结论（2026-09-12 通过）**：地形模块图（noise/biomes/terrain/Chunk/structures/catalog + BlockDefs）纯计算零 DOM，Worker 可直接运行。三区块字节级一致（确定性生成跨线程成立）、Transferable 回传正常、build 产出独立 worker chunk（`TerrainWorker-*.js`）。headless 软渲染 worker 反而慢（12.1ms vs 8.3ms/块）——收益是主线程解堵不是裸生成速度，真机帧时间才作数。
+- **⚠️ 最高危坑：worker 图必须补 `import '../blocks/BlockDefs.js'`（副作用注册）**。方块 id 注册在 BlockDefs 模块顶层执行，主线程由 Game.js 导入完成；worker 图缺它 → BlockRegistry 空 → getByName 全 undefined → 生成**全空气**（表面 ok:true 不报错，只表现为 17500/65536 字节差异、非零块数 0）。BlockDefs 顶层只做 SVG 字符串生成，DOM 全在函数体内，worker 安全。
+- **架构（B-①）**：`TerrainWorker.js`（每 seed+规模缓存生成器 LRU≤4，`chunk.blocks.buffer` Transferable）+ `TerrainWorkerClient`（请求队列 RR 分发 2 worker，`broken` 标志熔断）。**World.ensureChunk 保持同步**（setBlock 等大量调用方依赖）；新增 `requestChunk(cx,cz)`：已有/在途返回 true，不可用返回 false，调用方 `if (!requestChunk()) ensureChunk()` 回退。`_finalizeChunk(c)` = applyModifications → initChunkLight → 作物扫描公共收尾，**顺序勿变**（LightEngine 邻居导入语义耦合）；worker 回执在 `chunks.set` 后 finalize，与同步路径逐语句一致。回执落地时同步路径已建 → 丢弃；`.catch` 置 `broken=true` 熔断回退。
+- **门控与生命周期**：仅主世界注入（dimension==='overworld'，nether/end/aether 生成器类不同）；注入点在 `Game.start` 的 `new World` 后（换维/联机重启全走 start，天然覆盖）；`_disposeWorld` 首行 `terrainWorker.dispose()` terminate（新建型资源，跨存档必须销毁）。
+- **验证锚点**：瞬移远端 → `world.chunks.size==169` 且 patch 实例 `generator.generateChunk` 计数 **syncGens==0**（全 worker）；`terrainWorker.broken=true` 后再瞬移 → syncGens 增 169（回退接管）；worker 生成块 `hasLight==true`；returnToMenu 后 worker terminate。headless 无 Worker 环境自动走同步路径（构造失败 onerror→broken）。
