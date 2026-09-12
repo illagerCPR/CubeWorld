@@ -122,12 +122,12 @@ A（小，手感补课）→ B（中，联机体验补课）→ E（中，村庄
 
 ## Idea-4: 服务器运维池 —— 房间开关 / 世界备份 / 速率限制
 
-- **状态**：暂缓（2026-09-12 评审新增，低优先顺手项）。单项工作量均小，可在任意批次间隙插入。
+- **状态**：A（房间配置开关）已交付（2026-09-12，`test-idea4.mjs` 并入跑批）；B（世界备份导出）/ C（消息速率限制）进行中。单项工作量均小，可在任意批次间隙插入。
 
-### A. 房间配置开关
+### A. 房间配置开关（已交付）
 
-- 现状：房间级只有白名单/op；PvP 伤害、怪物生成全局恒开。
-- 方案：`config.roomSettings: {房间名: {pvp: bool, mobs: bool}}`，管理面板编辑；伤害链按开关短路（服务器中继过滤）。注意与 `isOperator` 权限及测试套件对齐。
+- ~~现状：房间级只有白名单/op；PvP 伤害、怪物生成全局恒开。~~
+- 已实现：`config.roomSettings: {房间名: {pvp, mobs}}`（缺省全开）；服务器权威过滤（`onAttack`/`onMobSpawn` 短路+系统提示）+ 客户端闸门（`WORLD_INFO.settings` 下发 + `room_settings` 热广播，`sendMobSpawn` 发送口短路零漂移）；面板房间卡 checkbox；`GET /api/settings` + `POST /api/room/<n>/settings`（viewer 403）。防回退见 `docs/agent-notes/multiplayer.md` Idea-4A 节。
 
 ### B. 世界备份导出
 

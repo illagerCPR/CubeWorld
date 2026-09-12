@@ -55,6 +55,9 @@ export const MSG = {
   PROFILE_SAVE: 'profile_save',       // C2S {profile}：客户端定期上报（背包/位置/状态）
   PLAYER_PROFILE: 'player_profile',   // S2C {profile}：进房后下发该昵称已有档案（仅发给本人）
 
+  // 房间设置（Idea-4A：{<房间名>: {pvp,mobs}}，缺省全开）
+  ROOM_SETTINGS: 'room_settings',     // S2C {room, pvp, mobs}：管理面板改动后向该房间在线玩家热广播
+
   // 世界
   SET_TIME: 'set_time',
   TIME: 'time',

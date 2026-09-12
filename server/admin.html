@@ -281,13 +281,19 @@
     return `${r(pos.x)}, ${r(pos.y)}, ${r(pos.z)}`;
   }
 
+  // 房间名注入 onclick 属性：先 JS 字符串转义（反斜杠/单引号），再 HTML 属性转义（双引号/&）
+  function attrRoom(name) {
+    return String(name).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+      .replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  }
+
   function renderRooms() {
     const el = document.getElementById('rooms');
     if (!status || !status.rooms || !status.rooms.length) {
       el.innerHTML = '<div class="empty">暂无房间（尚无玩家创建/加入）</div>';
       return;
     }
-    el.innerHTML = status.rooms.map((room) => `
+    el.innerHTML = status.rooms.map((room, idx) => `
       <div class="room-title">房间「${room.name}」
         <span class="tag">seed=${room.seed}</span>
         <span class="tag">方块改动 ${room.blocks}</span>
@@ -304,11 +310,33 @@
             <td><button class="btn-danger btn-sm" onclick="kick(${p.id})">踢出</button></td>
           </tr>`).join('')}
       </table>` : '<div class="empty">房间内暂无玩家在线</div>'}
+      <div style="margin-top:6px;font-size:13px;color:#aab3c2;">
+        房间开关：
+        <label style="margin-left:6px;cursor:pointer;">
+          <input type="checkbox" id="set-pvp-${idx}" ${room.settings && room.settings.pvp === false ? '' : 'checked'}
+                 onchange="saveRoomSetting('${attrRoom(room.name)}','pvp',this.checked)"> PvP
+        </label>
+        <label style="margin-left:10px;cursor:pointer;">
+          <input type="checkbox" id="set-mobs-${idx}" ${room.settings && room.settings.mobs === false ? '' : 'checked'}
+                 onchange="saveRoomSetting('${attrRoom(room.name)}','mobs',this.checked)"> 怪物生成
+        </label>
+      </div>
       <div style="margin-top:8px;">
-        <button class="btn-warn btn-sm" onclick="clearDrops('${room.name.replace(/'/g, "\\'")}')">清空掉落物</button>
-        <button class="btn-danger btn-sm" onclick="deleteRoom('${room.name.replace(/'/g, "\\'")}')">删除房间（重置世界）</button>
+        <button class="btn-warn btn-sm" onclick="clearDrops('${attrRoom(room.name)}')">清空掉落物</button>
+        <button class="btn-danger btn-sm" onclick="deleteRoom('${attrRoom(room.name)}')">删除房间（重置世界）</button>
       </div>
     `).join('');
+  }
+
+  // Idea-4A：房间开关保存（服务器落盘 config + 向该房间在线玩家广播 room_settings 热生效）
+  async function saveRoomSetting(room, key, value) {
+    const body = {}; body[key] = !!value;
+    const r = await api('/api/room/' + encodeURIComponent(room) + '/settings', 'POST', body);
+    if (r.ok) {
+      const label = key === 'pvp' ? 'PvP' : '怪物生成';
+      toast(`房间「${room}」${label}已${value ? '开启' : '关闭'}（在线玩家即时生效）`);
+    } else toast(r.error || '保存失败', true);
+    refresh();
   }
 
   async function refresh() {

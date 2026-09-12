@@ -1302,8 +1302,8 @@ export class Game {
         !(this.controls.mouseRight && bowLikeHeld)) return;
     
     if (this.controls.mouseLeft) {
-      // 联机互殴：先检测远端玩家（射线命中优先于怪物）
-      if (this.networkMode && this.net && !this.inventoryScreen?.visible) {
+      // 联机互殴：先检测远端玩家（射线命中优先于怪物）；Idea-4A：房间关闭 PvP 时跳过远端检测
+      if (this.networkMode && this.net && this.net.roomSettings?.pvp !== false && !this.inventoryScreen?.visible) {
         const origin = this.player.position.clone();
         origin.y += 1.62;
         const dir = new THREE.Vector3();

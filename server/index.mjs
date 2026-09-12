@@ -276,6 +276,11 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 200, { ok: true, roomWhitelist: serverConfig.roomWhitelist, roomOps: serverConfig.roomOps });
         return;
       }
+      // Idea-4A：房间开关（GET 两角色均可读；POST 走下方单房间端点，已被 viewer 拦截）
+      if (p === '/api/settings' && req.method === 'GET') {
+        sendJson(res, 200, { roomSettings: serverConfig.roomSettings || {} });
+        return;
+      }
       // 阶段6 操作日志（仅管理面板 / 管理员查看）
       if (p === '/api/logs' && req.method === 'GET') {
         sendJson(res, 200, { logs: [...adminLogs].reverse() }); // 最新在前
@@ -358,6 +363,36 @@ const server = http.createServer(async (req, res) => {
           }
         }
         sendJson(res, 404, { error: '玩家不在任何房间' });
+        return;
+      }
+      // Idea-4A：单房间开关（pvp/mobs 只认 boolean，缺省字段保持不变）；
+      // 落盘 config + 房间在内存时向在线玩家广播 room_settings 热生效
+      const sm = p.match(/^\/api\/room\/([^/]+)\/settings$/);
+      if (sm && req.method === 'POST') {
+        const roomName = decodeURIComponent(sm[1]);
+        const body = await readBody(req);
+        const patch = {};
+        if ('pvp' in body) {
+          if (typeof body.pvp !== 'boolean') { sendJson(res, 400, { error: 'pvp 须为 boolean' }); return; }
+          patch.pvp = body.pvp;
+        }
+        if ('mobs' in body) {
+          if (typeof body.mobs !== 'boolean') { sendJson(res, 400, { error: 'mobs 须为 boolean' }); return; }
+          patch.mobs = body.mobs;
+        }
+        if (!('pvp' in patch) && !('mobs' in patch)) { sendJson(res, 400, { error: '至少提供 pvp 或 mobs 之一' }); return; }
+        if (roomName.length > 32) { sendJson(res, 400, { error: '房间名过长' }); return; }
+        const cur = (serverConfig.roomSettings && serverConfig.roomSettings[roomName]) || {};
+        const entry = { pvp: 'pvp' in patch ? patch.pvp : cur.pvp !== false, mobs: 'mobs' in patch ? patch.mobs : cur.mobs !== false };
+        serverConfig.roomSettings = { ...(serverConfig.roomSettings || {}), [roomName]: entry };
+        config.saveConfig(serverConfig);
+        const room = rooms.get(roomName);
+        if (room) {
+          room.broadcast(MSG.ROOM_SETTINGS, { room: roomName, pvp: entry.pvp, mobs: entry.mobs });
+        }
+        logAdmin('room-settings', `房间「${roomName}」开关更新：PvP ${entry.pvp ? '开' : '关'}，怪物 ${entry.mobs ? '开' : '关'}${room ? `（已广播 ${room.players.size} 名在线玩家）` : '（房间当前离线）'}`);
+        console.log(`[管理] 房间「${roomName}」开关：PvP ${entry.pvp ? '开' : '关'} 怪物 ${entry.mobs ? '开' : '关'}`);
+        sendJson(res, 200, { ok: true, room: roomName, settings: entry });
         return;
       }
       // /api/room/<name>/<action>

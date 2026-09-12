@@ -210,6 +210,12 @@ export class Room {
     return this.players.size >= cap;
   }
 
+  // Idea-4A：房间开关（config.roomSettings[房间名]，未配置/缺字段 = 全开）
+  settings() {
+    const s = this.config && this.config.roomSettings && this.config.roomSettings[this.name];
+    return { pvp: !s || s.pvp !== false, mobs: !s || s.mobs !== false };
+  }
+
   addPlayer(p) {
     // 管理面板配置的房间人数上限（超出拒绝入房）
     const cap = (this.config && this.config.maxPlayersPerRoom) || 10;
@@ -309,6 +315,7 @@ export class Room {
       hostId: this.hostId,
       blocks: this.blocksTotal(),
       drops: this.drops.size,
+      settings: this.settings(), // Idea-4A：面板房间卡 checkbox 数据源
       players: [...this.players.values()].map((p) => ({
         id: p.id, name: p.name, mode: p.mode, dim: p.dim,
         health: p.health, food: p.food, pos: p.pos, host: p.id === this.hostId,
@@ -325,7 +332,7 @@ export class Room {
     this.hostId = player.id;
     this.sendTo(player, MSG.ROOM_CREATED, { roomId: this.name });
     // restart=true 表示世界内换房到新房间：客户端需重启本地世界（新 seed）
-    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: player.mode, time: this.time, hostId: this.hostId, room: this.name, restart: !!msg.restart, biomeScale: this.biomeScale });
+    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: player.mode, time: this.time, hostId: this.hostId, room: this.name, restart: !!msg.restart, biomeScale: this.biomeScale, settings: this.settings() });
     this.broadcast(MSG.PLAYER_JOIN, this.joinInfo(player), player.id);
     this.save();
     console.log(`[+] ${player.name} 创建房间「${this.name}」seed=${this.seed} (host)`);
@@ -340,7 +347,7 @@ export class Room {
     }
     // 无 host 时（如房间从磁盘恢复且暂无玩家在线）首个加入者接管 host
     if (this.hostId === null || !this.players.has(this.hostId)) this.hostId = player.id;
-    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId, room: this.name, restart: !!opts.restart, biomeScale: this.biomeScale });
+    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId, room: this.name, restart: !!opts.restart, biomeScale: this.biomeScale, settings: this.settings() });
     // 回放现存玩家：加入者立即可见房间内已有玩家（阶段10：附带选中槽位/手持物/完整快捷栏）
     for (const p of this.players.values()) {
       if (p.id === player.id) continue;
@@ -408,7 +415,7 @@ export class Room {
     this.time = 0.35;
     this.nextMobId = 1;
     this.nextDropId = 1;
-    this.broadcast(MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId, room: this.name, restart: true, biomeScale: this.biomeScale });
+    this.broadcast(MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId, room: this.name, restart: true, biomeScale: this.biomeScale, settings: this.settings() });
     for (const p of this.players.values()) {
       this.broadcast(MSG.PLAYER_JOIN, this.joinInfo(p), p.id);
     }
@@ -538,6 +545,11 @@ export class Room {
   // 怪物事件（阶段 2 方案①：服务器只分配 id + 中继，不跑 AI）
   // host 端请求生成 -> 分配唯一 id 广播（含发起者，各端据此创建同一怪物实体；M4：同维度广播）
   onMobSpawn(player, msg) {
+    // Idea-4A：怪物生成关闭时拒绝分配 id 不转发（发起者端实体由回执创建，故各端一致不出现）
+    if (!this.settings().mobs) {
+      this.sendTo(player, MSG.CHAT, { from: '系统', fromId: 0, text: '本房间已关闭怪物生成' });
+      return;
+    }
     const type = String(msg.type || '').slice(0, 24);
     const x = safeNum(msg.x), y = safeNum(msg.y), z = safeNum(msg.z);
     if (!type) return;
@@ -628,6 +640,11 @@ export class Room {
   }
 
   onAttack(player, msg) {
+    // Idea-4A：PvP 关闭时服务器权威短路——不结算不广播，给攻击者系统提示
+    if (!this.settings().pvp) {
+      this.sendTo(player, MSG.CHAT, { from: '系统', fromId: 0, text: '本房间已关闭 PvP（玩家间伤害无效）' });
+      return;
+    }
     const target = this.players.get(safeInt(msg.targetId));
     if (!target || target.id === player.id || !target.alive) return;
     const damage = Math.max(0, safeNum(msg.damage, 1));

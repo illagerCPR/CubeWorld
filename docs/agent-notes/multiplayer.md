@@ -62,3 +62,11 @@
 - **客户端应用（NetworkManager.applyPlayerProfile）**：进房消息到达时世界未就绪 → `_pendingProfile` 缓存，`onWorldStarted()` 应用；**位置仅同维度应用**（异维档案坐标无意义，只恢复背包/状态）；应用包 try/catch 不阻断游戏。
 - **管理 API**：`GET /api/room/<name>/players`（列表）+ `DELETE /api/room/<name>/players/<nick>`（清除伪造档案）；admin.html 房间卡片加「玩家档案」按钮（展开列表+清除，`btoa(unescape(encodeURIComponent()))` 做 DOM id 转义）。
 - **⚠️ 测试陷阱**：test-profile.mjs 文件内有 `const URL = 'ws://...'` **遮蔽全局 URL 类**——校验器里 `new URL(...)` 会抛 "URL is not a constructor" 且被 catch 吞成"无鉴权"（batch 401 假失败）。读路径用 `fileURLToPath(import.meta.url)` + path.join。**跑批中前序 test-admin/stage11 会留下 adminAccounts（含 viewer 角色）**——管理 API 断言必须带 Bearer 头（测试从 config.json 读未过期账号），否则 401 假阴性。stage11 结尾不清理账号（残留即鉴权开启态）。
+
+### Idea-4A 房间配置开关批次备忘（防回退）
+
+- **配置形态**：`config.roomSettings: {<房间名>: {pvp:bool, mobs:bool}}`，`sanitizeRoomSettings`（config.js）清洗——≤32 房、pvp/mobs **仅认 boolean（缺省/非布尔=开 true**，与"未配置即全开"语义一致）、非法条目跳过非整体拒绝）；loadConfig/applyConfig 均整体替换。**勿搬到房间快照**（与白名单同款：管理面板实时改 + 与房间存档生命周期解耦）。
+- **语义（谁信谁）**：服务器权威过滤 = `Room.onAttack`（pvp 关 → 不结算不广播 + 攻击者系统聊天提示）、`Room.onMobSpawn`（mobs 关 → 不分配 id 不转发 + 提示）；客户端一致性闸门 = `NetworkManager.sendMobSpawn` **发送口短路**——host 实体由 mob_spawn 回执创建，闸在发送口即本端与各端一致不生成（零漂移），村民/铁傀儡/潜影贝/自然生成全部共用此单一漏斗；`Game.js` 互殴分支加 `this.net.roomSettings?.pvp !== false` 跳过远端玩家检测。
+- **下发与热更**：`WORLD_INFO` 携带 `settings` 字段（createRoom/joinRoom/resetWorld 三出口都带；客户端 `_handle` 的 WORLD_INFO case 顶部统一更新——**勿在该 case 中间插 break**，曾把原 restart/重连逻辑切成不可达代码）；管理面板/API 改动后 `ROOM_SETTINGS {room,pvp,mobs}` 只向该房间在线玩家广播（异房间不串扰），客户端按 `msg.room === this.room` 收敛。
+- **API**：`GET /api/settings`（全表，viewer 可读）；`POST /api/room/<name>/settings {pvp?,mobs?}`（字段**只认 boolean 否则 400**、至少一项、房间名 ≤32；落盘 + 内存房间热广播 + logAdmin）。面板房间卡 checkbox 数据源是 `Room.info().settings`（status 轮询直出），onchange 即保存；房间名注入 onclick 走 `attrRoom()`（先 JS 转义 `\`/`'`，再 HTML 转义 `"`/`&`，顺序勿换——HTML 解码后得到的就是 JS 字符串字面量）。
+- **测试**：`server/test-idea4.mjs`（22-23 断言，已入 run-all-tests.sh，跑批中位于 test-profile 后——**前序套件遗留 adminAccounts**，op/viewer token 从 config.json 读；单独裸跑且只建 viewer 账号时 op 调用全 403 属预期假象非 bug）。

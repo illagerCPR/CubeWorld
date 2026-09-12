@@ -27,6 +27,8 @@ export class NetworkManager {
     this._pendingOpen = [];       // 连接打开前的待发消息
     this.isHost = false;          // 是否房间 host（host 端负责怪物自然生成）
     this.room = 'default';        // 当前房间名（阶段 3：同名房间共享同一世界）
+    // Idea-4A：房间开关（world_info 下发 / room_settings 热广播更新；缺省全开）
+    this.roomSettings = { pvp: true, mobs: true };
     this._url = null;             // 服务器地址（重连用）
     this._reconnectAttempt = 0;   // 当前重连尝试次数
     this._reconnectTimer = null;  // 重连定时器
@@ -236,6 +238,10 @@ export class NetworkManager {
         break;
       case MSG.WORLD_INFO:
         this.room = msg.room || this.room;
+        // Idea-4A：房间开关随 world_info 下发（首次进入/换房/重连三条路径统一在此更新）
+        if (msg.settings && typeof msg.settings === 'object') {
+          this.roomSettings = { pvp: msg.settings.pvp !== false, mobs: msg.settings.mobs !== false };
+        }
         if (this._ready && this.game && this.game.world && this.game.running) {
           if (msg.restart) {
             // 阶段5：世界内换房 / 重建世界 —— 重启本地世界（保持连接），期间缓存远端数据
@@ -268,6 +274,12 @@ export class NetworkManager {
         if (msg.profile) {
           if (this._ready) this.applyPlayerProfile(msg.profile);
           else this._pendingProfile = msg.profile;
+        }
+        break;
+      case MSG.ROOM_SETTINGS:
+        // Idea-4A：管理面板改动房间开关后热广播（进房期间实时生效，无需重进）
+        if (msg.room === this.room) {
+          this.roomSettings = { pvp: msg.pvp !== false, mobs: msg.mobs !== false };
         }
         break;
       case MSG.PLAYER_LEAVE:
@@ -452,6 +464,9 @@ export class NetworkManager {
 
   // 联机怪物事件（host 生成 / 玩家攻击 / 怪物死亡）；tradeSeed：T5 村民交易表种子（服务器原样透传）
   sendMobSpawn(type, x, y, z, tradeSeed) {
+    // Idea-4A：怪物生成关闭时在发送口短路——host 实体由 mob_spawn 回执创建，
+    // 闸在这里即本端与各端一致不生成（无漂移）；村民/铁傀儡/潜影贝等所有生成路径共用此出口
+    if (this.roomSettings && this.roomSettings.mobs === false) return;
     const data = { type, x, y, z };
     if (typeof tradeSeed === 'number') data.tradeSeed = tradeSeed >>> 0;
     this._send(MSG.MOB_SPAWN, data);

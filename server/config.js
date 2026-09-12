@@ -3,6 +3,7 @@
 //         旧字段 adminToken/adminTokenExpires 保留为兼容接口（等价于 label='default' 的账号）
 // 阶段11：adminAccounts 增 role（'op'|'viewer'，缺省 op）；新增房间白名单 roomWhitelist 与
 //         房间 op 名单 roomOps（{<房间名>: [昵称...]}，名单为空/不存在 = 不启用）
+// Idea-4A：房间配置开关 roomSettings（{<房间名>: {pvp,mobs}}，缺省/缺字段 = 开）
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +20,7 @@ const DEFAULTS = {
   adminAccounts: [],     // 阶段10：管理账号列表 [{token,label,expires,role}]；空数组=不鉴权（局域网信任）
   roomWhitelist: {},     // 阶段11：房间白名单 {<房间名>: [昵称...]}；名单非空时仅名单内昵称可进
   roomOps: {},           // 阶段11：房间 op 名单 {<房间名>: [昵称...]}；名单内玩家享 host 级游戏权限（改模式/设时间/重建世界）
+  roomSettings: {},      // Idea-4A：房间开关 {<房间名>: {pvp,mobs}}；缺省/缺字段 = 开（true）
 };
 
 // 数字配置的合法范围（防止管理面板提交脏值）
@@ -73,6 +75,25 @@ export function sanitizeRoomNameMap(raw) {
   return out;
 }
 
+// Idea-4A：校验房间开关表（{<房间名>: {pvp,mobs}}）：≤32 房间，pvp/mobs 仅认 boolean
+// （缺省/非布尔 = 开 true——与"未配置即全开"语义一致）；非法条目跳过，非对象整体返回 null
+export function sanitizeRoomSettings(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out = {};
+  let rooms = 0;
+  for (const [rawRoom, rawVal] of Object.entries(raw)) {
+    if (rooms >= ROOM_MAP_LIMITS.maxRooms) break;
+    const room = String(rawRoom || '').trim().slice(0, ROOM_MAP_LIMITS.roomNameMax);
+    if (!room || !rawVal || typeof rawVal !== 'object' || Array.isArray(rawVal)) continue;
+    out[room] = {
+      pvp: typeof rawVal.pvp === 'boolean' ? rawVal.pvp : true,
+      mobs: typeof rawVal.mobs === 'boolean' ? rawVal.mobs : true,
+    };
+    rooms++;
+  }
+  return out;
+}
+
 // 找 default 兼容账号（旧 adminToken 等价物）
 function findDefaultAccount(accounts) {
   return accounts.find((a) => a.label === 'default') || null;
@@ -101,6 +122,8 @@ export function loadConfig() {
       if (whitelist) cfg.roomWhitelist = whitelist;
       const ops = sanitizeRoomNameMap(data.roomOps);
       if (ops) cfg.roomOps = ops;
+      const settings = sanitizeRoomSettings(data.roomSettings);
+      if (settings) cfg.roomSettings = settings;
     }
   } catch (e) {
     console.error(`[配置] 读取 ${CONFIG_PATH} 失败: ${e.message}`);
@@ -134,6 +157,11 @@ export function applyConfig(current, patch) {
   if ('roomOps' in patch) {
     const ops = sanitizeRoomNameMap(patch.roomOps);
     if (ops) next.roomOps = ops;
+  }
+  // Idea-4A：房间开关（整体替换，非法丢弃）
+  if ('roomSettings' in patch) {
+    const settings = sanitizeRoomSettings(patch.roomSettings);
+    if (settings) next.roomSettings = settings;
   }
   // 兼容语义：adminToken 变更同步到 default 账号（空=移除 default 账号；其余账号不受影响）
   if ('adminToken' in patch) {
