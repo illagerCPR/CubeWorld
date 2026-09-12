@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { Renderer } from '../render/Renderer.js';
 import { Sky } from '../render/Sky.js';
 import { SVGTextures } from '../render/SVGTextures.js';
-import { ChunkMeshBuilder } from '../render/ChunkMesh.js';
+import { ChunkMeshBuilder, RenderQuality } from '../render/ChunkMesh.js';
 import { World } from '../core/World.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
@@ -51,6 +51,7 @@ import { ParticleSystem } from '../render/ParticleSystem.js';
 import { loadSettings, applySettings, applyFogRange } from '../core/Settings.js';
 import { audio } from '../audio/AudioEngine.js';
 import { TerrainWorkerClient } from '../workers/TerrainWorkerClient.js';
+import { MeshWorkerClient } from '../workers/MeshWorkerClient.js';
 import { playerColorCss } from '../net/playerColor.js';
 
 // 工具挖掘速度倍率（按物品 tier；金质单独 9 倍——原版金工具挖得快但等级低）
@@ -174,8 +175,9 @@ export class Game {
   // 清理旧世界所有 Three.js 资源和 UI DOM，防止切换存档时残留"幽灵方块"等
   _disposeWorld() {
     const scene = this.renderer.scene;
-    // B-①：地形 Worker 随世界销毁（新建型资源，跨存档/换维必须 terminate）
+    // B-①/B-②：地形/网格 Worker 随世界销毁（新建型资源，跨存档/换维必须 terminate）
     if (this.world && this.world.terrainWorker) this.world.terrainWorker.dispose();
+    if (this.world && this.world.meshWorker) this.world.meshWorker.dispose();
     // 旧区块网格
     if (this.world && this.world.chunks) {
       for (const chunk of this.world.chunks.values()) {
@@ -321,6 +323,8 @@ export class Game {
     // 水面独立纹理：RepeatWrapping + 世界坐标 UV 平铺，避免 chunk 边界方格
     this.waterTexture = await SVGTextures.buildRepeatTexture(allSvgs['water'] || '', 'water');
     this.chunkBuilder = new ChunkMeshBuilder(this.world, atlasTexture, atlasUV, this.waterTexture);
+    // B-②：网格构建 Worker（维度无关——收集只依赖缓存+图集表；随世界销毁重建）
+    this.world.meshWorker = new MeshWorkerClient([...atlasUV.entries()]);
     // 粒子系统（新建型：每次 start 重建，_disposeWorld 释放）
     this.particles = new ParticleSystem(this.renderer.scene, atlasTexture, atlasUV, 0.12);
     this.fireParticles = new ParticleSystem(this.renderer.scene, atlasTexture, atlasUV, 0.09);
@@ -403,6 +407,7 @@ export class Game {
       for (const a of this.arrows) this.renderer.scene.remove(a.mesh);
     }
     this.arrows = [];
+    this._meshBuildSeq = 0; // B-②：网格派发版本号（跨存档共享实例，单调递增即可）
     this._bowCharging = false; // 存档切换：清掉上一存档的蓄力状态
     this._bowCharge = 0;
     if (loadData && loadData.inventory) {
@@ -1005,43 +1010,96 @@ export class Game {
   }
 
   rebuildDirtyChunks() {
-    // 时间预算制（W-卡顿批次）：洞穴后单块 mesh ~15ms，固定"2 个/帧"会叠加出 29ms+
-    // 重建帧；改为限时 ~12ms（至少 1 块保证推进）。遍历序=加载序（近似近处优先）。
+    // 时间预算制（W-卡顿批次）：单块 mesh 收集 ~7-15ms，改为限时 ~12ms（至少 1 块保证推进）。
+    // B-②：优先派发 mesh worker（主线程只做缓存填充+拷贝 ~1-2ms/块）；不可用回退同步 build。
     const t0 = performance.now();
     let count = 0;
     for (const [, chunk] of this.world.chunks) {
       if (!chunk.dirty) continue;
-      if (chunk.mesh) {
-        this.renderer.scene.remove(chunk.mesh);
-        chunk.mesh.geometry.dispose();
-        chunk.mesh = null;
-      }
-      if (chunk.waterMesh) {
-        this.renderer.scene.remove(chunk.waterMesh);
-        chunk.waterMesh.geometry.dispose();
-        chunk.waterMesh = null;
-      }
-      if (chunk.lightMesh) {
-        this.renderer.scene.remove(chunk.lightMesh);
-        chunk.lightMesh.geometry.dispose();
-        chunk.lightMesh = null;
-      }
-      const meshes = this.chunkBuilder.build(chunk);
-      if (meshes.solid) {
-        chunk.mesh = meshes.solid;
-        this.renderer.scene.add(chunk.mesh);
-      }
-      if (meshes.water) {
-        chunk.waterMesh = meshes.water;
-        this.renderer.scene.add(chunk.waterMesh);
-      }
-      if (meshes.light) {
-        chunk.lightMesh = meshes.light;
-        this.renderer.scene.add(chunk.lightMesh);
-      }
-      chunk.dirty = false;
+      if (chunk._meshInFlight) continue; // 在途：结果落地时若期间被改脏会再次进入本循环
+      if (!this._dispatchMeshBuild(chunk)) this._buildChunkSync(chunk);
       count++;
       if (count >= 1 && performance.now() - t0 > 12) break;
+    }
+  }
+
+  // B-②：同步网格重建（原 rebuildDirtyChunks 主体；worker 不可用/失败时回退路径）
+  _buildChunkSync(chunk) {
+    this._removeChunkMeshes(chunk);
+    const meshes = this.chunkBuilder.build(chunk);
+    this._attachChunkMeshes(chunk, meshes);
+    chunk.dirty = false;
+  }
+
+  // worker 异步派发：填缓存 → 拷贝转移 → 回执校验版本后装配上屏。
+  // 返回 false 表示当前不可用（无 worker/已熔断），调用方走同步路径。
+  _dispatchMeshBuild(chunk) {
+    const mw = this.world.meshWorker;
+    if (!mw || mw.broken) return false;
+    const builder = this.chunkBuilder;
+    builder._curChunk = chunk;
+    builder._fillCache(chunk);
+    builder._fillLightCaches(chunk);
+    builder._refreshOpaqueLUT();
+    const version = ++this._meshBuildSeq;
+    chunk._meshVersion = version;
+    chunk._meshInFlight = true;
+    mw.build(chunk.cx, chunk.cz,
+      builder._cache.slice(), builder._skyCache.slice(), builder._blockLCache.slice(),
+      { smoothLighting: RenderQuality.smoothLighting, aoEnabled: RenderQuality.aoEnabled },
+      version)
+      .then((out) => {
+        chunk._meshInFlight = false;
+        // 过期/世界已换：丢弃（期间被改脏 → 下一帧循环重新派发）
+        if (this.world.getChunk(chunk.cx, chunk.cz) !== chunk || chunk._meshVersion !== version) return;
+        this._applyMeshOut(chunk, out);
+      })
+      .catch(() => {
+        chunk._meshInFlight = false;
+        mw.broken = true; // 熔断：后续全部回退同步 build
+        this._buildChunkSync(chunk);
+      });
+    return true;
+  }
+
+  // worker 回执落地：装配并替换旧网格
+  _applyMeshOut(chunk, out) {
+    this._removeChunkMeshes(chunk);
+    const meshes = this.chunkBuilder.assembleMeshes(out, chunk);
+    this._attachChunkMeshes(chunk, meshes);
+    chunk.dirty = false;
+  }
+
+  _removeChunkMeshes(chunk) {
+    if (chunk.mesh) {
+      this.renderer.scene.remove(chunk.mesh);
+      chunk.mesh.geometry.dispose();
+      chunk.mesh = null;
+    }
+    if (chunk.waterMesh) {
+      this.renderer.scene.remove(chunk.waterMesh);
+      chunk.waterMesh.geometry.dispose();
+      chunk.waterMesh = null;
+    }
+    if (chunk.lightMesh) {
+      this.renderer.scene.remove(chunk.lightMesh);
+      chunk.lightMesh.geometry.dispose();
+      chunk.lightMesh = null;
+    }
+  }
+
+  _attachChunkMeshes(chunk, meshes) {
+    if (meshes.solid) {
+      chunk.mesh = meshes.solid;
+      this.renderer.scene.add(chunk.mesh);
+    }
+    if (meshes.water) {
+      chunk.waterMesh = meshes.water;
+      this.renderer.scene.add(chunk.waterMesh);
+    }
+    if (meshes.light) {
+      chunk.lightMesh = meshes.light;
+      this.renderer.scene.add(chunk.lightMesh);
     }
   }
 

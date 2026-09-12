@@ -104,6 +104,10 @@ export class ChunkMeshBuilder {
 
     // 局部方块缓存 scratch（跨构建复用，避免每帧分配 83KB）
     this._cache = new Uint8Array(PAD * CHUNK_HEIGHT * PAD);
+    // B-②：体素光缓存（sky/block 各一份同尺寸）——光照采样收口本地查表，
+    // 使数据收集与 world 解耦（worker 上下文可复用同一收集代码）
+    this._skyCache = new Uint8Array(PAD * CHUNK_HEIGHT * PAD);
+    this._blockLCache = new Uint8Array(PAD * CHUNK_HEIGHT * PAD);
     this._curChunk = null;
     this._opaqueLUT = new Uint8Array(256);
   }
@@ -130,25 +134,17 @@ export class ChunkMeshBuilder {
     return this._cache[(y * PAD + z + 1) * PAD + x + 1];
   }
 
-  // 天光采样：本地格直读区块光数组，边界格走 world（未加载按露天 15）
+  // 天光采样：B-② 起读本地光缓存（_fillLightCaches 已含边界 world 回退值，语义不变）
   _skyAt(x, y, z) {
     if (y >= CHUNK_HEIGHT) return 15;
     if (y < 0) return 0;
-    const chunk = this._curChunk;
-    if (x >= 0 && x < CHUNK_SIZE && z >= 0 && z < CHUNK_SIZE) {
-      return chunk.getSky(x, y, z);
-    }
-    return this.world.getSkyLight(chunk.cx * CHUNK_SIZE + x, y, chunk.cz * CHUNK_SIZE + z);
+    return this._skyCache[(y * PAD + z + 1) * PAD + x + 1];
   }
 
-  // 方块光采样（同上，未加载按 0）
+  // 方块光采样（同上）
   _blockLAt(x, y, z) {
     if (y < 0 || y >= CHUNK_HEIGHT) return 0;
-    const chunk = this._curChunk;
-    if (x >= 0 && x < CHUNK_SIZE && z >= 0 && z < CHUNK_SIZE) {
-      return chunk.getBlockLight(x, y, z);
-    }
-    return this.world.getBlockLightAt(chunk.cx * CHUNK_SIZE + x, y, chunk.cz * CHUNK_SIZE + z);
+    return this._blockLCache[(y * PAD + z + 1) * PAD + x + 1];
   }
 
   // 填充局部缓存：内部直接拷贝，边界查 world
@@ -186,13 +182,52 @@ export class ChunkMeshBuilder {
     }
   }
 
+  // B-②：填充体素光缓存——内部整片从 chunk.light 拆包，边界格走 world
+  //（未加载区块的回退语义与旧 _skyAt/_blockLAt 逐值一致：露天 15 / 方块光 0）
+  _fillLightCaches(chunk) {
+    const skyC = this._skyCache;
+    const blkC = this._blockLCache;
+    const light = chunk.light;
+    const ox = chunk.cx * CHUNK_SIZE;
+    const oz = chunk.cz * CHUNK_SIZE;
+    for (let y = 0; y < CHUNK_HEIGHT; y++) {
+      for (let z = -1; z <= CHUNK_SIZE; z++) {
+        const rowBase = (y * PAD + z + 1) * PAD;
+        if (z >= 0 && z < CHUNK_SIZE) {
+          const src = (y * CHUNK_SIZE + z) * CHUNK_SIZE;
+          for (let x = 0; x < CHUNK_SIZE; x++) {
+            const li = light[src + x];
+            skyC[rowBase + 1 + x] = li >> 4;
+            blkC[rowBase + 1 + x] = li & 15;
+          }
+          // x 方向边界
+          skyC[rowBase] = this.world.getSkyLight(ox - 1, y, oz + z);
+          skyC[rowBase + PAD - 1] = this.world.getSkyLight(ox + CHUNK_SIZE, y, oz + z);
+          blkC[rowBase] = this.world.getBlockLightAt(ox - 1, y, oz + z);
+          blkC[rowBase + PAD - 1] = this.world.getBlockLightAt(ox + CHUNK_SIZE, y, oz + z);
+        } else {
+          // z 方向边界整行（含四角）
+          for (let x = -1; x <= CHUNK_SIZE; x++) {
+            skyC[rowBase + x + 1] = this.world.getSkyLight(ox + x, y, oz + z);
+            blkC[rowBase + x + 1] = this.world.getBlockLightAt(ox + x, y, oz + z);
+          }
+        }
+      }
+    }
+  }
+
   build(chunk) {
     this._curChunk = chunk;
     this._fillCache(chunk);
+    this._fillLightCaches(chunk);
     this._refreshOpaqueLUT();
-    // 环境粒子发射点（M3）：每次 build 重建，与方块数据天然同步（portal 增删必触发脏重建）
-    chunk.portalCells = null;
+    return this.assembleMeshes(this._collectData(chunk), chunk);
+  }
 
+  // B-②：纯数据收集——只依赖本地缓存（blocks/sky/blockL）、atlasUV、BlockRegistry、
+  // RenderQuality 与 chunk.cx/cz，与 world/Three 完全解耦（worker 上下文直接复用）。
+  // 返回 typed arrays（solid/water/light 三组，空组为 null）+ 环境粒子发射点。
+  _collectData(chunk) {
     const positions = [];
     const normals = [];
     const uvs = [];
@@ -200,6 +235,7 @@ export class ChunkMeshBuilder {
     const colors = [];
     const voxLight = []; // solid 顶点体素光 (skyL, blockL) 归一化
     let idx = 0;
+    const portalCells = []; // 环境粒子发射点（M3）：与方块数据天然同步
 
     const waterPositions = [];
     const waterNormals = [];
@@ -232,8 +268,7 @@ export class ChunkMeshBuilder {
           const def = BlockRegistry.getById(id);
           if (!def) continue;
           if (def.ambientParticles) {
-            if (!chunk.portalCells) chunk.portalCells = [];
-            chunk.portalCells.push(x, y, z);
+            portalCells.push(x, y, z);
           }
           if (def.renderType === 'portal') {
             // 传送门薄片：门面方向按水平邻格推断，相邻门格薄片共面连成整幕（无 cross 对角锯齿）。
@@ -400,15 +435,42 @@ export class ChunkMeshBuilder {
     // 贪心合并水面（顶面），消除网格分界
     wIdx = this._mergeWaterTops(waterTops, waterPositions, waterNormals, waterUvs, waterColors, waterVoxLight, waterIndices, wIdx, chunk);
 
+    // 转 typed arrays（transferable；索引按需选 16/32 位省内存）
+    const pack = (pos, norm, uv, col, vl, ind, maxIdx) => ({
+      position: new Float32Array(pos),
+      normal: new Float32Array(norm),
+      uv: new Float32Array(uv),
+      color: new Float32Array(col),
+      voxelLight: new Float32Array(vl),
+      index: maxIdx > 65535 ? new Uint32Array(ind) : new Uint16Array(ind),
+    });
+    return {
+      portalCells,
+      solid: positions.length ? pack(positions, normals, uvs, colors, voxLight, indices, idx) : null,
+      water: waterPositions.length ? pack(waterPositions, waterNormals, waterUvs, waterColors, waterVoxLight, waterIndices, wIdx) : null,
+      light: lightPos.length ? {
+        position: new Float32Array(lightPos),
+        normal: new Float32Array(lightNorm),
+        uv: new Float32Array(lightUv),
+        index: lIdx > 65535 ? new Uint32Array(lightIdx) : new Uint16Array(lightIdx),
+      } : null,
+    };
+  }
+
+  // B-②：typed arrays → THREE 网格装配（仅主线程；worker 回执与同步 build 共用）
+  assembleMeshes(out, chunk) {
     const meshes = {};
-    if (positions.length) {
+    if (out.solid) {
+      const g = out.solid;
       const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-      geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-      geo.setAttribute('voxelLight', new THREE.Float32BufferAttribute(voxLight, 2));
-      geo.setIndex(indices);
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(g.position, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(g.normal, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(g.uv, 2));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(g.color, 3));
+      geo.setAttribute('voxelLight', new THREE.Float32BufferAttribute(g.voxelLight, 2));
+      // setIndex(原始 TypedArray) 会被 three 原样存为 geo.index（非 BufferAttribute），
+      // 渲染期读 attribute.array 崩溃——必须显式包一层 BufferAttribute
+      geo.setIndex(new THREE.BufferAttribute(g.index, 1));
       meshes.solid = new THREE.Mesh(geo, this.solidMaterial);
       meshes.solid.position.set(chunk.cx * CHUNK_SIZE, 0, chunk.cz * CHUNK_SIZE);
       // L4-B 太阳阴影：cast 恒定（关闭档 shadowMap.enabled=false 时 shadow pass 不跑，零成本）；
@@ -416,25 +478,27 @@ export class ChunkMeshBuilder {
       meshes.solid.castShadow = true;
       meshes.solid.receiveShadow = GfxState.shadowReceive;
     }
-    if (waterPositions.length) {
+    if (out.water) {
+      const g = out.water;
       const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(waterPositions, 3));
-      geo.setAttribute('normal', new THREE.Float32BufferAttribute(waterNormals, 3));
-      geo.setAttribute('uv', new THREE.Float32BufferAttribute(waterUvs, 2));
-      geo.setAttribute('color', new THREE.Float32BufferAttribute(waterColors, 3));
-      geo.setAttribute('voxelLight', new THREE.Float32BufferAttribute(waterVoxLight, 2));
-      geo.setIndex(waterIndices);
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(g.position, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(g.normal, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(g.uv, 2));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(g.color, 3));
+      geo.setAttribute('voxelLight', new THREE.Float32BufferAttribute(g.voxelLight, 2));
+      geo.setIndex(new THREE.BufferAttribute(g.index, 1));
       meshes.water = new THREE.Mesh(geo, this.waterMaterial);
       meshes.water.position.set(chunk.cx * CHUNK_SIZE, 0, chunk.cz * CHUNK_SIZE);
       // 双挂 layer 0+2：主相机可见；L4-A 反射相机 mask 排除 2 → 水面不入反射（防自反射递归）
       meshes.water.layers.enable(2);
     }
-    if (lightPos.length) {
+    if (out.light) {
+      const g = out.light;
       const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(lightPos, 3));
-      geo.setAttribute('normal', new THREE.Float32BufferAttribute(lightNorm, 3));
-      geo.setAttribute('uv', new THREE.Float32BufferAttribute(lightUv, 2));
-      geo.setIndex(lightIdx);
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(g.position, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(g.normal, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(g.uv, 2));
+      geo.setIndex(new THREE.BufferAttribute(g.index, 1));
       meshes.light = new THREE.Mesh(geo, this.lightMaterial);
       meshes.light.position.set(chunk.cx * CHUNK_SIZE, 0, chunk.cz * CHUNK_SIZE);
     }

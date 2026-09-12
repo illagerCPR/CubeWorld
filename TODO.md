@@ -98,7 +98,7 @@ A（小，手感补课）→ B（中，联机体验补课）→ E（中，村庄
 
 ## Idea-3: 体验与性能补强池 —— 音频系统 / 主线程 Worker 化 / 服务器玩家档案
 
-- **状态**：进行中（2026-09-12 起排期，顺序 A→B→C 已确认）。**A 音频系统已全部交付**（A-① 底座+核心交互音效；A-② 怪物语音/脚步/环境风声/BGM）。**B-0 探针通过 + B-① 地形生成 Worker 化已交付**（主世界专用：TerrainWorker/Client 请求队列+熔断回退，`World.requestChunk` 异步预取、ensureChunk 保持同步、worker 图补 BlockDefs 副作用导入、仅 overworld 注入、_disposeWorld terminate）；B-② 网格构建 Worker 化待做；C（独立 players 目录）未开始。
+- **状态**：进行中（2026-09-12 起排期，顺序 A→B→C 已确认）。**A 音频系统已全部交付**（A-① 底座+核心交互音效；A-② 怪物语音/脚步/环境风声/BGM）。**B-0 探针通过 + B-① 地形生成 Worker 化 + B-② 网格构建 Worker 化已交付**（B-①：主世界专用 TerrainWorker/Client、`World.requestChunk` 异步预取 + ensureChunk 同步不变 + 熔断回退；B-②：ChunkMesh 收集/装配分离 `_collectData`/`assembleMeshes`、体素光缓存化解耦、MeshWorker typed arrays 回传、版本化派发+熔断+同步兜底）；C（独立 players 目录）未开始。
 
 ### A. 音频系统（体验断层最大）
 

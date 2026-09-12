@@ -40,3 +40,12 @@
 - **材质重绘结构**：`BlockDefs.js` 用 `makeTex/setPx/fillRect/rgb([r,g,b],f)/hash2` 像素画工具 + 三色噪声 `noiseTex`（基色为主 + 暗/亮碎点 + 轻微抖动）+ 2×2 斑驳 `blotchTex`，结构化图案（圆石砌块错位、石砖大砖受光边、红砖交错缝、木板拼条端缝、原木年轮、矿石晶簇高光/阴影点、TNT 白带字样、工作台网格、熔炉炉口、砂岩分层）按原版配色校准。注册名 / textures key / SVG 管线未变；`redstone_block` 双注册已清理（保留 light 0）。
 - **水体纹理平铺**：`waterTex` 的波纹用 `sin(x*π/8 + y*π/4)`（16 的整数分频周期）保证世界坐标 RepeatWrapping 平铺无缝，勿改回非周期函数。
 - **验证**：`node --check` + `npm run build`（45 模块）+ agent-browser 冒烟（创造物品栏一屏全图标核对 + 16 种方块阵列特写 + 摆放荧石后 `sky.time` 持续推进无冻结）。
+
+### Idea-3B-② 网格构建 Worker 化批次备忘（防回退）
+
+- **收集/装配分离（ChunkMesh.js）**：`_collectData(chunk)` 纯数据收集（只依赖 blocks/sky/blockL 三份本地缓存 + atlasUV + BlockRegistry + RenderQuality + chunk.cx/cz，与 world/Three 零耦合，worker 直接复用同一实现——同步与 worker 字节级一致由构造保证）；`assembleMeshes(out, chunk)` 主线程专用 THREE 装配；`build(chunk)` = 填缓存 → collect → assemble。**收集产出 typed arrays + portalCells 数组**（环境粒子发射点改由 build/apply 赋回 chunk）。
+- **⚠️ 最高危坑：`geo.setIndex(原始 TypedArray)` 会被 three 0.160 原样存为 `geo.index`（不是 BufferAttribute）**，渲染期 WebGLAttributes 读 `attribute.array` → undefined → `byteLength` 崩溃 → **rAF 链断裂画面冻结且 loop 静默死亡**（`if (!this.running) return` 不重排，无 uncaught 日志表象）。原代码传 JS 数组走 `Array.isArray` 包装分支故无恙；改 typed arrays 后必须 `geo.setIndex(new THREE.BufferAttribute(g.index, 1))` 显式包装。三组（solid/water/light）都要。
+- **体素光缓存（_skyCache/_blockLCache）**：`_fillLightCaches` 内部从 chunk.light 拆包、边界走 world.getSkyLight/getBlockLightAt（回退语义与旧 _skyAt/_blockLAt 逐值一致）；_skyAt/_blockLAt 改为纯缓存读——这是收集与 world 解耦的关键，勿改回直读 chunk/world。
+- **派发协议（Game.js）**：`_dispatchMeshBuild` 填缓存 → `slice()` 三份副本（勿转移 builder scratch 本体）→ worker `build()`（transfer）→ 回执校验 `world.getChunk===chunk && _meshVersion===version` 后 `_applyMeshOut` 装配替换。**版本号 `_meshBuildSeq` 是 Game 全局单调序号**（跨 chunk 共享，比较只对同 chunk 自身旧值有意义）。`chunk._meshInFlight` 防重复派发；catch 置 `meshWorker.broken=true` 熔断 + 立即同步 build 兜底。rebuildDirtyChunks 预算 12ms 内可多次派发（每派发仅 ~1-2ms 缓存填充+拷贝，~20ms 收集已卸给 worker）。
+- **MeshWorker init**：atlasUV 以 `[...map.entries()]` 传（worker `new Map()`），quality 随每次 build 传（视频设置改档 markAllDirty 后新派发自然带新值）。worker 端 ChunkMeshBuilder 以 `(null, null, atlasUV, null)` 构造（材质仅占位不渲染）。
+- **验证锚点**：同区块 sync `_collectData` vs worker 回执**逐字节 identical**（solid/water/light + portalCells）；重进世界 169/169 meshed、errors 0、broken false；真实挖掘 → `_meshVersion` 前进 + `position.count` 变化 + dirty false。headless 帧率低时派发节奏慢是预算制正常表现（每帧多块按 12ms 预算推进）。
