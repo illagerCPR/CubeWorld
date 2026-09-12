@@ -251,6 +251,12 @@ export class NetworkManager {
       case MSG.REDSTONE_STATE:
         if (this.game.redstone) this.game.redstone.applyRemoteState(msg.x, msg.y, msg.z, msg.on);
         break;
+      case MSG.ARROW_SHOT:
+        // Idea-2B：远端玩家射箭——本地生成纯视觉箭（伤害由射端权威走 mob_attack 链结算）
+        if (msg.id !== this.selfId && this.game.world) {
+          this.game.spawnRemoteArrow(msg.x, msg.y, msg.z, msg.dx, msg.dy, msg.dz);
+        }
+        break;
       case MSG.CONTAINER_SET: {
         // T5：他人修改箱子 → 覆盖本地容器缓存，开着的同箱界面刷新（M4：异维度忽略）
         if (!this.game.world || !Array.isArray(msg.items) || msg.items.length !== 27) break;
@@ -392,6 +398,11 @@ export class NetworkManager {
   }
   sendMobAttack(id, damage, x, y, z) { this._send(MSG.MOB_ATTACK, { id, damage, x, y, z }); }
   sendMobDied(id) { this._send(MSG.MOB_DIED, { id }); }
+
+  // Idea-2B：箭矢初速上报（事件式，服务器转发给同维度其他玩家）
+  sendArrowShot(pos, vel) {
+    this._send(MSG.ARROW_SHOT, { x: pos.x, y: pos.y, z: pos.z, dx: vel.x, dy: vel.y, dz: vel.z });
+  }
 
   // 红石源状态（lever/button），低频广播让各端 poweredBlocks 对齐
   sendRedstoneState(x, y, z, on) { this._send(MSG.REDSTONE_STATE, { x, y, z, on }); }

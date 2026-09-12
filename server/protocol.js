@@ -40,6 +40,9 @@ export const MSG = {
   // 红石源状态（阶段 2，低频缓解：lever/button 状态广播）
   REDSTONE_STATE: 'redstone_state',
 
+  // 箭矢（Idea-2B，事件式：只广播初速，各端本地确定性积分；伤害由射端走 mob_attack 权威结算）
+  ARROW_SHOT: 'arrow_shot',
+
   // 玩家
   PLAYER_STATE: 'player_state',
   PLAYER_FULL: 'player_full',

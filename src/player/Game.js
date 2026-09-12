@@ -1531,20 +1531,39 @@ export class Game {
   }
 
   // 射箭：箭矢为本地投射物（几何/材质模块级共享），重力下坠、命中怪复用 attackMob 链
-  // power = 初速系数（0.3~1 蓄力插值），dmg = 命中伤害（2~8 蓄力插值）
+  // power = 初速系数（0.3~1 蓄力插值），dmg = 命中伤害（2~8 蓄力插值）；返回箭对象供联机上报
   _shootArrow(power = 1, dmg = 6) {
     const dir = new THREE.Vector3();
     this.renderer.camera.getWorldDirection(dir);
     const start = this.player.position.clone();
     start.y += 1.62;
     start.addScaledVector(dir, 0.6);
-    if (!Game._arrowGeo) Game._arrowGeo = new THREE.BoxGeometry(0.06, 0.06, 0.5);
-    if (!Game._arrowMat) Game._arrowMat = new THREE.MeshBasicMaterial({ color: 0x9a7442 });
+    this._ensureArrowAssets();
     const mesh = new THREE.Mesh(Game._arrowGeo, Game._arrowMat);
     mesh.position.copy(start);
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
     this.renderer.scene.add(mesh);
-    this.arrows.push({ mesh, pos: start, vel: dir.multiplyScalar(28 * power), life: 8, stuck: false, dmg });
+    const arrow = { mesh, pos: start, vel: dir.multiplyScalar(28 * power), life: 8, stuck: false, dmg };
+    this.arrows.push(arrow);
+    return arrow;
+  }
+
+  _ensureArrowAssets() {
+    if (!Game._arrowGeo) Game._arrowGeo = new THREE.BoxGeometry(0.06, 0.06, 0.5);
+    if (!Game._arrowMat) Game._arrowMat = new THREE.MeshBasicMaterial({ color: 0x9a7442 });
+  }
+
+  // Idea-2B：远端玩家射箭——本地生成纯视觉箭（dmg=0/remote=true：命中怪只消失不结算，
+  // 伤害由射端经 mob_attack 权威上报；钉墙/寿命消失各端本地处理）
+  spawnRemoteArrow(x, y, z, dx, dy, dz) {
+    this._ensureArrowAssets();
+    const pos = new THREE.Vector3(x, y, z);
+    const vel = new THREE.Vector3(dx, dy, dz);
+    const mesh = new THREE.Mesh(Game._arrowGeo, Game._arrowMat);
+    mesh.position.copy(pos);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), vel.clone().normalize());
+    this.renderer.scene.add(mesh);
+    this.arrows.push({ mesh, pos, vel, life: 8, stuck: false, dmg: 0, remote: true });
   }
 
   _cancelBowCharge() {
@@ -1562,8 +1581,9 @@ export class Game {
     const hasArrow = this.player.creative || this.inventory.slots.some(s => s && s.name === 'arrow');
     if (!hasArrow) return;
     if (!this.player.creative) this.inventory.removeItems('arrow', 1);
-    this._shootArrow(0.3 + 0.7 * charge, 2 + Math.round(charge * 6));
+    const arrow = this._shootArrow(0.3 + 0.7 * charge, 2 + Math.round(charge * 6));
     this.hand.swing();
+    if (this.networkMode && this.net) this.net.sendArrowShot(arrow.pos, arrow.vel); // Idea-2B：初速广播
   }
 
   _updateArrows(dt) {
@@ -1582,7 +1602,7 @@ export class Game {
         const dirN = seg.clone().normalize();
         const mh = this.mobManager.findMobByRay(old, dirN, segLen + 0.2);
         if (mh && !mh.mob.dead) {
-          this.mobManager.attackMob(old, dirN, segLen + 0.2, a.dmg || 6); // 伤害随蓄力（Idea-2A）
+          if (!a.remote) this.mobManager.attackMob(old, dirN, segLen + 0.2, a.dmg || 6); // 伤害随蓄力；远端视觉箭不结算（射端权威）
           this._despawnArrow(i);
           continue;
         }

@@ -38,3 +38,11 @@
 - **viewer 只读**：`authState` 返回 `{state, role}`（勿改回字符串——whoami/403 都依赖 role）；viewer 非 GET 一律 403 且**该检查必须在各路由前**；过期账号仍只放行 POST /api/config（与阶段6一致）。admin.html 靠 `body.viewer .card button { display:none }` 一条 CSS 隐藏全部写按钮（新增写操作自动被盖住，无需逐个加类）；白名单 textarea 回显会跳过 `document.activeElement` 聚焦中的框（防 3s 轮询打断编辑）。
 - **netStats（`src/net/netStats.js` 纯函数）**：RTT EMA(0.8/0.2) + 抖动 = 相邻样本差绝对值的 EMA（**首样本无抖动**）；`targetInterpDelay = clamp(0.05 + rtt/2000 + jitter/4000, 0.05, 0.4)`——抖动权重是 RTT 的一半，别调大（局域网抖动 ms 级只作微调）；`RemotePlayer` 头余量欠载保护保留作 RTT 缺失时兜底；InfoBar 第 7 参 `rttJitterMs`（null=不显示 ±）。
 - **测试非幂等 + 路径口径**：`test-stage11.mjs` 第 1 用例依赖"鉴权未开启"前提（重复跑批前必须清 `server/config.json`，收尾已把名单清空但**账号会遗留**导致鉴权开启）；`server/test-*.mjs` 的 `api()` 帮助函数以 `http://.../api` 为基底，**路径传 `/status` 不传 `/api/status`**（传全路径 = /api/api/... = 404 未知接口，曾真踩）。
+
+### Idea-2B 关键实现备忘（防回退）—— 箭矢事件同步
+
+- **事件式而非状态同步**（与怪物同步同款妥协）：`arrow_shot {id,x,y,z,dx,dy,dz}` 只传初速，各端本地确定性积分（重力 -12/寿命 8s 一致即视觉对齐）；`Room.onArrowShot` = 纯转发 except 发起者 + **broadcastDim 同维度**（异维端不收到）；不进方块/掉落账本（钉墙/消失各端本地处理）。
+- **伤害射端权威**：`spawnRemoteArrow` 生成的箭带 `remote:true, dmg:0`，`_updateArrows` 命中怪分支 `if (!a.remote) attackMob(...)`——远端箭只 despawn 不结算；射端 `_releaseBow` 本地 spawn 后 `net.sendArrowShot(arrow.pos, arrow.vel)`（Vector3 引用即时序列化，无时序问题）。
+- **服务器脏包校验必须先 typeof 再 isFinite**：`JSON.stringify(NaN)` 序列化成 **null**，`Number(null)=0` 会混过 `[...].map(Number).every(Number.isFinite)` 转换式校验（测试真踩：NaN 弹丸被静默放行为 x=0）；正确写法 `raw.every(v => typeof v === 'number' && Number.isFinite(v))`。
+- **远端箭命中本地模拟的怪会即时消失**（设计行为）——冒烟时"没收到箭"先排除弹道撞怪再怀疑链路（曾误判丢包，ws.send 探针 + 复测定位）。
+- **测试**：`server/test-idea2.mjs`（7/7，已入 run-all-tests.sh）：转发字段一致/携带射者 id/无回声/三类脏包（字符串、缺字段、NaN→null）全丢弃。

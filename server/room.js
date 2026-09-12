@@ -331,6 +331,7 @@ export class Room {
       case MSG.MOB_ATTACK: this.onMobAttack(player, msg); break;
       case MSG.MOB_DIED: this.onMobDied(player, msg); break;
       case MSG.REDSTONE_STATE: this.onRedstoneState(player, msg); break;
+      case MSG.ARROW_SHOT: this.onArrowShot(player, msg); break;
       case MSG.PLAYER_STATE: this.onPlayerState(player, msg); break;
       case MSG.PLAYER_FULL: this.onPlayerFull(player, msg); break;
       case MSG.ATTACK_PLAYER: this.onAttack(player, msg); break;
@@ -466,6 +467,16 @@ export class Room {
   onRedstoneState(player, msg) {
     const x = safeInt(msg.x), y = safeInt(msg.y), z = safeInt(msg.z);
     this.broadcastDim(MSG.REDSTONE_STATE, { x, y, z, on: !!msg.on, by: player.id }, player.dim, player.id);
+  }
+
+  // 箭矢射击（Idea-2B）：事件转发 except 发起者（射端已本地生成）——只传初速，
+  // 各端本地积分；不进方块/掉落账本（钉墙/寿命消失各端本地处理）；M4：同维度
+  onArrowShot(player, msg) {
+    // 先类型检查再放行：JSON 无 NaN（stringify 成 null，Number(null)=0 会混过 isFinite 转换）
+    const raw = [msg.x, msg.y, msg.z, msg.dx, msg.dy, msg.dz];
+    if (!raw.every((v) => typeof v === 'number' && Number.isFinite(v))) return; // 脏包丢弃
+    const [x, y, z, dx, dy, dz] = raw;
+    this.broadcastDim(MSG.ARROW_SHOT, { id: player.id, x, y, z, dx, dy, dz }, player.dim, player.id);
   }
 
   onPlayerState(player, msg) {
