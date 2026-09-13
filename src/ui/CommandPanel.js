@@ -5,6 +5,7 @@ import { ringPoints } from '../world/structures/stronghold.js';
 import { DIMENSIONS } from '../core/dimensions.js';
 import { ensureStoneStyles } from './StoneStyle.js';
 import { t, onLocaleChange } from '../i18n/index.js';
+import { tName } from '../i18n/name.js';
 
 // 探索列表：玩家周围村庄扫描 cell 半径（cell=20 区块 → ±960 格）；要塞环带 3 点全局 O(1)
 const EXPLORE_VILLAGE_CELL_R = 3;
@@ -25,7 +26,8 @@ function mobEntries() {
     const ia = MOB_ORDER.indexOf(a), ib = MOB_ORDER.indexOf(b);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
   });
-  return names.map(n => ({ name: n, label: MobTypes[n].displayName || n }));
+  // 怪物名走 names.js 八语字典（tName）；语言包无怪物名键，走 t() 会始终回落简体（Build 7 修复）
+  return names.map(n => ({ name: n, label: tName(n, MobTypes[n].displayName || n) }));
 }
 
 export class CommandPanel {
