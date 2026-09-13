@@ -4,7 +4,7 @@ import { MobTypes } from '../entity/MobTextures.js';
 import { ringPoints } from '../world/structures/stronghold.js';
 import { DIMENSIONS } from '../core/dimensions.js';
 import { ensureStoneStyles } from './StoneStyle.js';
-import { t } from '../i18n/index.js';
+import { t, onLocaleChange } from '../i18n/index.js';
 
 // 探索列表：玩家周围村庄扫描 cell 半径（cell=20 区块 → ±960 格）；要塞环带 3 点全局 O(1)
 const EXPLORE_VILLAGE_CELL_R = 3;
@@ -50,9 +50,24 @@ export class CommandPanel {
     this.el.appendChild(this.panel);
 
     this._build();
+    // 语言切换（Build 5 i18n）：面板按钮/卡片标题是构造期一次性文本，整体重建最稳
+    //（_build 会重建 tpX/tpY/tpZ/timeInput/dimBtns/modeBtns/exploreBox 等全部引用）
+    this._unbindLocale = onLocaleChange(() => this._rebuild());
     this.el.addEventListener('click', (e) => { if (e.target === this.el) this.hide(); });
 
     document.body.appendChild(this.el);
+  }
+
+  // 语言切换后整体重建面板（_build 重新赋值全部内部引用），可见时补跑动态刷新
+  _rebuild() {
+    this.panel.innerHTML = '';
+    this._build();
+    if (this.visible) {
+      this._refreshModeHighlight();
+      this._refreshDimensionHighlight();
+      this._refreshTimeLabel();
+      this._refreshExplore();
+    }
   }
 
   _mkLabel(text) {
@@ -441,6 +456,11 @@ export class CommandPanel {
     this.el.style.display = 'none';
     if (this.game.paused !== undefined) this.game.paused = false;
     if (this.game.controls) this.game.controls.enabled = true;
+  }
+
+  dispose() {
+    if (this._unbindLocale) this._unbindLocale();
+    this.el.remove();
   }
 
   toggle() {

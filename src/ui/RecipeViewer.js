@@ -9,7 +9,7 @@ import { getAllSmeltingRecipes, getFuelTime, SMELT_TIME } from '../core/Smelting
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
 import { SVGTextures } from '../render/SVGTextures.js';
-import { t } from '../i18n/index.js';
+import { t, onLocaleChange } from '../i18n/index.js';
 import { getDisplayName } from './itemName.js';
 
 const FAV_KEY = 'cubeworld-jei-favorites';
@@ -48,6 +48,23 @@ export class RecipeViewer {
     // 配方详情弹窗：覆盖物品栏之上（z-index 高于容器 UI 的 30）
     this.popEl = this._makePanel(36);
     this._buildShell();
+    // 语言切换（Build 5 i18n）：骨架文本是构造期一次性写入，切语言需刷新固定文本 +
+    // 重绘动态区（列表格/弹窗内容本身每次操作重绘会跟随语言，无需单独处理）
+    this._unbindLocale = onLocaleChange(() => this._applyLang());
+  }
+
+  // 骨架固定文本刷新（构造后切语言）
+  _applyLang() {
+    this.favHead.textContent = t('★ 收藏');
+    this.favHead.title = t('收藏夹（对物品按 A 收藏/取消）');
+    this.searchInput.placeholder = t('搜索物品…');
+    this.listHead.textContent = t('全部物品');
+    this.listHead.title = t('点击看配方 / 右键看用途 / A 收藏');
+    this.popClose.title = t('关闭配方详情');
+    if (this._shown) {
+      this.renderList();
+      this.renderRecipe();
+    }
   }
 
   // 统一风格的 fixed 面板骨架（默认隐藏，位置由 _layout() 动态维护）
@@ -67,8 +84,9 @@ export class RecipeViewer {
   _buildShell() {
     // ── 收藏夹 ──
     const favHead = document.createElement('div');
-    favHead.textContent = '★ 收藏';
-    favHead.title = '收藏夹（对物品按 A 收藏/取消）';
+    this.favHead = favHead; // _applyLang 切语言刷新用
+    favHead.textContent = t('★ 收藏');
+    favHead.title = t('收藏夹（对物品按 A 收藏/取消）');
     favHead.style.cssText = 'font-size: 12px; font-weight: bold; color: #333; margin-bottom: 4px; flex: none; text-align: center;';
     this.favEl.appendChild(favHead);
     this.favGrid = document.createElement('div');
@@ -91,6 +109,7 @@ export class RecipeViewer {
     this.searchInput.addEventListener('keydown', (e) => e.stopPropagation());
     this.listEl.appendChild(this.searchInput);
     const listHead = document.createElement('div');
+    this.listHead = listHead; // _applyLang 切语言刷新用
     listHead.textContent = t('全部物品');
     listHead.title = t('点击看配方 / 右键看用途 / A 收藏');
     listHead.style.cssText = 'font-size: 11px; font-weight: bold; color: #333; margin: 4px 0; flex: none;';
@@ -107,7 +126,7 @@ export class RecipeViewer {
     this.popTitle.appendChild(this.popName);
     this.popClose = document.createElement('button');
     this.popClose.textContent = '✕';
-    this.popClose.title = '关闭配方详情';
+    this.popClose.title = t('关闭配方详情');
     this.popClose.style.cssText = 'padding: 2px 8px; cursor: pointer;';
     this.popClose.addEventListener('click', () => { this.current = null; this.renderRecipe(); });
     this.popTitle.appendChild(this.popClose);
@@ -118,6 +137,7 @@ export class RecipeViewer {
   }
 
   dispose() {
+    if (this._unbindLocale) this._unbindLocale();
     this.favEl.remove();
     this.listEl.remove();
     this.popEl.remove();
@@ -395,7 +415,7 @@ export class RecipeViewer {
 
     if (crafting.length > 0) {
       const sec = document.createElement('div');
-      sec.textContent = '合成';
+      sec.textContent = t('合成');
       sec.style.cssText = 'font-size: 12px; font-weight: bold; color: #333; margin: 4px 0;';
       this.popScroll.appendChild(sec);
       for (const r of crafting) this.popScroll.appendChild(this._craftingRow(r));
@@ -403,7 +423,7 @@ export class RecipeViewer {
 
     if (smelting.length > 0) {
       const sec = document.createElement('div');
-      sec.textContent = '熔炼（熔炉）';
+      sec.textContent = t('熔炼（熔炉）');
       sec.style.cssText = 'font-size: 12px; font-weight: bold; color: #333; margin: 8px 0 4px 0;';
       this.popScroll.appendChild(sec);
       for (const r of smelting) this.popScroll.appendChild(this._smeltingRow(r));

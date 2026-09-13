@@ -225,7 +225,7 @@ export class Game {
     if (this.tradeScreen) { this.tradeScreen.dispose(); this.tradeScreen = null; }
     if (this.pauseMenu) { this.pauseMenu.el.remove(); this.pauseMenu = null; }
     if (this.deathScreen) { this.deathScreen.el.remove(); this.deathScreen = null; }
-    if (this.commandPanel) { this.commandPanel.el.remove(); this.commandPanel = null; }
+    if (this.commandPanel) { this.commandPanel.dispose(); this.commandPanel = null; }
     if (this.bossBar) { this.bossBar.dispose(); this.bossBar = null; }
     if (this.portalOverlay) { this.portalOverlay.dispose(); this.portalOverlay = null; }
     // 远端玩家与联机聊天框

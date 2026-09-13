@@ -136,6 +136,11 @@ export const en = {
   '没有以该物品为材料的配方': 'No recipes use this item as an ingredient',
   '没有已注册的配方（可能只能从世界获取）': 'No registered recipe (may only be obtainable from the world)',
   'R 配方 · U 用途 · A 收藏当前/悬浮物品': 'R recipe · U usages · A favorite hovered/current item',
+  '★ 收藏': '★ Favorites',
+  '收藏夹（对物品按 A 收藏/取消）': 'Favorites (press A on an item to add/remove)',
+  '关闭配方详情': 'Close recipe details',
+  '合成': 'Crafting',
+  '熔炼（熔炉）': 'Smelting (Furnace)',
   // ── 命令面板 ──
   '命令面板': 'Command Panel',
   '关闭 (C / ESC)': 'Close (C / ESC)',

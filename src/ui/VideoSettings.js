@@ -4,7 +4,7 @@
 // 平滑光照开关切换时对所有区块 markAllDirty，网格在后续帧内分批重建。
 import { loadSettings, saveSettings, applySettings, brightnessToMinLight, GFX_ORDER, GFX_LABELS } from '../core/Settings.js';
 import { ensureStoneStyles } from './StoneStyle.js';
-import { t, setLocale, LOCALES, localeLabel } from '../i18n/index.js';
+import { t, setLocale, LOCALES, localeLabel, onLocaleChange } from '../i18n/index.js';
 
 const PARTICLE_LABELS = { all: '全部', decreased: '减少', minimal: '最少' };
 const PARTICLE_ORDER = ['all', 'decreased', 'minimal'];
@@ -47,10 +47,12 @@ export class VideoSettings {
 
     const title = document.createElement('div');
     title.textContent = t('视频设置');
+    this._titleEl = title;
     title.style.cssText = 'font-size: 24px; font-weight: bold; margin-bottom: 16px; letter-spacing: 2px; text-shadow: 2px 2px 0 rgba(0,0,0,0.6);';
     panel.appendChild(title);
 
     this.rows = {};
+    this._groupHeads = []; // 组名标题（切语言刷新用）
 
     // 分组容器：标题 + 两列网格（Build 4 重排，替代原单列长条）
     const mkGroup = (label) => {
@@ -58,6 +60,7 @@ export class VideoSettings {
       group.style.cssText = 'margin-bottom: 16px;';
       const gt = document.createElement('div');
       gt.textContent = label;
+      this._groupHeads.push({ el: gt, key: label });
       gt.style.cssText = 'font-size: 13px; color: #ffd97a; letter-spacing: 3px; margin-bottom: 8px; text-shadow: 1px 1px 0 #000;';
       group.appendChild(gt);
       const grid = document.createElement('div');
@@ -193,10 +196,20 @@ export class VideoSettings {
     const done = document.createElement('button');
     done.className = 'cw-stone-btn';
     done.textContent = t('完成');
+    this._doneBtn = done;
     done.style.cssText = 'width: 532px; padding: 12px 14px; font-size: 15px; margin-top: 4px;';
     done.addEventListener('click', () => this.hide());
     panel.appendChild(done);
 
+    this._refresh();
+    // 语言切换（Build 5 i18n）：面板常在切语言现场打开，标题/组名/完成按钮需即时重绘
+    this._unbindLocale = onLocaleChange(() => this._applyLang());
+  }
+
+  _applyLang() {
+    this._titleEl.textContent = t('视频设置');
+    for (const g of this._groupHeads) g.el.textContent = t(g.key);
+    this._doneBtn.textContent = t('完成');
     this._refresh();
   }
 
@@ -250,6 +263,7 @@ export class VideoSettings {
   }
 
   dispose() {
+    if (this._unbindLocale) this._unbindLocale();
     document.removeEventListener('keydown', this._onKey, true);
     this.el.remove();
   }
