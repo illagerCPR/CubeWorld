@@ -7,6 +7,7 @@ import { MenuScreen } from './ui/MenuScreen.js';
 import { NetworkManager } from './net/NetworkManager.js';
 import { Panorama } from './render/Panorama.js';
 import { VideoSettings } from './ui/VideoSettings.js';
+import { LanguageScreen } from './ui/LanguageScreen.js';
 import { audio } from './audio/AudioEngine.js';
 import { loadSettings } from './core/Settings.js';
 import { initLocale, t } from './i18n/index.js';
@@ -39,6 +40,10 @@ if (location.search.includes('bake-panorama')) {
   const videoSettings = new VideoSettings(game);
   game.videoSettings = videoSettings;
 
+  // 语言切换界面（Build 7：主界面/暂停菜单地球小按钮进入的共用单例）
+  const languageScreen = new LanguageScreen(game);
+  game.languageScreen = languageScreen;
+
   // 局域网联机网络层
   const net = new NetworkManager(game);
   game.net = net;
@@ -54,6 +59,7 @@ if (location.search.includes('bake-panorama')) {
   menu.onHide = () => panorama.setActive(false);
   menu.onShow = () => panorama.setActive(true);
   menu.videoSettings = videoSettings; // 主菜单"视频设置"入口
+  menu.languageScreen = languageScreen; // 主菜单语言小按钮入口
   window.panorama = panorama; // 调试暴露
 
   game.onExit = () => {

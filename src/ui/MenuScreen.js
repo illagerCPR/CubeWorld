@@ -4,6 +4,7 @@ import { BIOME_SCALES, DEFAULT_BIOME_SCALE, safeBiomeScale } from '../world/biom
 import { ensureStoneStyles } from './StoneStyle.js';
 import { VERSION_LABEL } from '../version.js';
 import { t, getLocale, onLocaleChange } from '../i18n/index.js';
+import { globeIconDataUri } from './LanguageScreen.js';
 import logoUrl from '../../res/logo-cubeworld-js-edition.png';
 
 const MODE_LABEL = { creative: '创造模式', survival: '生存模式', spectator: '旁观模式' };
@@ -46,6 +47,10 @@ export class MenuScreen {
         this.videoSettings.show();
         return;
       }
+      if (btn.id === 'language-btn' && this.languageScreen) {
+        this.languageScreen.show();
+        return;
+      }
       if (btn.id === 'menu-single' || btn.id === 'menu-lan' || btn.classList.contains('back-btn')) {
         this.page = btn.id === 'menu-single' ? 'single' : (btn.id === 'menu-lan' ? 'lan' : 'main');
         this.render();
@@ -80,7 +85,12 @@ export class MenuScreen {
       <div style="display:flex; flex-direction:column; align-items:center; gap:14px;">
         <button id="menu-single" class="cw-stone-btn" style="width:400px; height:52px; font-size:18px;">${t('单人游戏')}</button>
         <button id="menu-lan" class="cw-stone-btn" style="width:400px; height:52px; font-size:18px;">${t('局域网游戏')}</button>
-        <button id="video-settings-btn" class="cw-stone-btn" style="width:196px; height:38px; font-size:14px; margin-top:10px;">${t('⚙ 视频设置')}</button>
+        <div style="display:flex; gap:10px; align-items:center; margin-top:10px;">
+          <button id="video-settings-btn" class="cw-stone-btn" style="width:196px; height:38px; font-size:14px;">${t('⚙ 视频设置')}</button>
+          <button id="language-btn" class="cw-stone-btn" title="${t('语言')}" aria-label="${t('语言')}" style="
+            width:38px; height:38px; padding:0; background-size:64%; background-repeat:no-repeat; background-position:center;
+            background-image:url('${globeIconDataUri()}');"></button>
+        </div>
       </div>
       <div style="font-size: 11px; color: #aaa; text-align: center; line-height: 1.7; margin-top: 4vh;">
         ${t('WASD 移动 / 空格 跳跃 / 双击空格 飞行(创造) / Shift 下蹲')}<br/>

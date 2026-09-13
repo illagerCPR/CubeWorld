@@ -7,6 +7,7 @@ import { fr } from './locales/fr.js';
 import { de } from './locales/de.js';
 import { ja } from './locales/ja.js';
 import { ko } from './locales/ko.js';
+import { ar } from './locales/ar.js';
 
 // 语言清单（顺序即 VideoSettings 语言行循环顺序；label 各用本语言自称）
 export const LOCALES = [
@@ -17,9 +18,10 @@ export const LOCALES = [
   { id: 'de', label: 'Deutsch' },
   { id: 'ja', label: '日本語' },
   { id: 'ko', label: '한국어' },
+  { id: 'ar', label: 'العربية' },
 ];
 
-const PACKS = { 'zh-TW': zhTW, 'en': en, 'fr': fr, 'de': de, 'ja': ja, 'ko': ko };
+const PACKS = { 'zh-TW': zhTW, 'en': en, 'fr': fr, 'de': de, 'ja': ja, 'ko': ko, 'ar': ar };
 
 let locale = 'zh-CN';
 const changeListeners = new Set();

@@ -85,3 +85,9 @@
 - **多语言包生成口径**：以 en.js 键集为基准逐键翻译（键一字不改、值按 MC 对应官方语言 fr_fr/de_de/ja_jp/ko_kr 术语），完成后程序化校验三件事——键集 missing/extra 双向为零、占位符 `{n}…` 多重集一致、`node --check`。自创词全书统一（Nether/l'End/Aether、wisp=Aspiritelle/Irrlicht/ウィスプ/위스프 等）。
 - **⚠️ eval 探针验 i18n 的实例分裂扩展**：页面模块链被 HMR 编辑过（如 Game.js）后，裸 `import('/src/i18n/index.js')` 是新实例——对它 setLocale 后再用页面实例的 tName 读会得到**切换前的语言值**（假象）。验语言切换走 UI 真实路径（语言行点击 + 断言主菜单按钮文本），不要裸 import 探针。
 - **Esc 关闭物品栏（Build 6 修复）**：Game.js ESC 分支原对 `inventoryScreen.visible` 裸 `return`（什么都不做，与其他容器 hide 不一致）——改为 `inventoryScreen.hide()` 后 return；`_setupPauseOnUnlock` 已排除全部界面，Esc 关背包不会误弹暂停。
+
+### Build 7 批次备忘（防回退）—— 语言界面独立 + 阿语 + 手持物像素挤出
+
+- **LanguageScreen.js（语言切换独立界面）**：主界面与暂停菜单的地球小按钮（`globeIconDataUri()` 像素风 SVG data-URI，无文本）进入；单例挂 `game.languageScreen`（main.js 创建），列出 `LOCALES` 全部语言（各语言自称，label 不走 t()），当前语言 `.selected`；点击 = settings.language + saveSettings + setLocale（onLocaleChange 通知各常驻 UI）；ESC/遮罩/返回键关闭；onHide 机制与 VideoSettings 同款（暂停菜单保持暂停态交还）。**主界面按钮挂 MenuScreen 主页 row（`language-btn`，事件委托构造期分支）；暂停菜单按钮 `pauseMenu.langBtn`（videoBtn 同模式：mainView 隐藏 + title 改 + onHide 恢复）**。
+- **八语言**：+ar（العربية）——LOCALES/PACKS/LANG_IDX（'ar': 7）/names.js 第八列四处同步。**阿语仅翻译不做 RTL 布局镜像**（ar.js 头注释已声明，MC ar_sa 官方是镜像的，属已知限制）；术语全书统一（النيثر/النهاية/الأثير/المنارة/بوابة العبور 与 بوابة النهاية 有意区分）。
+- **手持物像素挤出（Build 7，HeldItemMesh.js）**：物品与 cross 方块从双面薄片改为 **MC 风格像素挤出**——`extrudeSpriteGeometry(data, w, h, depth=0.125)`：32×32 贴图 alpha≥128 的像素各生成一个带厚度小立方，**只输出暴露面**（前后总暴露，±x/±y 相邻透明才生成），front/back 用像素 UV、侧面窄条 UV；尺寸归一 [-0.5,0.5]²、Y 轴翻转（canvas 行号→世界坐标 `Y=(y)=>0.5-y/h`）。普通方块仍是 BoxGeometry 六面、portal 保持薄片。材质沿用 heldMaterial（Lambert+DoubleSide 兜底绕向+alphaTest+低强度自发光）。构建一次进进程缓存（cache Map），clone 零拷贝。**勿改回 PlaneGeometry 薄片**。

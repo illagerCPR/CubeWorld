@@ -49,3 +49,5 @@
 - **派发协议（Game.js）**：`_dispatchMeshBuild` 填缓存 → `slice()` 三份副本（勿转移 builder scratch 本体）→ worker `build()`（transfer）→ 回执校验 `world.getChunk===chunk && _meshVersion===version` 后 `_applyMeshOut` 装配替换。**版本号 `_meshBuildSeq` 是 Game 全局单调序号**（跨 chunk 共享，比较只对同 chunk 自身旧值有意义）。`chunk._meshInFlight` 防重复派发；catch 置 `meshWorker.broken=true` 熔断 + 立即同步 build 兜底。rebuildDirtyChunks 预算 12ms 内可多次派发（每派发仅 ~1-2ms 缓存填充+拷贝，~20ms 收集已卸给 worker）。
 - **MeshWorker init**：atlasUV 以 `[...map.entries()]` 传（worker `new Map()`），quality 随每次 build 传（视频设置改档 markAllDirty 后新派发自然带新值）。worker 端 ChunkMeshBuilder 以 `(null, null, atlasUV, null)` 构造（材质仅占位不渲染）。
 - **验证锚点**：同区块 sync `_collectData` vs worker 回执**逐字节 identical**（solid/water/light + portalCells）；重进世界 169/169 meshed、errors 0、broken false；真实挖掘 → `_meshVersion` 前进 + `position.count` 变化 + dirty false。headless 帧率低时派发节奏慢是预算制正常表现（每帧多块按 12ms 预算推进）。
+
+- **Build 7 手持物像素挤出**：`HeldItemMesh.extrudeSpriteGeometry` 替代物品/cross 的双面薄片——像素级小立方（alpha≥128 实体、只生成暴露面、depth 0.125 归一单位）。侧面 UV 用像素窄条（边缘色），前后全 UV。DoubleSide 保绕向容错；热点：`Y=(y)=>0.5-y/h` 行号翻转方向勿反（反了物品上下颠倒）。RemotePlayer 手持物（HeldItemMesh 共享缓存）自动受益。

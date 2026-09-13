@@ -2,6 +2,7 @@
 import { SaveSystem } from '../core/SaveSystem.js';
 import { ensureStoneStyles } from './StoneStyle.js';
 import { t, onLocaleChange } from '../i18n/index.js';
+import { globeIconDataUri } from './LanguageScreen.js';
 
 export class PauseMenu {
   constructor(game) {
@@ -43,6 +44,17 @@ export class PauseMenu {
     this.mainView.appendChild(this.saveBtn);
     this.mainView.appendChild(this.videoBtn);
     this.mainView.appendChild(this.exitBtn);
+    // 语言切换小按钮（Build 7：地球图标，无文本；进入独立语言界面）
+    this.langBtn = document.createElement('button');
+    this.langBtn.className = 'cw-stone-btn';
+    this.langBtn.title = t('语言');
+    this.langBtn.setAttribute('aria-label', t('语言'));
+    this.langBtn.style.cssText = `
+      width: 40px; height: 40px; padding: 0; margin-top: 4px; align-self: center;
+      background-size: 64%; background-repeat: no-repeat; background-position: center;
+      background-image: url('${globeIconDataUri()}');
+    `;
+    this.mainView.appendChild(this.langBtn);
 
     this.resumeBtn.addEventListener('click', () => this.hide());
     // 保存反馈（Build 4）：按钮短暂变为"✓ 已保存"并禁用 1.2s，防连点 + 显式确认
@@ -70,6 +82,20 @@ export class PauseMenu {
         }
       };
       this.game.videoSettings.show();
+    });
+    // 语言切换：显示共用语言界面，关闭后回到暂停菜单（保持暂停态）
+    this.langBtn.addEventListener('click', () => {
+      if (!this.game.languageScreen) return;
+      this.mainView.style.display = 'none';
+      this.title.textContent = t('语言');
+      this.game.languageScreen.onHide = () => {
+        this.game.languageScreen.onHide = null;
+        if (this.visible) {
+          this.mainView.style.display = 'flex';
+          this.title.textContent = t('游戏暂停');
+        }
+      };
+      this.game.languageScreen.show();
     });
     this.exitBtn.addEventListener('click', () => {
       this.game.returnToMenu(true);
