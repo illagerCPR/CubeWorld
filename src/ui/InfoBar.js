@@ -68,8 +68,9 @@ export class InfoBar {
         // 无昼夜维度（下界/末地）：时钟无意义
         this.timeLine.textContent = t('时间: 无昼夜');
       } else {
-        const t = sky.time;
-        const totalMinutes = Math.floor(t * 24 * 60);
+        // 局部变量命名 timeVal——避开 i18n 的 t()（Build 5，遮蔽会让 t('...') 命中数字报错）
+        const timeVal = sky.time;
+        const totalMinutes = Math.floor(timeVal * 24 * 60);
         const hh = Math.floor(totalMinutes / 60) % 24;
         const mm = totalMinutes % 60;
         const hhStr = String(hh).padStart(2, '0');
