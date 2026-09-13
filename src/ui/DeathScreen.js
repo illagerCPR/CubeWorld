@@ -1,8 +1,11 @@
 // DeathScreen.js -- 玩家死亡屏幕
+import { ensureStoneStyles } from './StoneStyle.js';
+
 export class DeathScreen {
   constructor(game) {
     this.game = game;
     this.visible = false;
+    ensureStoneStyles();
 
     this.el = document.createElement('div');
     this.el.style.cssText = `
@@ -24,9 +27,9 @@ export class DeathScreen {
     title.style.cssText = 'font-size:30px; font-weight:bold; color:#ff6666; text-shadow:2px 2px 0 #000; letter-spacing:4px; margin-bottom:12px;';
     panel.appendChild(title);
 
-    this.respawnBtn = this._mkBtn('重生', '#4a8a4a', '#2a5a2a');
-    this.spectateBtn = this._mkBtn('观战其他玩家', '#4a6a8a', '#2a4a6a');
-    this.exitBtn = this._mkBtn('返回标题画面', '#8a4a4a', '#5a2a2a');
+    this.respawnBtn = this._mkBtn('重生');
+    this.spectateBtn = this._mkBtn('观战其他玩家');
+    this.exitBtn = this._mkBtn('返回标题画面', 'danger');
     panel.appendChild(this.respawnBtn);
     panel.appendChild(this.spectateBtn);
     panel.appendChild(this.exitBtn);
@@ -43,10 +46,12 @@ export class DeathScreen {
     document.body.appendChild(this.el);
   }
 
-  _mkBtn(label, bg, border) {
+  _mkBtn(label, extraClass = '') {
+    ensureStoneStyles();
     const b = document.createElement('button');
+    b.className = `cw-stone-btn${extraClass ? ' ' + extraClass : ''}`;
     b.textContent = label;
-    b.style.cssText = `padding:10px 20px; font-size:15px; background:${bg}; color:#fff; border:2px solid ${border}; cursor:pointer; font-weight:bold; min-width:180px;`;
+    b.style.cssText = 'padding:10px 20px; font-size:15px; min-width:180px;';
     return b;
   }
 

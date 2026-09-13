@@ -4,6 +4,7 @@
 import { SVGTextures } from '../render/SVGTextures.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
+import { ensureStoneStyles } from './StoneStyle.js';
 import { villagerTrades } from '../world/loot.js';
 
 function getDisplayName(name) {
@@ -160,11 +161,12 @@ export class TradeScreen {
 
     const btn = document.createElement('button');
     const ok = this._countOf(trade.give.name) >= trade.give.count;
+    ensureStoneStyles();
+    btn.className = 'cw-stone-btn';
     btn.textContent = '交易';
     btn.disabled = !ok;
     btn.style.cssText = `
       margin-left: 8px; padding: 6px 14px; font-size: 13px; cursor: ${ok ? 'pointer' : 'not-allowed'};
-      background: ${ok ? '#7da453' : '#9a9a9a'}; color: #fff; border: 2px solid #555;
     `;
     btn.onmousedown = (e) => {
       e.preventDefault();

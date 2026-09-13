@@ -13,11 +13,16 @@
     #loading {
       position: absolute; inset: 0; display: none; flex-direction: column;
       align-items: center; justify-content: center; color: #fff;
-      background: linear-gradient(180deg, #6db7ff 0%, #2a5a8a 100%); z-index: 100;
-      font-size: 20px; letter-spacing: 2px;
+      /* 泥土背景（原版风）：程序化棕色噪点平铺 + 压暗叠层保文字可读 */
+      background:
+        linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%2379553a'/%3E%3Crect x='1' y='0' width='2' height='1' fill='%236b4a31'/%3E%3Crect x='5' y='1' width='1' height='2' fill='%238f6a47'/%3E%3Crect x='9' y='0' width='3' height='1' fill='%235d4030'/%3E%3Crect x='14' y='1' width='2' height='1' fill='%236b4a31'/%3E%3Crect x='0' y='2' width='1' height='2' fill='%238f6a47'/%3E%3Crect x='3' y='3' width='2' height='1' fill='%235d4030'/%3E%3Crect x='7' y='2' width='1' height='1' fill='%239c764f'/%3E%3Crect x='11' y='3' width='2' height='2' fill='%236b4a31'/%3E%3Crect x='15' y='3' width='1' height='1' fill='%238f6a47'/%3E%3Crect x='2' y='5' width='3' height='1' fill='%235d4030'/%3E%3Crect x='6' y='5' width='1' height='2' fill='%236b4a31'/%3E%3Crect x='9' y='6' width='2' height='1' fill='%238f6a47'/%3E%3Crect x='13' y='5' width='2' height='1' fill='%239c764f'/%3E%3Crect x='0' y='7' width='2' height='1' fill='%236b4a31'/%3E%3Crect x='4' y='8' width='1' height='1' fill='%238f6a47'/%3E%3Crect x='8' y='8' width='3' height='1' fill='%235d4030'/%3E%3Crect x='12' y='8' width='1' height='2' fill='%236b4a31'/%3E%3Crect x='15' y='7' width='1' height='2' fill='%235d4030'/%3E%3Crect x='1' y='10' width='2' height='1' fill='%238f6a47'/%3E%3Crect x='5' y='10' width='2' height='2' fill='%236b4a31'/%3E%3Crect x='10' y='10' width='1' height='1' fill='%239c764f'/%3E%3Crect x='13' y='11' width='2' height='1' fill='%235d4030'/%3E%3Crect x='0' y='12' width='1' height='1' fill='%239c764f'/%3E%3Crect x='3' y='13' width='1' height='2' fill='%238f6a47'/%3E%3Crect x='7' y='12' width='2' height='1' fill='%236b4a31'/%3E%3Crect x='11' y='13' width='3' height='1' fill='%238f6a47'/%3E%3Crect x='15' y='13' width='1' height='1' fill='%235d4030'/%3E%3Crect x='2' y='15' width='2' height='1' fill='%235d4030'/%3E%3Crect x='9' y='14' width='1' height='2' fill='%236b4a31'/%3E%3Crect x='6' y='15' width='3' height='1' fill='%238f6a47'/%3E%3C/svg%3E");
+      background-size: auto, 64px 64px;
+      image-rendering: pixelated; z-index: 100;
+      font-size: 20px; letter-spacing: 2px; text-shadow: 2px 2px 0 rgba(0,0,0,0.6);
     }
     #loading .bar { width: 320px; height: 16px; border: 2px solid #fff; margin-top: 20px; background: rgba(0,0,0,0.3); }
-    #loading .fill { width: 0%; height: 100%; background: #8ff; transition: width 0.2s; }
+    #loading .fill { width: 0%; height: 100%; background: #8f6a47; border-right: 2px solid #c8a06a; transition: width 0.2s; }
   </style>
 </head>
 <body>

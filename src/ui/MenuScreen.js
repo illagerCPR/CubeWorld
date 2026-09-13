@@ -1,6 +1,7 @@
 // MenuScreen.js -- 主菜单（主页 / 单人游戏 / 局域网游戏 三页导航）+ 石质按钮
 import { SaveSystem } from '../core/SaveSystem.js';
 import { BIOME_SCALES, DEFAULT_BIOME_SCALE, safeBiomeScale } from '../world/biomes.js';
+import { ensureStoneStyles } from './StoneStyle.js';
 import { VERSION_LABEL } from '../version.js';
 import logoUrl from '../../res/logo-cubeworld-js-edition.png';
 
@@ -12,67 +13,12 @@ const MODE_COLOR = {
 };
 const DIM_LABEL = { overworld: '主世界', nether: '下界', end: '末地', aether: '天域' };
 
-// ---------- 石质按钮材质 ----------
-// 与游戏内 stone 方块同风格的确定性哈希噪点（禁用 Math.random，符合程序化纹理生成约定）
-function menuHash2(x, y, s) {
-  let h = (x * 374761393 + y * 668265263 + s * 974634073) >>> 0;
-  h = ((h ^ (h >>> 13)) * 1103515245) >>> 0;
-  return (h >>> 16) / 65536;
-}
-
-function stoneSvgDataUri(seed = 7) {
-  const rects = [];
-  for (let y = 0; y < 16; y++) {
-    for (let x = 0; x < 16; x++) {
-      const t = menuHash2(x, y, seed);
-      let f = 1 + (menuHash2(x, y, seed + 1) - 0.5) * 0.06;
-      if (t < 0.2) f *= 0.9;
-      else if (t > 0.85) f *= 1.08;
-      const c = Math.max(0, Math.min(255, Math.round(125 * f)));
-      rects.push(`<rect x="${x}" y="${y}" width="1" height="1" fill="rgb(${c},${c},${c})"/>`);
-    }
-  }
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 16 16" shape-rendering="crispEdges">${rects.join('')}</svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
-}
-
-const STONE_BG = stoneSvgDataUri(7);
-
-// 样式表构造期注入一次（幂等）：hover/active/selected 态必须走 class，内联样式写不了伪类；
-// class 选择器不受 render() 重建 innerHTML 影响
-function ensureMenuStyles() {
-  if (document.getElementById('cw-menu-styles')) return;
-  const style = document.createElement('style');
-  style.id = 'cw-menu-styles';
-  style.textContent = `
-    .cw-stone-btn {
-      background-image: ${STONE_BG};
-      background-size: 64px 64px;
-      image-rendering: pixelated;
-      border: 2px solid #000;
-      box-shadow: inset 2px 2px 0 rgba(255,255,255,0.35), inset -2px -4px 0 rgba(0,0,0,0.45);
-      color: #fff;
-      text-shadow: 2px 2px 0 rgba(0,0,0,0.55);
-      cursor: pointer;
-      font-weight: bold;
-      font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-    }
-    .cw-stone-btn:hover { filter: brightness(1.22); border-color: #fff; }
-    .cw-stone-btn:active {
-      filter: brightness(0.92);
-      box-shadow: inset -2px -2px 0 rgba(255,255,255,0.2), inset 2px 2px 0 rgba(0,0,0,0.45);
-    }
-    .cw-stone-btn.selected {
-      border-color: #fff;
-      box-shadow: inset 2px 2px 0 rgba(255,255,255,0.35), inset -2px -4px 0 rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.55);
-    }
-  `;
-  document.head.appendChild(style);
-}
+// ---------- 石质按钮 ----------
+// Build 4：样式提取到共享模块 StoneStyle.js（全界面统一 .cw-stone-btn），此处仅注入
 
 export class MenuScreen {
   constructor(onStart, net = null) {
-    ensureMenuStyles();
+    ensureStoneStyles();
     this.onStart = onStart;
     this.net = net;
     this.page = 'main'; // main | single | lan
@@ -173,9 +119,8 @@ export class MenuScreen {
               <div style="font-size:14px; font-weight:bold; color:#fff;">槽 ${s.slot} · ${MODE_LABEL[s.gamemode] || s.gamemode}${dim}${bs}${s.cheatsEnabled ? ' · <span style="color:#fc5;">作弊</span>' : ''}</div>
               <div style="font-size:11px; color:#bbb;">${time} · 种子 ${s.seed}${s.cheatsEnabled ? ' · 命令已启用' : ''}</div>
             </div>
-            <button class="del-btn" data-del="${s.slot}" style="
-              background: #8a3a3a; color:#fff; border:1px solid #5a2a2a;
-              cursor:pointer; padding:4px 10px; font-size:12px;">删除</button>
+            <button class="del-btn cw-stone-btn danger" data-del="${s.slot}" style="
+              color:#fff; cursor:pointer; padding:4px 10px; font-size:12px;">删除</button>
           </div>`;
       }
     }

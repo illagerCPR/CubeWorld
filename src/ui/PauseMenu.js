@@ -1,10 +1,12 @@
 // PauseMenu.js -- 游戏暂停菜单
 import { SaveSystem } from '../core/SaveSystem.js';
+import { ensureStoneStyles } from './StoneStyle.js';
 
 export class PauseMenu {
   constructor(game) {
     this.game = game;
     this.visible = false;
+    ensureStoneStyles();
 
     this.el = document.createElement('div');
     this.el.style.cssText = `
@@ -32,18 +34,27 @@ export class PauseMenu {
     this.mainView.style.cssText = 'display:flex; flex-direction:column; gap:12px;';
     panel.appendChild(this.mainView);
 
-    this.resumeBtn = this._mkBtn('继续游戏', '#4a8a4a', '#2a5a2a');
-    this.saveBtn = this._mkBtn('保存游戏', '#2a6a8a', '#1a4a6a');
-    this.videoBtn = this._mkBtn('视频设置', '#4a4a6a', '#2a2a4a');
-    this.exitBtn = this._mkBtn('保存并回到标题', '#8a4a4a', '#5a2a2a');
+    this.resumeBtn = this._mkBtn('继续游戏');
+    this.saveBtn = this._mkBtn('保存游戏');
+    this.videoBtn = this._mkBtn('视频设置');
+    this.exitBtn = this._mkBtn('保存并回到标题', 'danger');
     this.mainView.appendChild(this.resumeBtn);
     this.mainView.appendChild(this.saveBtn);
     this.mainView.appendChild(this.videoBtn);
     this.mainView.appendChild(this.exitBtn);
 
     this.resumeBtn.addEventListener('click', () => this.hide());
+    // 保存反馈（Build 4）：按钮短暂变为"✓ 已保存"并禁用 1.2s，防连点 + 显式确认
     this.saveBtn.addEventListener('click', () => {
+      if (this.saveBtn.disabled) return;
       if (this.game.world) SaveSystem.save(this.game);
+      this.saveBtn.disabled = true;
+      this.saveBtn.textContent = '✓ 已保存';
+      setTimeout(() => {
+        if (!this.saveBtn) return;
+        this.saveBtn.disabled = false;
+        this.saveBtn.textContent = '保存游戏';
+      }, 1200);
     });
     // 视频设置：显示共用面板，关闭后回到暂停菜单（保持暂停态）
     this.videoBtn.addEventListener('click', () => {
@@ -66,10 +77,12 @@ export class PauseMenu {
     document.body.appendChild(this.el);
   }
 
-  _mkBtn(label, bg, border) {
+  _mkBtn(label, extraClass = '') {
+    ensureStoneStyles();
     const b = document.createElement('button');
+    b.className = `cw-stone-btn${extraClass ? ' ' + extraClass : ''}`;
     b.textContent = label;
-    b.style.cssText = `padding:10px 18px; font-size:15px; background:${bg}; color:#fff; border:2px solid ${border}; cursor:pointer; font-weight:bold;`;
+    b.style.cssText = 'padding:10px 18px; font-size:15px;';
     return b;
   }
 

@@ -3,6 +3,7 @@ import { Mob } from '../entity/Mob.js';
 import { MobTypes } from '../entity/MobTextures.js';
 import { ringPoints } from '../world/structures/stronghold.js';
 import { DIMENSIONS } from '../core/dimensions.js';
+import { ensureStoneStyles } from './StoneStyle.js';
 
 // 探索列表：玩家周围村庄扫描 cell 半径（cell=20 区块 → ±960 格）；要塞环带 3 点全局 O(1)
 const EXPLORE_VILLAGE_CELL_R = 3;
@@ -30,6 +31,7 @@ export class CommandPanel {
   constructor(game) {
     this.game = game;
     this.visible = false;
+    ensureStoneStyles();
 
     this.el = document.createElement('div');
     this.el.style.cssText = `
@@ -70,10 +72,12 @@ export class CommandPanel {
     return card;
   }
 
-  _mkBtn(label, bg, border) {
+  _mkBtn(label, extraClass = '') {
+    ensureStoneStyles();
     const b = document.createElement('button');
+    b.className = `cw-stone-btn${extraClass ? ' ' + extraClass : ''}`;
     b.textContent = label;
-    b.style.cssText = `padding:8px 12px; font-size:13px; background:${bg}; color:#fff; border:2px solid ${border}; cursor:pointer; font-weight:bold;`;
+    b.style.cssText = 'padding:8px 12px; font-size:13px;';
     return b;
   }
 
@@ -95,7 +99,7 @@ export class CommandPanel {
     title.textContent = '命令面板';
     title.style.cssText = 'font-size:18px; font-weight:bold; letter-spacing:2px;';
     header.appendChild(title);
-    const closeBtn = this._mkBtn('关闭 (C / ESC)', '#555', '#333');
+    const closeBtn = this._mkBtn('关闭 (C / ESC)');
     closeBtn.style.padding = '4px 10px';
     closeBtn.addEventListener('click', () => this.hide());
     header.appendChild(closeBtn);
@@ -130,10 +134,10 @@ export class CommandPanel {
 
     const tpBtns = document.createElement('div');
     tpBtns.style.cssText = 'display:flex; gap:6px;';
-    const tpBtn = this._mkBtn('传送', '#2a6a8a', '#1a4a6a');
+    const tpBtn = this._mkBtn('传送');
     tpBtn.addEventListener('click', () => this._teleport());
     tpBtns.appendChild(tpBtn);
-    const spawnBtn = this._mkBtn('返回出生点', '#4a6a8a', '#2a4a6a');
+    const spawnBtn = this._mkBtn('返回出生点');
     spawnBtn.addEventListener('click', () => {
       const sp = this.game.world.getSpawnPoint();
       this.tpX.value = sp.x.toFixed(1);
@@ -142,7 +146,7 @@ export class CommandPanel {
       this._teleport();
     });
     tpBtns.appendChild(spawnBtn);
-    const hereBtn = this._mkBtn('填入当前位置', '#555', '#333');
+    const hereBtn = this._mkBtn('填入当前位置');
     hereBtn.addEventListener('click', () => {
       const p = this.game.player.position;
       this.tpX.value = p.x.toFixed(1);
@@ -171,7 +175,7 @@ export class CommandPanel {
     this.dimBtns = [];
     for (const def of Object.values(DIMENSIONS)) {
       if (!def.implemented) continue;
-      const b = this._mkBtn(def.name, '#3a6a5a', '#2a4a3a');
+      const b = this._mkBtn(def.name);
       b.addEventListener('click', () => {
         this.hide();
         this.game.switchDimension(def.id);
@@ -188,7 +192,7 @@ export class CommandPanel {
     modeRow.style.cssText = 'display:flex; gap:6px;';
     this.modeBtns = [];
     for (const m of MODES) {
-      const b = this._mkBtn(m.label, m.bg, m.border);
+      const b = this._mkBtn(m.label);
       b.addEventListener('click', () => {
         this.game.player.setMode(m.name);
         this._refreshModeHighlight();
@@ -210,7 +214,7 @@ export class CommandPanel {
       { label: '半夜', value: 0.00, bg: '#3a3a6a', border: '#2a2a4a' }
     ];
     for (const tp of TIME_PRESETS) {
-      const b = this._mkBtn(tp.label, tp.bg, tp.border);
+      const b = this._mkBtn(tp.label);
       b.addEventListener('click', () => this._setTime(tp.value));
       timeRow.appendChild(b);
     }
@@ -224,7 +228,7 @@ export class CommandPanel {
     this.timeInput.min = '0';
     this.timeInput.max = '1';
     timeCustomRow.appendChild(this.timeInput);
-    const setBtn = this._mkBtn('设为', '#2a6a8a', '#1a4a6a');
+    const setBtn = this._mkBtn('设为');
     setBtn.addEventListener('click', () => this._setTime(parseFloat(this.timeInput.value)));
     timeCustomRow.appendChild(setBtn);
     const curTimeLabel = document.createElement('span');
@@ -239,7 +243,7 @@ export class CommandPanel {
     const mobRow = document.createElement('div');
     mobRow.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fill, minmax(88px, 1fr)); gap:6px;';
     for (const mt of mobEntries()) {
-      const b = this._mkBtn(mt.label, '#6a3a6a', '#4a2a4a');
+      const b = this._mkBtn(mt.label);
       b.addEventListener('click', () => this._spawnMob(mt.name));
       mobRow.appendChild(b);
     }
@@ -307,8 +311,9 @@ export class CommandPanel {
       label.textContent = `${it.name} (${it.x}, ${it.z}) · ${Math.round(it.d)}m · ${CommandPanel._compass(p.x, p.z, it.x, it.z)}`;
       row.appendChild(label);
       const btn = document.createElement('button');
+      btn.className = 'cw-stone-btn mini';
       btn.textContent = '传送';
-      btn.style.cssText = 'padding: 2px 8px; font-size: 11px; background: #2a6a8a; color: #fff; border: 1px solid #1a4a6a; cursor: pointer;';
+      btn.style.cssText = 'padding: 2px 8px; font-size: 11px;';
       btn.addEventListener('click', () => {
         const ty = it.y != null ? it.y + 2 : world.getHeightAt(it.x, it.z) + 3;
         this.tpX.value = (it.x + 0.5).toFixed(1);

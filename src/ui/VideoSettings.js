@@ -1,7 +1,9 @@
 // VideoSettings.js -- 视频设置面板（ESC 暂停菜单与主菜单共用）
-// 原版 MC 选项页风格：整屏半透明遮罩 + 居中列按钮（点击循环取值），改动即存 localStorage 并实时生效。
+// Build 4 全新布局：原版 MC 选项页风格——分组两列网格（画面 / 光影增强 / 音频与操作），
+// 按钮统一 .cw-stone-btn 石质材质；点击循环取值，改动即存 localStorage 并实时生效。
 // 平滑光照开关切换时对所有区块 markAllDirty，网格在后续帧内分批重建。
 import { loadSettings, saveSettings, applySettings, brightnessToMinLight, GFX_ORDER, GFX_LABELS } from '../core/Settings.js';
+import { ensureStoneStyles } from './StoneStyle.js';
 
 const PARTICLE_LABELS = { all: '全部', decreased: '减少', minimal: '最少' };
 const PARTICLE_ORDER = ['all', 'decreased', 'minimal'];
@@ -34,121 +36,140 @@ export class VideoSettings {
     this._build();
   }
 
-  _btnStyle() {
-    return `
-      width: 310px; padding: 10px 14px; font-size: 14px; cursor: pointer;
-      background: #3a3a3a; color: #fff; border: 2px solid #5a5a5a; font-weight: bold;
-    `;
-  }
-
   _build() {
+    ensureStoneStyles();
     this.el.innerHTML = '';
+
+    const panel = document.createElement('div');
+    panel.style.cssText = 'display:flex; flex-direction:column; align-items:center;';
+    this.el.appendChild(panel);
 
     const title = document.createElement('div');
     title.textContent = '视频设置';
-    title.style.cssText = 'font-size: 24px; font-weight: bold; margin-bottom: 18px; letter-spacing: 2px;';
-    this.el.appendChild(title);
+    title.style.cssText = 'font-size: 24px; font-weight: bold; margin-bottom: 16px; letter-spacing: 2px; text-shadow: 2px 2px 0 rgba(0,0,0,0.6);';
+    panel.appendChild(title);
 
     this.rows = {};
-    const mkRow = (label) => {
+
+    // 分组容器：标题 + 两列网格（Build 4 重排，替代原单列长条）
+    const mkGroup = (label) => {
+      const group = document.createElement('div');
+      group.style.cssText = 'margin-bottom: 16px;';
+      const gt = document.createElement('div');
+      gt.textContent = label;
+      gt.style.cssText = 'font-size: 13px; color: #ffd97a; letter-spacing: 3px; margin-bottom: 8px; text-shadow: 1px 1px 0 #000;';
+      group.appendChild(gt);
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display: grid; grid-template-columns: repeat(2, 262px); gap: 8px;';
+      group.appendChild(grid);
+      panel.appendChild(group);
+      return grid;
+    };
+    const gDisplay = mkGroup('画　面');
+    const gGfx = mkGroup('光影增强');
+    const gAudio = mkGroup('音频与操作');
+
+    const mkRow = (label, groupEl) => {
       const b = document.createElement('button');
-      b.style.cssText = this._btnStyle() + 'margin-bottom:8px;';
-      this.el.appendChild(b);
+      b.className = 'cw-stone-btn';
+      b.style.cssText = 'padding: 10px 12px; font-size: 13px;';
+      groupEl.appendChild(b);
       this.rows[label] = b;
       return b;
     };
 
     // 渲染距离
-    mkRow('renderDistance').addEventListener('click', () => {
+    mkRow('renderDistance', gDisplay).addEventListener('click', () => {
       const s = this.game.settings;
       s.renderDistance = s.renderDistance >= 12 ? 2 : s.renderDistance + 1;
       this._apply();
     });
     // 视野
-    mkRow('fov').addEventListener('click', () => {
+    mkRow('fov', gDisplay).addEventListener('click', () => {
       const s = this.game.settings;
       s.fov = s.fov >= 110 ? 60 : s.fov + 5;
       this._apply();
     });
     // 亮度
-    mkRow('brightness').addEventListener('click', () => {
+    mkRow('brightness', gDisplay).addEventListener('click', () => {
       const s = this.game.settings;
       s.brightness = s.brightness >= 100 ? 0 : s.brightness + 10;
       this._apply();
     });
     // 云
-    mkRow('clouds').addEventListener('click', () => {
+    mkRow('clouds', gDisplay).addEventListener('click', () => {
       this.game.settings.clouds = !this.game.settings.clouds;
       this._apply();
     });
     // 粒子
-    mkRow('particles').addEventListener('click', () => {
+    mkRow('particles', gDisplay).addEventListener('click', () => {
       const s = this.game.settings;
       s.particles = PARTICLE_ORDER[(PARTICLE_ORDER.indexOf(s.particles) + 1) % PARTICLE_ORDER.length];
       this._apply();
     });
     // 平滑光照（切换需重建全部区块网格）
-    mkRow('smoothLighting').addEventListener('click', () => {
+    mkRow('smoothLighting', gDisplay).addEventListener('click', () => {
       this.game.settings.smoothLighting = !this.game.settings.smoothLighting;
       this._apply();
       if (this.game.world) this.game.world.markAllDirty();
     });
     // 视角摇晃
-    mkRow('viewBobbing').addEventListener('click', () => {
+    mkRow('viewBobbing', gDisplay).addEventListener('click', () => {
       this.game.settings.viewBobbing = !this.game.settings.viewBobbing;
       this._apply();
     });
     // 鼠标灵敏度
-    mkRow('sensitivity').addEventListener('click', () => {
+    mkRow('sensitivity', gAudio).addEventListener('click', () => {
       const s = this.game.settings;
       s.sensitivity = s.sensitivity >= 200 ? 30 : s.sensitivity + 10;
       this._apply();
     });
     // 音量（主音量，步进 10）
-    mkRow('volume').addEventListener('click', () => {
+    mkRow('volume', gAudio).addEventListener('click', () => {
       const s = this.game.settings;
       s.volume = s.volume >= 100 ? 0 : s.volume + 10;
       this._apply();
     });
     // 音效总开关
-    mkRow('sound').addEventListener('click', () => {
+    mkRow('sound', gAudio).addEventListener('click', () => {
       this.game.settings.sound = !this.game.settings.sound;
       this._apply();
     });
     // 音乐（BGM/环境风声）开关
-    mkRow('music').addEventListener('click', () => {
+    mkRow('music', gAudio).addEventListener('click', () => {
       this.game.settings.music = !this.game.settings.music;
       this._apply();
     });
     // 光照增强（三档一键：关闭 / 基础=水面反射+云影 / 完整=再加后处理）
-    mkRow('gfx').addEventListener('click', () => {
+    mkRow('gfx', gGfx).addEventListener('click', () => {
       const s = this.game.settings;
       s.gfx = GFX_ORDER[(GFX_ORDER.indexOf(s.gfx) + 1) % GFX_ORDER.length];
       this._apply();
     });
     // 泛光（完整档生效）
-    mkRow('gfxBloom').addEventListener('click', () => {
+    mkRow('gfxBloom', gGfx).addEventListener('click', () => {
       this.game.settings.gfxBloom = !this.game.settings.gfxBloom;
       this._apply();
     });
     // 体积光（完整档生效）
-    mkRow('gfxGodRays').addEventListener('click', () => {
+    mkRow('gfxGodRays', gGfx).addEventListener('click', () => {
       this.game.settings.gfxGodRays = !this.game.settings.gfxGodRays;
       this._apply();
     });
     // 平面真反射（完整档生效；镜像相机二次渲染，低端机可关）
-    mkRow('gfxWaterReflection').addEventListener('click', () => {
+    mkRow('gfxWaterReflection', gGfx).addEventListener('click', () => {
       this.game.settings.gfxWaterReflection = !this.game.settings.gfxWaterReflection;
       this._apply();
     });
     // 太阳阴影（完整档生效；节流 shadow pass，低端机可关）
-    mkRow('gfxShadows').addEventListener('click', () => {
+    mkRow('gfxShadows', gGfx).addEventListener('click', () => {
       this.game.settings.gfxShadows = !this.game.settings.gfxShadows;
       this._apply();
     });
-    // 全屏（不持久化，按浏览器当前状态显示）
+    // 全屏（不持久化，按浏览器当前状态显示；归入"画面"组）
     this.fullscreenBtn = document.createElement('button');
-    this.fullscreenBtn.style.cssText = this._btnStyle() + 'margin-bottom:8px;';
+    this.fullscreenBtn.className = 'cw-stone-btn';
+    this.fullscreenBtn.style.cssText = 'padding: 10px 12px; font-size: 13px;';
     this.fullscreenBtn.addEventListener('click', async () => {
       try {
         if (document.fullscreenElement) await document.exitFullscreen();
@@ -156,17 +177,15 @@ export class VideoSettings {
       } catch { /* 用户拒绝等忽略 */ }
       this._refresh();
     });
-    this.el.appendChild(this.fullscreenBtn);
+    gDisplay.appendChild(this.fullscreenBtn);
 
-    // 完成按钮
+    // 完成按钮（跨两列居中）
     const done = document.createElement('button');
+    done.className = 'cw-stone-btn';
     done.textContent = '完成';
-    done.style.cssText = `
-      width: 310px; padding: 12px 14px; font-size: 15px; cursor: pointer; margin-top: 14px;
-      background: #4a8a4a; color: #fff; border: 2px solid #2a5a2a; font-weight: bold;
-    `;
+    done.style.cssText = 'width: 532px; padding: 12px 14px; font-size: 15px; margin-top: 4px;';
     done.addEventListener('click', () => this.hide());
-    this.el.appendChild(done);
+    panel.appendChild(done);
 
     this._refresh();
   }
