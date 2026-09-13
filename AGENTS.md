@@ -200,6 +200,12 @@ LAN 联机阶段 0-11 已全部完成（`https://github.com/illagerCPR/CubeWorld
 
 **交付约定（2026-09-12 起）**：每完成一个阶段性批次即 `git push origin master`，并用 `gh run watch <runId> --repo illagerCPR/CubeWorld --exit-status` 确认 CI 绿后再收尾汇报；不积压未推送的本地提交。
 
+**版本号与发布规则（2026-09-13 确立）**：
+- 版本格式 **Alpha Build X**；X 从 1 起，**每次功能交付完成（批次 push + CI 绿）递增 1**，一个批次 = 一个 Release。
+- 版本常量唯一来源 `src/version.js`（`BUILD` 数字 + `VERSION_LABEL` 模板）：递增版本只改这一个数字，其他地方一律引用常量，禁止硬编码版本文本。
+- 显示规则：主界面（`MenuScreen.versionEl`）与游戏内（`Hud.versionTag`）**左下角**常驻文本 `CubeWorld Alpha Build X`，格式勿改；新增 UI 不得遮挡/移除该元素（主菜单元素挂 body 勿挂 `MenuScreen.el`——`render()` 重建 innerHTML 会清除）。
+- 发布：每批 CI 绿后 `gh release create alpha-build-<X> --repo illagerCPR/CubeWorld --title "CubeWorld Alpha Build <X>" --notes "<本批内容简述>"`，tag 指向已绿的 master 提交。
+
 后续候选（见 `docs/lan-multiplayer-design.md` §11 阶段 12）：Tab 玩家列表面板、远端盔甲外观同步、服务器性能面板（消息速率图表）、房间私聊/队伍分组。
 
 ## 批次备忘索引（按需必读，防回退）

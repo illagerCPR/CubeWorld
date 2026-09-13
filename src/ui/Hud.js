@@ -1,4 +1,6 @@
 // Hud.js -- 生存模式 HUD：血量/饥饿/经验
+import { VERSION_LABEL } from '../version.js';
+
 export class Hud {
   constructor() {
     this.el = document.createElement('div');
@@ -52,6 +54,16 @@ export class Hud {
       text-shadow: 0 1px 3px #000, 0 0 8px rgba(80,120,255,0.6);
     `;
     document.body.appendChild(this.glideTag);
+
+    // 版本号（游戏内左下角，规则见 AGENTS.md「版本号与发布规则」）：
+    // 进游戏由 update()/updateVisibility() 显示，回菜单 hideAll() 隐藏
+    this.versionTag = document.createElement('div');
+    this.versionTag.textContent = VERSION_LABEL;
+    this.versionTag.style.cssText = `
+      position: fixed; left: 10px; bottom: 8px; z-index: 10; pointer-events: none; display: none;
+      color: rgba(255,255,255,0.78); font-size: 12px; text-shadow: 1px 1px 0 #000;
+    `;
+    document.body.appendChild(this.versionTag);
 
     document.body.appendChild(this.el);
     document.body.appendChild(this.xpBar);
@@ -132,6 +144,7 @@ export class Hud {
     this.airBar.style.display = 'none';
     this.armorRow.style.display = 'none';
     this.glideTag.style.display = 'none';
+    this.versionTag.style.display = 'none';
   }
 
   // 着火滤镜开关（同款幂等开关）
@@ -167,6 +180,7 @@ export class Hud {
   }
 
   update(player) {
+    this.versionTag.style.display = 'block'; // 版本号任意模式常显（含创造/旁观提前 return 前）
     if (player.gamemode === 'spectator' || player.gamemode === 'creative') {
       this.el.style.display = 'none';
       this.xpBar.style.display = 'none';
@@ -240,6 +254,7 @@ export class Hud {
   }
 
   updateVisibility(mode) {
+    this.versionTag.style.display = 'block';
     if (mode === 'creative') {
       this.el.style.display = 'none';
       this.xpBar.style.display = 'none';

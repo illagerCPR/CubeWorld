@@ -1,6 +1,7 @@
 // MenuScreen.js -- 主菜单（主页 / 单人游戏 / 局域网游戏 三页导航）+ 石质按钮
 import { SaveSystem } from '../core/SaveSystem.js';
 import { BIOME_SCALES, DEFAULT_BIOME_SCALE, safeBiomeScale } from '../world/biomes.js';
+import { VERSION_LABEL } from '../version.js';
 import logoUrl from '../../res/logo-cubeworld-js-edition.png';
 
 const MODE_LABEL = { creative: '创造模式', survival: '生存模式', spectator: '旁观模式' };
@@ -102,6 +103,16 @@ export class MenuScreen {
       }
     });
     this.render();
+    // 版本号（左下角，规则见 AGENTS.md「版本号与发布规则」）；
+    // 挂 body 而非 el —— render() 重建 innerHTML 会清除 el 的子元素
+    this.versionEl = document.createElement('div');
+    this.versionEl.textContent = VERSION_LABEL;
+    this.versionEl.style.cssText = `
+      position: fixed; left: 10px; bottom: 8px; z-index: 60; pointer-events: none;
+      color: rgba(255,255,255,0.78); font-size: 12px; text-shadow: 1px 1px 0 #000;
+      font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    `;
+    document.body.appendChild(this.versionEl);
   }
 
   render() {
@@ -358,6 +369,6 @@ export class MenuScreen {
   }
 
   // onShow/onHide 由 main.js 注入（切换全景背景的启停）
-  hide() { this.el.style.display = 'none'; if (this.onHide) this.onHide(); }
-  show() { this.page = 'main'; this.el.style.display = 'flex'; this.render(); if (this.onShow) this.onShow(); }
+  hide() { this.el.style.display = 'none'; this.versionEl.style.display = 'none'; if (this.onHide) this.onHide(); }
+  show() { this.page = 'main'; this.el.style.display = 'flex'; this.versionEl.style.display = 'block'; this.render(); if (this.onShow) this.onShow(); }
 }
