@@ -1943,10 +1943,11 @@ export class Game {
     return true;
   }
 
-  // Idea-2D-②：凋灵召唤检测——底层 4 灵魂沙横排 + 上层 3 头颅（原版 T 型）。
+  // Idea-2D-②：凋灵召唤检测——双结构：原版 T 型（柱底 1 + 沙排 3 + 头排 3，Build 8 起）
+  // 与兼容平铺两层（沙排 4 + 头排 3，初版摆法）；原版 T 优先匹配。
   // 只在本地放置成功路径调用（同铁傀儡：远端 block_set 不检测，防多端重复召唤）；
   // 命中则移除 7 块（setBlock 自动广播账本）并就地召唤凋灵（联机经 mob_spawn 回执全端创建）。
-  // 图案枚举：轴向 x/z 两种 × 头排相对底排两种对齐（头排 3 连续，底排 4 连续左/右对齐）。
+  // 枚举：轴向 x/z × 头排起点 [-3,3]（宽枚举无害，校验保证正确性）。
   _trySummonWither(x, y, z) {
     if (!this.world || !this.mobManager) return false;
     const SAND = BlockRegistry.getId('soul_sand');
@@ -1955,28 +1956,49 @@ export class Game {
     const get = (bx, by, bz) => this.world.getBlock(bx, by, bz);
     const placed = get(x, y, z);
     if (placed !== SAND && placed !== SKULL) return false;
-    // 头/沙的层位由放置物决定：放头 → 头层 y、底层 y-1；放沙 → 底层 y、头层 y+1
-    const hy = placed === SKULL ? y : y + 1;
-    const by = placed === SKULL ? y - 1 : y;
-    for (const [ax, az] of [[1, 0], [0, 1]]) {       // 水平轴向：x / z
-      for (let h0 = -3; h0 <= 3; h0++) {             // 头排起点相对放置点（沿轴标量；校验保证正确性）
-        for (const off of [0, -1]) {                 // 底排相对头排两种对齐
+    // 扫描头层 ty 的 3 连头颅排，再按形状补验下层；命中返回待清除块与召唤点
+    const scan = (ty, shape) => {
+      for (const [ax, az] of [[1, 0], [0, 1]]) {       // 水平轴向：x / z
+        for (let h0 = -3; h0 <= 3; h0++) {             // 头排起点相对放置点（沿轴标量）
           const hx = x + ax * h0, hz = z + az * h0;
-          const bx0 = hx + ax * off, bz0 = hz + az * off;
           let ok = true;
-          for (let i = 0; i < 3 && ok; i++) if (get(hx + ax * i, hy, hz + az * i) !== SKULL) ok = false;
-          for (let i = 0; i < 4 && ok; i++) if (get(bx0 + ax * i, by, bz0 + az * i) !== SAND) ok = false;
+          for (let i = 0; i < 3 && ok; i++) if (get(hx + ax * i, ty, hz + az * i) !== SKULL) ok = false;
           if (!ok) continue;
-          for (let i = 0; i < 3; i++) this.world.setBlock(hx + ax * i, hy, hz + az * i, 0);
-          for (let i = 0; i < 4; i++) this.world.setBlock(bx0 + ax * i, by, bz0 + az * i, 0);
-          const cx = bx0 + ax * 1.5, cz = bz0 + az * 1.5;
-          this.mobManager._spawnAt('wither', cx, by + 1 + 0.1, cz);
-          if (this.chatBox) this.chatBox.add(t('凋灵从方块中苏醒了…'), '#c9c');
-          return true;
+          if (shape === 'flat') {                      // 兼容平铺：沙排 4 连，头排左/右两种对齐
+            for (const off of [0, -1]) {
+              const bx0 = hx + ax * off, bz0 = hz + az * off;
+              let ok2 = true;
+              for (let i = 0; i < 4 && ok2; i++) if (get(bx0 + ax * i, ty - 1, bz0 + az * i) !== SAND) ok2 = false;
+              if (!ok2) continue;
+              const blocks = [];
+              for (let i = 0; i < 3; i++) blocks.push([hx + ax * i, ty, hz + az * i]);
+              for (let i = 0; i < 4; i++) blocks.push([bx0 + ax * i, ty - 1, bz0 + az * i]);
+              return { blocks, cx: bx0 + ax * 1.5, cz: bz0 + az * 1.5, sy: ty };
+            }
+          } else {                                     // 原版 T：沙排 3 连同列 + 柱底在沙排中列下方一层
+            let ok2 = true;
+            for (let i = 0; i < 3 && ok2; i++) if (get(hx + ax * i, ty - 1, hz + az * i) !== SAND) ok2 = false;
+            if (!ok2) continue;
+            if (get(hx + ax, ty - 2, hz + az) !== SAND) continue;
+            const blocks = [];
+            for (let i = 0; i < 3; i++) blocks.push([hx + ax * i, ty, hz + az * i]);
+            for (let i = 0; i < 3; i++) blocks.push([hx + ax * i, ty - 1, hz + az * i]);
+            blocks.push([hx + ax, ty - 2, hz + az]);
+            return { blocks, cx: hx + ax + 0.5, cz: hz + az + 0.5, sy: ty - 1 };
+          }
         }
       }
-    }
-    return false;
+      return null;
+    };
+    // 头/沙的层位由放置物决定：放头 → 头层 y；放沙 → 沙排 y（头层 y+1）或柱底 y（头层 y+2）
+    const hit = placed === SKULL
+      ? (scan(y, 't') || scan(y, 'flat'))
+      : (scan(y + 2, 't') || scan(y + 1, 't') || scan(y + 1, 'flat'));
+    if (!hit) return false;
+    for (const [bx, by, bz] of hit.blocks) this.world.setBlock(bx, by, bz, 0);
+    this.mobManager._spawnAt('wither', hit.cx, hit.sy + 0.1, hit.cz);
+    if (this.chatBox) this.chatBox.add(t('凋灵从方块中苏醒了…'), '#c9c');
+    return true;
   }
 
   // ── 信标（Idea-2D-③）────────────────────────────────────────
