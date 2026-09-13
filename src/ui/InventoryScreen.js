@@ -4,14 +4,9 @@ import { SVGTextures } from '../render/SVGTextures.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
 import { matchRecipe } from '../core/Crafting.js';
+import { t } from '../i18n/index.js';
+import { getDisplayName } from './itemName.js';
 
-function getDisplayName(name) {
-  const item = ItemRegistry.getByName(name);
-  if (item && item.displayName && item.displayName !== name) return item.displayName;
-  const block = BlockRegistry.getByName(name);
-  if (block && block.displayName && block.displayName !== name) return block.displayName;
-  return name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
 
 export class InventoryScreen {
   constructor(inventory, player, game) {
@@ -163,7 +158,7 @@ export class InventoryScreen {
     this.panel.style.width = 'max-content';
     
     const title = document.createElement('div');
-    title.textContent = this.craftSize === 3 ? '工作台' : '背包';
+    title.textContent = this.craftSize === 3 ? t('工作台') : t('背包');
     title.style.cssText = 'font-size: 14px; margin-bottom: 8px; color: #333;';
     this.panel.appendChild(title);
     
@@ -196,7 +191,7 @@ export class InventoryScreen {
     topRow.appendChild(craftArea);
     const armorArea = document.createElement('div');
     const armorLabel = document.createElement('div');
-    armorLabel.textContent = '盔甲';
+    armorLabel.textContent = t('盔甲');
     armorLabel.style.cssText = 'font-size: 12px; margin-bottom: 4px; color: #555;';
     armorArea.appendChild(armorLabel);
     armorArea.appendChild(this.makeGrid(2, 2, 'armor'));
@@ -221,7 +216,7 @@ export class InventoryScreen {
     this.panel.style.width = 'max-content';
     
     const title = document.createElement('div');
-    title.textContent = '创造模式 - 点击取物品';
+    title.textContent = t('创造模式 - 点击取物品');
     title.style.cssText = 'font-size: 14px; margin-bottom: 8px; color: #333;';
     this.panel.appendChild(title);
     

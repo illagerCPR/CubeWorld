@@ -2,14 +2,7 @@
 import { SVGTextures } from '../render/SVGTextures.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
-
-function getDisplayName(name) {
-  const item = ItemRegistry.getByName(name);
-  if (item && item.displayName && item.displayName !== name) return item.displayName;
-  const block = BlockRegistry.getByName(name);
-  if (block && block.displayName && block.displayName !== name) return block.displayName;
-  return name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
+import { getDisplayName } from './itemName.js';
 
 export class Hotbar {
   constructor(inventory) {

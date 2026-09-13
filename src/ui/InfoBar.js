@@ -1,4 +1,5 @@
 // InfoBar.js -- 游戏内左上角信息栏：坐标 / 生物群系 / 时间 / 准星目标 / 所处建筑 /（联机）网络 RTT
+import { t } from '../i18n/index.js';
 import { BiomeNames } from '../world/biomes.js';
 
 const BUILDING_CHECK_INTERVAL = 500; // 建筑归属查询节流（毫秒）——recordsAround 按需求解不宜每帧
@@ -56,16 +57,16 @@ export class InfoBar {
     const biome = generator.getBiome(x, z);
     const biomeLabel = generator.biomeNames ? generator.biomeNames[biome] : BiomeNames[biome];
     this.biomeLine.textContent = dimensionName
-      ? `维度: ${dimensionName} ｜ 生物群系: ${biomeLabel || '未知'}`
-      : `生物群系: ${biomeLabel || '未知'}`;
+      ? t('维度: {d} ｜ 生物群系: {b}', { d: t(dimensionName), b: biomeLabel ? t(biomeLabel) : t('未知') })
+      : t('生物群系: {b}', { b: biomeLabel ? t(biomeLabel) : t('未知') });
 
     if (sky) {
       if (sky.dimDef && sky.dimDef.sky && sky.dimDef.sky.polarDay) {
         // 永昼维度（天域）：太阳恒亮无时钟语义
-        this.timeLine.textContent = '时间: 永昼';
+        this.timeLine.textContent = t('时间: 永昼');
       } else if (sky.dimDef && sky.dimDef.noDayCycle) {
         // 无昼夜维度（下界/末地）：时钟无意义
-        this.timeLine.textContent = '时间: 无昼夜';
+        this.timeLine.textContent = t('时间: 无昼夜');
       } else {
         const t = sky.time;
         const totalMinutes = Math.floor(t * 24 * 60);
@@ -73,12 +74,12 @@ export class InfoBar {
         const mm = totalMinutes % 60;
         const hhStr = String(hh).padStart(2, '0');
         const mmStr = String(mm).padStart(2, '0');
-        this.timeLine.textContent = `时间: ${hhStr}:${mmStr}`;
+        this.timeLine.textContent = t('时间: {t}', { t: `${hhStr}:${mmStr}` });
       }
     }
 
     if (crosshairInfo) {
-      const label = crosshairInfo.type === 'mob' ? '准星实体' : '准星方块';
+      const label = crosshairInfo.type === 'mob' ? t('准星实体') : t('准星方块');
       this.targetLine.textContent = `${label}: ${crosshairInfo.displayName}`;
     } else {
       this.targetLine.textContent = '';
@@ -93,7 +94,7 @@ export class InfoBar {
     }
     if (this._building) {
       this.buildingLine.style.display = 'block';
-      this.buildingLine.textContent = `建筑: ${this._building}`;
+      this.buildingLine.textContent = t('建筑: {b}', { b: t(this._building) });
     } else {
       this.buildingLine.style.display = 'none';
     }
@@ -102,8 +103,8 @@ export class InfoBar {
       this.rttLine.style.display = 'block';
       // 阶段11：抖动可测时显示 ± 部分（jitter 为相邻 RTT 样本差的 EMA，向上取整）
       this.rttLine.textContent = rttJitterMs != null
-        ? `网络: ${Math.round(rttMs)}ms ±${Math.ceil(rttJitterMs)}ms`
-        : `网络: ${Math.round(rttMs)}ms`;
+        ? t('网络: {v}', { v: `${Math.round(rttMs)}ms ±${Math.ceil(rttJitterMs)}ms` })
+        : t('网络: {v}', { v: `${Math.round(rttMs)}ms` });
     } else {
       this.rttLine.style.display = 'none';
     }

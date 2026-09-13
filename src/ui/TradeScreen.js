@@ -6,14 +6,8 @@ import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
 import { ensureStoneStyles } from './StoneStyle.js';
 import { villagerTrades } from '../world/loot.js';
-
-function getDisplayName(name) {
-  const item = ItemRegistry.getByName(name);
-  if (item && item.displayName && item.displayName !== name) return item.displayName;
-  const block = BlockRegistry.getByName(name);
-  if (block && block.displayName && block.displayName !== name) return block.displayName;
-  return name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
+import { t } from '../i18n/index.js';
+import { getDisplayName } from './itemName.js';
 
 export class TradeScreen {
   constructor(game) {
@@ -101,7 +95,7 @@ export class TradeScreen {
   render() {
     this.panel.innerHTML = '';
     const title = document.createElement('div');
-    title.textContent = '村民交易';
+    title.textContent = t('村民交易');
     title.style.cssText = 'font-size: 14px; margin-bottom: 10px; color: #333;';
     this.panel.appendChild(title);
 
@@ -115,7 +109,7 @@ export class TradeScreen {
     }
 
     const hint = document.createElement('div');
-    hint.textContent = '按 E / ESC 关闭 · 手持绿宝石可与村民换取货物';
+    hint.textContent = t('按 E / ESC 关闭 · 手持绿宝石可与村民换取货物');
     hint.style.cssText = 'font-size: 12px; color: #555; margin-top: 10px;';
     this.panel.appendChild(hint);
   }
@@ -163,7 +157,7 @@ export class TradeScreen {
     const ok = this._countOf(trade.give.name) >= trade.give.count;
     ensureStoneStyles();
     btn.className = 'cw-stone-btn';
-    btn.textContent = '交易';
+    btn.textContent = t('交易');
     btn.disabled = !ok;
     btn.style.cssText = `
       margin-left: 8px; padding: 6px 14px; font-size: 13px; cursor: ${ok ? 'pointer' : 'not-allowed'};

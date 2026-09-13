@@ -1,6 +1,7 @@
 // PauseMenu.js -- 游戏暂停菜单
 import { SaveSystem } from '../core/SaveSystem.js';
 import { ensureStoneStyles } from './StoneStyle.js';
+import { t, onLocaleChange } from '../i18n/index.js';
 
 export class PauseMenu {
   constructor(game) {
@@ -24,7 +25,7 @@ export class PauseMenu {
     this.el.appendChild(panel);
 
     const title = document.createElement('div');
-    title.textContent = '游戏暂停';
+    title.textContent = t('游戏暂停');
     title.style.cssText = 'font-size:24px; font-weight:bold; text-align:center; margin-bottom:8px; letter-spacing:2px;';
     panel.appendChild(title);
     this.title = title;
@@ -49,23 +50,23 @@ export class PauseMenu {
       if (this.saveBtn.disabled) return;
       if (this.game.world) SaveSystem.save(this.game);
       this.saveBtn.disabled = true;
-      this.saveBtn.textContent = '✓ 已保存';
+      this.saveBtn.textContent = t('✓ 已保存');
       setTimeout(() => {
         if (!this.saveBtn) return;
         this.saveBtn.disabled = false;
-        this.saveBtn.textContent = '保存游戏';
+        this.saveBtn.textContent = t('保存游戏');
       }, 1200);
     });
     // 视频设置：显示共用面板，关闭后回到暂停菜单（保持暂停态）
     this.videoBtn.addEventListener('click', () => {
       if (!this.game.videoSettings) return;
       this.mainView.style.display = 'none';
-      this.title.textContent = '视频设置';
+      this.title.textContent = t('视频设置');
       this.game.videoSettings.onHide = () => {
         this.game.videoSettings.onHide = null;
         if (this.visible) {
           this.mainView.style.display = 'flex';
-          this.title.textContent = '游戏暂停';
+          this.title.textContent = t('游戏暂停');
         }
       };
       this.game.videoSettings.show();
@@ -74,14 +75,26 @@ export class PauseMenu {
       this.game.returnToMenu(true);
     });
 
+    // 语言切换（Build 5 i18n）：常驻文本即时重绘
+    this._unbindLocale = onLocaleChange(() => this._applyLang());
+
     document.body.appendChild(this.el);
+  }
+
+  // 常驻文本统一刷新（构造 + 语言切换共用；label 传原文，_mkBtn/t 负责翻译）
+  _applyLang() {
+    this.title.textContent = t('游戏暂停');
+    this.resumeBtn.textContent = t('继续游戏');
+    this.saveBtn.textContent = this.saveBtn.disabled ? t('✓ 已保存') : t('保存游戏');
+    this.videoBtn.textContent = t('视频设置');
+    this.exitBtn.textContent = t('保存并回到标题');
   }
 
   _mkBtn(label, extraClass = '') {
     ensureStoneStyles();
     const b = document.createElement('button');
     b.className = `cw-stone-btn${extraClass ? ' ' + extraClass : ''}`;
-    b.textContent = label;
+    b.textContent = t(label); // 约定：label 传简体中文原文，此处统一翻译
     b.style.cssText = 'padding:10px 18px; font-size:15px;';
     return b;
   }
@@ -106,7 +119,11 @@ export class PauseMenu {
     if (this.game.controls) this.game.controls.enabled = true;
     // 复位子视图（视频设置面板打开时被外部关闭等）
     if (this.mainView) this.mainView.style.display = 'flex';
-    if (this.title) this.title.textContent = '游戏暂停';
+    if (this.title) this.title.textContent = t('游戏暂停');
     if (this.game.videoSettings && this.game.videoSettings.visible) this.game.videoSettings.hide();
+  }
+
+  dispose() {
+    if (this._unbindLocale) this._unbindLocale();
   }
 }

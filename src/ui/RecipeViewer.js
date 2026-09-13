@@ -9,6 +9,8 @@ import { getAllSmeltingRecipes, getFuelTime, SMELT_TIME } from '../core/Smelting
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
 import { SVGTextures } from '../render/SVGTextures.js';
+import { t } from '../i18n/index.js';
+import { getDisplayName } from './itemName.js';
 
 const FAV_KEY = 'cubeworld-jei-favorites';
 const PANEL_KEY = 'cubeworld-jei-panel-enabled';
@@ -22,14 +24,6 @@ const LIST_MIN_COLS = 3;
 const PANEL_GAP = 10;    // 面板与物品栏 / 屏幕边缘的间距
 const FAV_DEFAULT_COLS = 2;
 const LIST_DEFAULT_COLS = 9;
-
-function getDisplayName(name) {
-  const item = ItemRegistry.getByName(name);
-  if (item && item.displayName && item.displayName !== name) return item.displayName;
-  const block = BlockRegistry.getByName(name);
-  if (block && block.displayName && block.displayName !== name) return block.displayName;
-  return name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
 
 export class RecipeViewer {
   constructor(game) {
@@ -83,7 +77,7 @@ export class RecipeViewer {
 
     // ── 全物品 ──
     this.searchInput = document.createElement('input');
-    this.searchInput.placeholder = '搜索物品…';
+    this.searchInput.placeholder = t('搜索物品…');
     this.searchInput.value = this._searchText;
     this.searchInput.style.cssText = `
       padding: 4px 8px; border: 2px solid #555; background: #8b8b8b;
@@ -97,8 +91,8 @@ export class RecipeViewer {
     this.searchInput.addEventListener('keydown', (e) => e.stopPropagation());
     this.listEl.appendChild(this.searchInput);
     const listHead = document.createElement('div');
-    listHead.textContent = '全部物品';
-    listHead.title = '点击看配方 / 右键看用途 / A 收藏';
+    listHead.textContent = t('全部物品');
+    listHead.title = t('点击看配方 / 右键看用途 / A 收藏');
     listHead.style.cssText = 'font-size: 11px; font-weight: bold; color: #333; margin: 4px 0; flex: none;';
     this.listEl.appendChild(listHead);
     this.listGrid = document.createElement('div');
@@ -385,7 +379,7 @@ export class RecipeViewer {
     this.popEl.style.display = show ? 'flex' : 'none';
     if (!show) return;
     this.popScroll.innerHTML = '';
-    const modeLabel = this.mode === 'usages' ? '用途（作为材料）' : '获取配方';
+    const modeLabel = this.mode === 'usages' ? t('用途（作为材料）') : t('获取配方');
     this.popName.innerHTML = `<b>${getDisplayName(this.current)}</b> · ${modeLabel}`;
 
     const { crafting, smelting } = this.mode === 'usages'
@@ -394,7 +388,7 @@ export class RecipeViewer {
 
     if (crafting.length === 0 && smelting.length === 0) {
       const none = document.createElement('div');
-      none.textContent = this.mode === 'usages' ? '没有以该物品为材料的配方' : '没有已注册的配方（可能只能从世界获取）';
+      none.textContent = this.mode === 'usages' ? t('没有以该物品为材料的配方') : t('没有已注册的配方（可能只能从世界获取）');
       none.style.cssText = 'font-size: 12px; color: #444; padding: 6px;';
       this.popScroll.appendChild(none);
     }
@@ -418,7 +412,7 @@ export class RecipeViewer {
     // 操作提示行
     const ops = document.createElement('div');
     ops.style.cssText = 'font-size: 11px; color: #444; margin-top: 6px; flex: none;';
-    ops.innerHTML = 'R 配方 · U 用途 · A 收藏当前/悬浮物品';
+    ops.innerHTML = t('R 配方 · U 用途 · A 收藏当前/悬浮物品');
     this.popScroll.appendChild(ops);
 
     this._layout(); // 弹窗当帧立即定位（覆盖物品栏之上）

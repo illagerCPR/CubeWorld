@@ -8,9 +8,18 @@ import { NetworkManager } from './net/NetworkManager.js';
 import { Panorama } from './render/Panorama.js';
 import { VideoSettings } from './ui/VideoSettings.js';
 import { audio } from './audio/AudioEngine.js';
+import { loadSettings } from './core/Settings.js';
+import { initLocale, t } from './i18n/index.js';
 
 // 音频解锁：首次用户手势后创建 AudioContext（自动播放策略规避，幂等）
 audio.installUnlock();
+
+// 语言初始化（Build 5 i18n）：越早越好——index.html 静态加载文案随之替换
+initLocale(loadSettings().language);
+{
+  const loadingInner = document.querySelector('#loading > div');
+  if (loadingInner) loadingInner.textContent = t('世界生成中...');
+}
 
 const app = document.getElementById('app');
 const game = new Game(app);

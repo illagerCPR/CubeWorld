@@ -65,3 +65,16 @@
 - **架构（B-①）**：`TerrainWorker.js`（每 seed+规模缓存生成器 LRU≤4，`chunk.blocks.buffer` Transferable）+ `TerrainWorkerClient`（请求队列 RR 分发 2 worker，`broken` 标志熔断）。**World.ensureChunk 保持同步**（setBlock 等大量调用方依赖）；新增 `requestChunk(cx,cz)`：已有/在途返回 true，不可用返回 false，调用方 `if (!requestChunk()) ensureChunk()` 回退。`_finalizeChunk(c)` = applyModifications → initChunkLight → 作物扫描公共收尾，**顺序勿变**（LightEngine 邻居导入语义耦合）；worker 回执在 `chunks.set` 后 finalize，与同步路径逐语句一致。回执落地时同步路径已建 → 丢弃；`.catch` 置 `broken=true` 熔断回退。
 - **门控与生命周期**：仅主世界注入（dimension==='overworld'，nether/end/aether 生成器类不同）；注入点在 `Game.start` 的 `new World` 后（换维/联机重启全走 start，天然覆盖）；`_disposeWorld` 首行 `terrainWorker.dispose()` terminate（新建型资源，跨存档必须销毁）。
 - **验证锚点**：瞬移远端 → `world.chunks.size==169` 且 patch 实例 `generator.generateChunk` 计数 **syncGens==0**（全 worker）；`terrainWorker.broken=true` 后再瞬移 → syncGens 增 169（回退接管）；worker 生成块 `hasLight==true`；returnToMenu 后 worker terminate。headless 无 Worker 环境自动走同步路径（构造失败 onerror→broken）。
+
+### Build 5 本地化（i18n）批次备忘（防回退）
+
+- **核心约定：t() 以简体中文原文为键**（`t('单人游戏')`）——zh-CN 零字典直接返回原文，`zh-TW`/`en` 查包缺项回落原文。**勿改成英文 key 体系**（等于重写全部接线）；新加界面文本时 zh-TW/en 两包要同步补键（grep 原文即可找全）。
+- **模块**：`src/i18n/index.js`（`t` / `initLocale`（启动静默）/ `setLocale`（用户切换+通知）/ `onLocaleChange` / `LOCALES` / `localeLabel`）+ `locales/zh-TW.js`、`locales/en.js`；**语言选择持久化在 Settings.language**（loadSettings 白名单清洗，非法值回落 zh-CN），`main.js` 最先 `initLocale(loadSettings().language)` 并替换 index.html 静态"世界生成中..."。
+- **名称三语走 `src/i18n/names.js`**（`NAME_I18N[注册名] = [简,繁,en]`，覆盖 BlockCN+ItemCN+内联 displayName+MobTypes ≈ 226 条）+ `src/i18n/name.js` 的 `tName(name, fallback)`（简体 idx=0 直接返回 fallback=注册侧中文，繁/英查表缺项回落）。**注册侧（BlockCN/ItemCN/MobTypes.displayName）保持简体不动**——数据层中文，出口处翻译。
+- **显示名统一出口 `src/ui/itemName.js` 的 `getDisplayName(name)`**：原 Hotbar/InventoryScreen/ChestScreen/FurnaceScreen/TradeScreen/RecipeViewer 六份本地副本已删除改共享 import——**勿再新建本地副本**（会绕过翻译）。怪物名出口：`tName(mob.type.name, mob.type.displayName)`（BossBar/CommandPanel/crosshair 三处）。
+- **语言切换入口**：VideoSettings「音频与操作」组「语言」行（循环三语，`setLocale` + `_apply` 即存）。**常驻 UI 刷新靠 `onLocaleChange`**：MenuScreen（render 当前页）/ PauseMenu / DeathScreen（`_applyLang()` + dispose 解绑）；容器类界面打开时才渲染天然自愈。新加常驻 UI（构造时写死文本）必须注册 onLocaleChange。
+- **陷阱 1（t 变量名遮蔽）**：Game.js 准星分支与 CommandPanel._refreshTimeLabel 有局部变量 `t`——后者已改名 `timeVal`，前者块内只用 `tName`；新代码在含局部 `t` 的作用域内需要翻译函数时用 `tName` 或重命名局部变量。
+- **陷阱 2（_mkBtn 约定）**：PauseMenu/DeathScreen/CommandPanel 的 `_mkBtn(label)` 约定 label 传**简体中文原文**、内部统一 `t(label)`——调用点不要再包一层 t（双重翻译目前无害但语义错）。
+- **服务器侧文本不翻译**（踢出原因/房间开关提示等随协议下发）——客户端 `chatBox.add` 里对 `fromId===0` 服务器系统回复原样显示；本批只本地化客户端自身文案（Game.js ~25 条系统提示已 t() 化）。
+- **存档时间本地化**：MenuScreen 槽位 `toLocaleString(getLocale())`（原硬编码 'zh-CN'）。
+- **验证锚点**：视频设置切 English → 主菜单/HUD/暂停/信标界面全英文；`localStorage['cubeworld-settings'].language` 持久化；刷新后仍英文；方块名（快捷栏气泡/准星）三语切换。

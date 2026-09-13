@@ -4,14 +4,8 @@
 import { SVGTextures } from '../render/SVGTextures.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
-
-function getDisplayName(name) {
-  const item = ItemRegistry.getByName(name);
-  if (item && item.displayName && item.displayName !== name) return item.displayName;
-  const block = BlockRegistry.getByName(name);
-  if (block && block.displayName && block.displayName !== name) return block.displayName;
-  return name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
+import { t } from '../i18n/index.js';
+import { getDisplayName } from './itemName.js';
 
 export class ChestScreen {
   constructor(game) {
@@ -149,7 +143,7 @@ export class ChestScreen {
     this.panel.style.width = 'max-content';
 
     const title = document.createElement('div');
-    title.textContent = '箱子';
+    title.textContent = t('箱子');
     title.style.cssText = 'font-size: 14px; margin-bottom: 8px; color: #333;';
     this.panel.appendChild(title);
 

@@ -4,6 +4,7 @@
 import { RenderQuality } from '../render/ChunkMesh.js';
 import { VoxelLightUniforms } from '../render/VoxelLight.js';
 import { audio } from '../audio/AudioEngine.js';
+import { LOCALES } from '../i18n/index.js';
 
 const KEY = 'cubeworld-settings';
 
@@ -24,6 +25,7 @@ export const DEFAULT_SETTINGS = {
   sound: true,         // 音效总开关
   volume: 60,          // 0..100 主音量
   music: true,         // 音乐（BGM/环境风声）开关
+  language: 'zh-CN',   // 界面语言（Build 5 i18n：zh-CN | zh-TW | en）
 };
 
 export const GFX_ORDER = ['off', 'basic', 'full'];
@@ -55,6 +57,7 @@ export function loadSettings() {
         if (saved.sound !== undefined) s.sound = !!saved.sound;
         if (saved.volume !== undefined) s.volume = clamp(Math.round(saved.volume), 0, 100);
         if (saved.music !== undefined) s.music = !!saved.music;
+        if (LOCALES.some(l => l.id === saved.language)) s.language = saved.language;
       }
     }
   } catch { /* 损坏的设置按默认处理 */ }

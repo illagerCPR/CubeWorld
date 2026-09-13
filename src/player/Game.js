@@ -18,7 +18,10 @@ import { Hud } from '../ui/Hud.js';
 import { InfoBar } from '../ui/InfoBar.js';
 import { InventoryScreen } from '../ui/InventoryScreen.js';
 import { ChestScreen } from '../ui/ChestScreen.js';
-import { BeaconScreen } from '../ui/BeaconScreen.js';
+import { BeaconScreen, BEACON_EFFECTS } from '../ui/BeaconScreen.js';
+import { t } from '../i18n/index.js';
+import { tName } from '../i18n/name.js';
+import { getDisplayName } from '../ui/itemName.js';
 import { FurnaceScreen } from '../ui/FurnaceScreen.js';
 import { RecipeViewer } from '../ui/RecipeViewer.js';
 import { TradeScreen } from '../ui/TradeScreen.js';
@@ -57,6 +60,12 @@ import { playerColorCss } from '../net/playerColor.js';
 
 // 工具挖掘速度倍率（按物品 tier；金质单独 9 倍——原版金工具挖得快但等级低）
 const TOOL_TIER_SPEED = { 1: 2, 2: 4, 3: 6, 4: 8 };
+
+// 信标效果名（英文）→ 当前语言显示名（语言包键 = 效果中文 label，见 BeaconScreen.BEACON_EFFECTS）
+function beaconEffectLabel(name) {
+  const e = BEACON_EFFECTS.find(x => x[0] === name);
+  return t(e ? e[1] : name);
+}
 
 // 挖矿经验（原版口径：煤/红石/青金/钻/绿宝给，铁金不给；门控掉落成功才结算）
 const ORE_XP = {
@@ -482,7 +491,7 @@ export class Game {
         if (!info) return; // 未抢先拾取（本地预判已拦下），无需回滚
         this.inventory.removeItems(info.name, info.count);
         if (this.hotbar) this.hotbar.update();
-        if (this.chatBox) this.chatBox.add('该掉落物仍归属其主人，已归还。', '#fa8');
+        if (this.chatBox) this.chatBox.add(t('该掉落物仍归属其主人，已归还。'), '#fa8');
       });
       // 红石源状态（lever/button）：低频广播让各端 poweredBlocks 对齐
       if (this.redstone) this.redstone.onStateChange = (x, y, z, on) => this.net.sendRedstoneState(x, y, z, on);
@@ -499,7 +508,7 @@ export class Game {
       });
       this.net.on('attacked', ({ damage }) => { this.player.hurt(damage, 'player', true); });
       this.chatBox = new ChatBox(this, (text) => this.net.sendChat(text));
-      this.chatBox.add(`已进入局域网世界 · 房间「${this.net.room || 'default'}」 · 按 T 聊天（/room 换房 /rebuild 重建世界 host）`, '#ff8');
+      this.chatBox.add(t('已进入局域网世界 · 房间「{r}」 · 按 T 聊天（/room 换房 /rebuild 重建世界 host）', { r: this.net.room || 'default' }), '#ff8');
     }
 
     // 隐藏加载界面
@@ -517,7 +526,7 @@ export class Game {
       console.error('游戏启动失败:', e);
       const loading = document.getElementById('loading');
       if (loading) {
-        loading.innerHTML = `<div style="color:#f88;font-size:16px;text-align:center;padding:20px;">游戏启动失败: ${e.message}<br><br>请按 F5 刷新或清除 localStorage 后重试</div>`;
+        loading.innerHTML = `<div style="color:#f88;font-size:16px;text-align:center;padding:20px;">${t('游戏启动失败: {msg}', { msg: e.message })}<br><br>${t('请按 F5 刷新或清除 localStorage 后重试')}</div>`;
       }
     }
   }
@@ -1287,12 +1296,12 @@ export class Game {
       const mh = this.mobManager.findMobByRay(origin, dir, maxDist);
       if (mh && mh.distance < blockDist) {
         const t = mh.mob.type;
-        info = { type: 'mob', displayName: t.displayName || t.name, name: t.name };
+        info = { type: 'mob', displayName: tName(t.name, t.displayName || t.name), name: t.name };
       }
     }
     if (!info && hit) {
       const def = BlockRegistry.getById(hit.id);
-      info = { type: 'block', displayName: def ? def.displayName : '未知', name: def ? def.name : '?' };
+      info = { type: 'block', displayName: def ? getDisplayName(def.name) : t('未知'), name: def ? def.name : '?' };
     }
     this.crosshairInfo = info;
   }
@@ -1501,9 +1510,9 @@ export class Game {
         this.bedSpawn = { x: furnaceHit.block.x, y: furnaceHit.block.y, z: furnaceHit.block.z, dimension: this.world.dimension };
         if (!this.networkMode && this.sky.isNight()) {
           this.sky.time = 0.25; // 日出
-          if (this.chatBox) this.chatBox.add('你睡了一觉，重生点已设置', '#cfc');
+          if (this.chatBox) this.chatBox.add(t('你睡了一觉，重生点已设置'), '#cfc');
         } else if (this.chatBox) {
-          this.chatBox.add(this.networkMode ? '重生点已设置（联机时间由服务器管理）' : '重生点已设置（夜晚右键床可直接入睡）', '#cfc');
+          this.chatBox.add(this.networkMode ? t('重生点已设置（联机时间由服务器管理）') : t('重生点已设置（夜晚右键床可直接入睡）'), '#cfc');
         }
         this.controls.mouseRight = false;
         return;
@@ -1655,7 +1664,7 @@ export class Game {
       const dirs = ['北', '东北', '东', '东南', '南', '西南', '西', '西北'];
       const ang = Math.atan2(dx, -dz);
       const dirName = dirs[((Math.round(ang / (Math.PI / 4)) % 8) + 8) % 8];
-      if (this.chatBox) this.chatBox.add(`末影之眼飞向${dirName}方（约 ${Math.round(Math.sqrt(bestD))} 格）`, '#c8f');
+      if (this.chatBox) this.chatBox.add(t('末影之眼飞向{d}方（约 {n} 格）', { d: t(dirName), n: Math.round(Math.sqrt(bestD)) }), '#c8f');
       const mesh = new THREE.Mesh(
         new THREE.SphereGeometry(0.12, 8, 8),
         new THREE.MeshBasicMaterial({ color: 0x66ffcc })
@@ -1926,7 +1935,7 @@ export class Game {
       this.world.setBlock(bx, by, bz, 0);
     }
     this.mobManager._spawnAt('iron_golem', hx + 0.5, hy - 2 + 0.1, hz + 0.5);
-    if (this.chatBox) this.chatBox.add('铁傀儡从方块中苏醒了…', '#cfc');
+    if (this.chatBox) this.chatBox.add(t('铁傀儡从方块中苏醒了…'), '#cfc');
     return true;
   }
 
@@ -1958,7 +1967,7 @@ export class Game {
           for (let i = 0; i < 4; i++) this.world.setBlock(bx0 + ax * i, by, bz0 + az * i, 0);
           const cx = bx0 + ax * 1.5, cz = bz0 + az * 1.5;
           this.mobManager._spawnAt('wither', cx, by + 1 + 0.1, cz);
-          if (this.chatBox) this.chatBox.add('凋灵从方块中苏醒了…', '#c9c');
+          if (this.chatBox) this.chatBox.add(t('凋灵从方块中苏醒了…'), '#c9c');
           return true;
         }
       }
@@ -1971,13 +1980,14 @@ export class Game {
   // 每 4s 给范围内玩家刷新效果（12s 时长，金字塔等级决定强度与范围）。
   // 效果选择为内存级状态（随会话）；方块本身走账本；光柱为纯视觉 mesh。
 
-  // 金字塔等级：从信标正下方逐层向上检测（层 1=5×5 … 层 4=11×11），断层即停
+  // 金字塔等级：从信标正下方逐层向上检测（层 1=3×3 … 层 4=9×9），断层即停
+  // Build 5 修复：与原版一致，首层 3×3 起（原误为 5×5 起，整塔多耗 40 块）
   _getBeaconPower(x, y, z) {
     if (!this.world) return 0;
     const VALID = new Set(['iron_block', 'gold_block', 'diamond_block', 'emerald_block'].map(n => BlockRegistry.getId(n)));
     let power = 0;
     for (let l = 1; l <= 4; l++) {
-      const half = l + 1; // 层 1 → 5×5，层 4 → 11×11
+      const half = l; // 层 1 → 3×3，层 2 → 5×5，层 3 → 7×7，层 4 → 9×9
       let ok = true;
       for (let dx = -half; dx <= half && ok; dx++) {
         for (let dz = -half; dz <= half && ok; dz++) {
@@ -1996,7 +2006,7 @@ export class Game {
     this.beacons.set(key, { x, y, z, effect: name, level, lastPower: level });
     this._ensureBeaconBeam(key, x, y, z);
     this._pulseBeacon(this.beacons.get(key), level);
-    if (this.chatBox) this.chatBox.add(`信标已激活：${name} ×${Math.min(2, level)}`, '#ffd');
+    if (this.chatBox) this.chatBox.add(t('信标已激活：{n} ×{l}', { n: beaconEffectLabel(name), l: Math.min(2, level) }), '#ffd');
   }
 
   _pulseBeacon(b, power) {
@@ -2076,12 +2086,12 @@ export class Game {
     if (this.world.getBlock(cx, cy, cz) !== 0) return false;
     const det = detectPortalInterior(this.world, cx, cy, cz, targetDef.id);
     if (!det) {
-      if (this.chatBox) this.chatBox.add('传送门框架不完整（内部至少 2×3，框边须封闭）', '#fa8');
+      if (this.chatBox) this.chatBox.add(t('传送门框架不完整（内部至少 2×3，框边须封闭）'), '#fa8');
       return true;
     }
     this.hand.swing();
     fillPortal(this.world, det, portalBlockId(kind));
-    if (this.chatBox) this.chatBox.add(kind === 'nether' ? '下界传送门被点亮了…' : '天域传送门被点亮了…', '#a7f');
+    if (this.chatBox) this.chatBox.add(kind === 'nether' ? t('下界传送门被点亮了…') : t('天域传送门被点亮了…'), '#a7f');
     return true;
   }
 
@@ -2103,9 +2113,9 @@ export class Game {
     const after = detectEndRing(this.world, bx, by, bz, FRAME, EYE);
     if (after && after.eyes === 12) {
       fillEndPortalCenter(this.world, after, PORTAL);
-      if (this.chatBox) this.chatBox.add('末地传送门被激活了——跳进去！', '#a7f');
+      if (this.chatBox) this.chatBox.add(t('末地传送门被激活了——跳进去！'), '#a7f');
     } else if (after) {
-      if (this.chatBox) this.chatBox.add(`末影之眼嵌入框架（${after.eyes}/12）`, '#a7f');
+      if (this.chatBox) this.chatBox.add(t('末影之眼嵌入框架（{n}/12）', { n: after.eyes }), '#a7f');
     }
     return true;
   }
@@ -2203,7 +2213,7 @@ export class Game {
     }
     if (!target) return;
     const def = getDimension(target);
-    if (this.chatBox) this.chatBox.add(`传送门轰鸣着将你送往「${def.name}」…`, '#a7f');
+    if (this.chatBox) this.chatBox.add(t('传送门轰鸣着将你送往「{d}」…', { d: t(def.name) }), '#a7f');
     this.switchDimension(target, arrival);
   }
 
@@ -2216,7 +2226,7 @@ export class Game {
     if (!target) return;
     p.set(target.x + 0.5, target.y + 1, target.z + 0.5);
     this.player.velocity.set(0, 0, 0);
-    if (this.chatBox) this.chatBox.add('折跃门的光束把你送往远方的岛屿……', '#a7f');
+    if (this.chatBox) this.chatBox.add(t('折跃门的光束把你送往远方的岛屿……'), '#a7f');
   }
 
   // 传送门到达落地：有坐标落点 → 半径 24 搜既有同类门吸附、无门自动建返程门（原版语义）；
@@ -2239,7 +2249,7 @@ export class Game {
         platform: ARRIVAL_PLATFORM[this.world.dimension] || null,
       });
       this.player.position.set(pos.x, pos.y, pos.z);
-      if (this.chatBox) this.chatBox.add('你在落点建造了一座返程传送门', '#a7f');
+      if (this.chatBox) this.chatBox.add(t('你在落点建造了一座返程传送门'), '#a7f');
     }
     if (pos) this.player.velocity.set(0, 0, 0);
     this._portalCooldown = 4;
@@ -2257,7 +2267,7 @@ export class Game {
       platformY: 64,
       fountain: true,
     });
-    if (this.chatBox) this.chatBox.add('主岛中心升起基岩喷泉——踩上门垫返回主世界', '#a7f');
+    if (this.chatBox) this.chatBox.add(t('主岛中心升起基岩喷泉——踩上门垫返回主世界'), '#a7f');
   }
 
   // 出生点 16 格内是否已有激活回程门（_ensureEndReturnPad 与 _ensureDragon 共用）
@@ -2289,7 +2299,7 @@ export class Game {
     } else {
       this.mobManager.spawnMob(mob);
     }
-    if (this.chatBox) this.chatBox.add('末影龙的咆哮在虚空回荡……', '#c5f');
+    if (this.chatBox) this.chatBox.add(t('末影龙的咆哮在虚空回荡……'), '#c5f');
   }
 
   // 末影龙被击败：置标记 + 激活末地奖励（返回门喷泉 + 主岛缘/外岛缘折跃门阵列）
@@ -2297,7 +2307,7 @@ export class Game {
   _onDragonDefeated(mob) {
     if (!this.world) return;
     this.world.dragonDefeated = true;
-    if (this.chatBox) this.chatBox.add('末影龙被击败了！', '#c5f');
+    if (this.chatBox) this.chatBox.add(t('末影龙被击败了！'), '#c5f');
     if (this.world.dimension === 'end') this._activateEndRewards();
   }
 
@@ -2318,7 +2328,7 @@ export class Game {
       if (id !== 0) {
         if (this.world.getBlock(0, y + 1, 0) === 0) {
           this.world.setBlock(0, y + 1, 0, EGG);
-          if (this.chatBox) this.chatBox.add('一枚龙蛋静静出现在主岛中央……', '#c8f');
+          if (this.chatBox) this.chatBox.add(t('一枚龙蛋静静出现在主岛中央……'), '#c8f');
         }
         return;
       }
@@ -2338,7 +2348,7 @@ export class Game {
       buildGatewayPad(this.world, place.inner.x, place.inner.z, { top: 140, platformY: 64 });
       buildGatewayPad(this.world, place.outer.x, place.outer.z, { top: 140, platformY: 64 });
     }
-    if (this.chatBox) this.chatBox.add('主岛边缘升起了数座折跃门——它们通向外岛', '#a7f');
+    if (this.chatBox) this.chatBox.add(t('主岛边缘升起了数座折跃门——它们通向外岛'), '#a7f');
   }
 
   // 盔甲点数合计（armorSlot 未识别/普通物品不计）
@@ -2496,7 +2506,7 @@ export class Game {
       const dmg = Math.round(14 * (1 - d / 8));
       if (dmg > 0) this.player.hurt(dmg, 'explosion', true);
     }
-    if (this.chatBox) this.chatBox.add('末影水晶碎裂，爆发出紫色的冲击！', '#c8f');
+    if (this.chatBox) this.chatBox.add(t('末影水晶碎裂，爆发出紫色的冲击！'), '#c8f');
   }
 
   // 紫颂果食用后随机短距传送（原版机制）：±8 格水平随机落点，下探找立地面，
@@ -2518,7 +2528,7 @@ export class Game {
     if (y < 1) return;
     p.set(tx + 0.5, y, tz + 0.5);
     this.player.velocity.set(0, 0, 0); // 传送落地速度清零（摔落伤害按落地速度计算）
-    if (this.chatBox) this.chatBox.add('紫颂果把你拉向了虚空中的另一处……', '#c8f');
+    if (this.chatBox) this.chatBox.add(t('紫颂果把你拉向了虚空中的另一处……'), '#c8f');
   }
 
   // 传送门落点立足面预解析：临时生成器 + 临时区块探测（纯函数，不碰当前世界）；
@@ -2735,7 +2745,7 @@ export class Game {
     if (this.networkMode) {
       // M4 联机：服务器权威——发请求（携带落点），收 DIMENSION_WORLD 回执后由 applyDimensionWorld 落地
       if (!this.net || dim === this.world.dimension) return false;
-      if (this.chatBox) this.chatBox.add(`正在切换到「${def.name}」…`, '#8f8');
+      if (this.chatBox) this.chatBox.add(t('正在切换到「{d}」…', { d: t(def.name) }), '#8f8');
       this.net.sendSwitchDimension(dim, arrival);
       return true;
     }
@@ -2840,7 +2850,7 @@ export class Game {
       const loadData = this._composeSwitchLoadData(dim, dimBlocks, dimContainers, arrival);
       await this.start(loadData.gamemode, loadData.seed, loadData, this.currentSlot, loadData.cheatsEnabled, this.networkMode);
       if (arrival) this._afterPortalArrival(arrival);
-      if (this.chatBox) this.chatBox.add(`已切换到「${def.name}」`, '#8f8');
+      if (this.chatBox) this.chatBox.add(t('已切换到「{d}」', { d: t(def.name) }), '#8f8');
       return true;
     });
   }
@@ -2881,7 +2891,7 @@ export class Game {
     if (!this.chatBox) return;
     const rp = this.spectateTargetId != null ? this.remotePlayers.get(this.spectateTargetId) : null;
     const who = rp ? `跟随 ${rp.name}` : '自由飞行（无存活玩家）';
-    this.chatBox.add(`观战中 · ${who} · F5 切换目标 / R 重生`, '#aac');
+    this.chatBox.add(t('观战中 · {who} · F5 切换目标 / R 重生', { who }), '#aac');
   }
 
   // 每帧观战相机：跟随目标时第一人称视角贴合目标（平滑后的位置/朝向）；无目标则自由飞行（spectator 已穿墙）

@@ -6,14 +6,8 @@ import { SMELT_TIME, getSmeltingResult, getFuelTime } from '../core/Smelting.js'
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
 import { SVGTextures } from '../render/SVGTextures.js';
-
-function getDisplayName(name) {
-  const item = ItemRegistry.getByName(name);
-  if (item && item.displayName && item.displayName !== name) return item.displayName;
-  const block = BlockRegistry.getByName(name);
-  if (block && block.displayName && block.displayName !== name) return block.displayName;
-  return name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
+import { t } from '../i18n/index.js';
+import { getDisplayName } from './itemName.js';
 
 export class FurnaceScreen {
   constructor(game) {
@@ -139,7 +133,7 @@ export class FurnaceScreen {
     this._slotSigs = {};
 
     const title = document.createElement('div');
-    title.textContent = '熔炉';
+    title.textContent = t('熔炉');
     title.style.cssText = 'font-size: 14px; margin-bottom: 8px; color: #333;';
     this.panel.appendChild(title);
 
@@ -421,7 +415,7 @@ export class FurnaceScreen {
     this._renderFurnaceSlot(fout, this.st.output);
     if (ffuel) {
       const ft = getFuelTime(this.st.fuel ? this.st.fuel.name : null);
-      ffuel.title = ft > 0 ? `燃料：可烧 ${Math.floor(ft / SMELT_TIME)} 个物品` : '';
+      ffuel.title = ft > 0 ? t('燃料：可烧 {n} 个物品', { n: Math.floor(ft / SMELT_TIME) }) : '';
     }
     if (fin) {
       const r = getSmeltingResult(this.st.input ? this.st.input.name : null);

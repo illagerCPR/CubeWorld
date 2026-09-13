@@ -4,6 +4,7 @@
 // 平滑光照开关切换时对所有区块 markAllDirty，网格在后续帧内分批重建。
 import { loadSettings, saveSettings, applySettings, brightnessToMinLight, GFX_ORDER, GFX_LABELS } from '../core/Settings.js';
 import { ensureStoneStyles } from './StoneStyle.js';
+import { t, setLocale, LOCALES, localeLabel } from '../i18n/index.js';
 
 const PARTICLE_LABELS = { all: '全部', decreased: '减少', minimal: '最少' };
 const PARTICLE_ORDER = ['all', 'decreased', 'minimal'];
@@ -45,7 +46,7 @@ export class VideoSettings {
     this.el.appendChild(panel);
 
     const title = document.createElement('div');
-    title.textContent = '视频设置';
+    title.textContent = t('视频设置');
     title.style.cssText = 'font-size: 24px; font-weight: bold; margin-bottom: 16px; letter-spacing: 2px; text-shadow: 2px 2px 0 rgba(0,0,0,0.6);';
     panel.appendChild(title);
 
@@ -65,9 +66,9 @@ export class VideoSettings {
       panel.appendChild(group);
       return grid;
     };
-    const gDisplay = mkGroup('画　面');
-    const gGfx = mkGroup('光影增强');
-    const gAudio = mkGroup('音频与操作');
+    const gDisplay = mkGroup(t('画　面'));
+    const gGfx = mkGroup(t('光影增强'));
+    const gAudio = mkGroup(t('音频与操作'));
 
     const mkRow = (label, groupEl) => {
       const b = document.createElement('button');
@@ -140,6 +141,15 @@ export class VideoSettings {
       this.game.settings.music = !this.game.settings.music;
       this._apply();
     });
+    // 语言（Build 5 i18n）：循环简体中文/繁體中文/English，即选即存，setLocale 通知常驻 UI 重绘
+    mkRow('language', gAudio).addEventListener('click', () => {
+      const s = this.game.settings;
+      const idx = LOCALES.findIndex(l => l.id === s.language);
+      const next = LOCALES[(Math.max(0, idx) + 1) % LOCALES.length];
+      s.language = next.id;
+      setLocale(next.id);
+      this._apply();
+    });
     // 光照增强（三档一键：关闭 / 基础=水面反射+云影 / 完整=再加后处理）
     mkRow('gfx', gGfx).addEventListener('click', () => {
       const s = this.game.settings;
@@ -182,7 +192,7 @@ export class VideoSettings {
     // 完成按钮（跨两列居中）
     const done = document.createElement('button');
     done.className = 'cw-stone-btn';
-    done.textContent = '完成';
+    done.textContent = t('完成');
     done.style.cssText = 'width: 532px; padding: 12px 14px; font-size: 15px; margin-top: 4px;';
     done.addEventListener('click', () => this.hide());
     panel.appendChild(done);
@@ -198,24 +208,26 @@ export class VideoSettings {
 
   _refresh() {
     const s = this.game.settings;
-    this.rows.renderDistance.textContent = `渲染距离: ${s.renderDistance} 区块`;
-    this.rows.fov.textContent = `视野: ${s.fov}`;
-    this.rows.brightness.textContent = `亮度: ${s.brightness}%（最低亮度 ${brightnessToMinLight(s.brightness).toFixed(2)}）`;
-    this.rows.clouds.textContent = `云: ${s.clouds ? '开' : '关'}`;
-    this.rows.particles.textContent = `粒子: ${PARTICLE_LABELS[s.particles] || '全部'}`;
-    this.rows.smoothLighting.textContent = `平滑光照: ${s.smoothLighting ? '开' : '关'}`;
-    this.rows.viewBobbing.textContent = `视角摇晃: ${s.viewBobbing ? '开' : '关'}`;
-    this.rows.sensitivity.textContent = `鼠标灵敏度: ${s.sensitivity}%`;
-    this.rows.volume.textContent = `音量: ${s.volume}%`;
-    this.rows.sound.textContent = `音效: ${s.sound ? '开' : '关'}`;
-    this.rows.music.textContent = `音乐: ${s.music ? '开' : '关'}`;
-    this.rows.gfx.textContent = `光照增强: ${GFX_LABELS[s.gfx] || '关闭'}`;
-    const subHint = s.gfx === 'full' ? '' : '（完整档生效）';
-    this.rows.gfxBloom.textContent = `泛光: ${s.gfxBloom ? '开' : '关'}${subHint}`;
-    this.rows.gfxGodRays.textContent = `体积光: ${s.gfxGodRays ? '开' : '关'}${subHint}`;
-    this.rows.gfxWaterReflection.textContent = `水面真反射: ${s.gfxWaterReflection !== false ? '开' : '关'}${subHint}`;
-    this.rows.gfxShadows.textContent = `太阳阴影: ${s.gfxShadows !== false ? '开' : '关'}${subHint}`;
-    this.fullscreenBtn.textContent = `全屏: ${document.fullscreenElement ? '开（点击退出）' : '关（点击进入）'}`;
+    const onOff = (v) => t(v ? '开' : '关');
+    this.rows.renderDistance.textContent = t('渲染距离: {n} 区块', { n: s.renderDistance });
+    this.rows.fov.textContent = t('视野: {n}', { n: s.fov });
+    this.rows.brightness.textContent = t('亮度: {p}%（最低亮度 {v}）', { p: s.brightness, v: brightnessToMinLight(s.brightness).toFixed(2) });
+    this.rows.clouds.textContent = t('云: {v}', { v: onOff(s.clouds) });
+    this.rows.particles.textContent = t('粒子: {v}', { v: t(PARTICLE_LABELS[s.particles] || '全部') });
+    this.rows.smoothLighting.textContent = t('平滑光照: {v}', { v: onOff(s.smoothLighting) });
+    this.rows.viewBobbing.textContent = t('视角摇晃: {v}', { v: onOff(s.viewBobbing) });
+    this.rows.sensitivity.textContent = t('鼠标灵敏度: {p}%', { p: s.sensitivity });
+    this.rows.volume.textContent = t('音量: {p}%', { p: s.volume });
+    this.rows.sound.textContent = t('音效: {v}', { v: onOff(s.sound) });
+    this.rows.music.textContent = t('音乐: {v}', { v: onOff(s.music) });
+    this.rows.language.textContent = t('语言: {v}', { v: localeLabel(s.language) });
+    this.rows.gfx.textContent = t('光照增强: {v}', { v: t(GFX_LABELS[s.gfx] || '关闭') });
+    const subHint = s.gfx === 'full' ? '' : t('（完整档生效）');
+    this.rows.gfxBloom.textContent = t('泛光: {v}{h}', { v: onOff(s.gfxBloom), h: subHint });
+    this.rows.gfxGodRays.textContent = t('体积光: {v}{h}', { v: onOff(s.gfxGodRays), h: subHint });
+    this.rows.gfxWaterReflection.textContent = t('水面真反射: {v}{h}', { v: onOff(s.gfxWaterReflection !== false), h: subHint });
+    this.rows.gfxShadows.textContent = t('太阳阴影: {v}{h}', { v: onOff(s.gfxShadows !== false), h: subHint });
+    this.fullscreenBtn.textContent = t('全屏: {v}', { v: document.fullscreenElement ? t('开（点击退出）') : t('关（点击进入）') });
   }
 
   show() {

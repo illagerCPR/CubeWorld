@@ -1,5 +1,6 @@
 // DeathScreen.js -- 玩家死亡屏幕
 import { ensureStoneStyles } from './StoneStyle.js';
+import { t, onLocaleChange } from '../i18n/index.js';
 
 export class DeathScreen {
   constructor(game) {
@@ -23,7 +24,7 @@ export class DeathScreen {
     this.el.appendChild(panel);
 
     const title = document.createElement('div');
-    title.textContent = '你死了！';
+    title.textContent = t('你死了！');
     title.style.cssText = 'font-size:30px; font-weight:bold; color:#ff6666; text-shadow:2px 2px 0 #000; letter-spacing:4px; margin-bottom:12px;';
     panel.appendChild(title);
 
@@ -43,14 +44,24 @@ export class DeathScreen {
       this.game.returnToMenu(false);
     });
 
+    // 语言切换（Build 5 i18n）：常驻文本即时重绘
+    this._unbindLocale = onLocaleChange(() => this._applyLang());
+
     document.body.appendChild(this.el);
+  }
+
+  _applyLang() {
+    this.title.textContent = t('你死了！');
+    this.respawnBtn.textContent = t('重生');
+    this.spectateBtn.textContent = t('观战其他玩家');
+    this.exitBtn.textContent = t('返回标题画面');
   }
 
   _mkBtn(label, extraClass = '') {
     ensureStoneStyles();
     const b = document.createElement('button');
     b.className = `cw-stone-btn${extraClass ? ' ' + extraClass : ''}`;
-    b.textContent = label;
+    b.textContent = t(label); // 约定：label 传简体中文原文，此处统一翻译
     b.style.cssText = 'padding:10px 20px; font-size:15px; min-width:180px;';
     return b;
   }
@@ -80,5 +91,9 @@ export class DeathScreen {
   hideForSpectate() {
     this.visible = false;
     this.el.style.display = 'none';
+  }
+
+  dispose() {
+    if (this._unbindLocale) this._unbindLocale();
   }
 }

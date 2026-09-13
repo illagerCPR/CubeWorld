@@ -4,6 +4,7 @@ import { MobTypes } from '../entity/MobTextures.js';
 import { ringPoints } from '../world/structures/stronghold.js';
 import { DIMENSIONS } from '../core/dimensions.js';
 import { ensureStoneStyles } from './StoneStyle.js';
+import { t } from '../i18n/index.js';
 
 // 探索列表：玩家周围村庄扫描 cell 半径（cell=20 区块 → ±960 格）；要塞环带 3 点全局 O(1)
 const EXPLORE_VILLAGE_CELL_R = 3;
@@ -56,7 +57,7 @@ export class CommandPanel {
 
   _mkLabel(text) {
     const l = document.createElement('div');
-    l.textContent = text;
+    l.textContent = t(text);
     l.style.cssText = 'font-size:12px; color:#bbd; font-weight:bold; letter-spacing:1px;';
     return l;
   }
@@ -76,7 +77,7 @@ export class CommandPanel {
     ensureStoneStyles();
     const b = document.createElement('button');
     b.className = `cw-stone-btn${extraClass ? ' ' + extraClass : ''}`;
-    b.textContent = label;
+    b.textContent = t(label);
     b.style.cssText = 'padding:8px 12px; font-size:13px;';
     return b;
   }
@@ -96,7 +97,7 @@ export class CommandPanel {
     const header = document.createElement('div');
     header.style.cssText = 'display:flex; align-items:center; justify-content:space-between;';
     const title = document.createElement('div');
-    title.textContent = '命令面板';
+    title.textContent = t('命令面板');
     title.style.cssText = 'font-size:18px; font-weight:bold; letter-spacing:2px;';
     header.appendChild(title);
     const closeBtn = this._mkBtn('关闭 (C / ESC)');
@@ -308,7 +309,7 @@ export class CommandPanel {
       row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 8px;';
       const label = document.createElement('span');
       label.style.cssText = 'color: #dde; white-space: nowrap;';
-      label.textContent = `${it.name} (${it.x}, ${it.z}) · ${Math.round(it.d)}m · ${CommandPanel._compass(p.x, p.z, it.x, it.z)}`;
+      label.textContent = `${t(it.name)} (${it.x}, ${it.z}) · ${Math.round(it.d)}m · ${t(CommandPanel._compass(p.x, p.z, it.x, it.z))}`;
       row.appendChild(label);
       const btn = document.createElement('button');
       btn.className = 'cw-stone-btn mini';
@@ -336,18 +337,19 @@ export class CommandPanel {
   }
 
   _refreshTimeLabel() {
-    const t = this.game.sky.time;
+    // 局部变量命名 timeVal——避开 i18n 的 t()（Build 5）
+    const timeVal = this.game.sky.time;
     let label;
-    if (t < 0.05 || t >= 0.95) label = '半夜';
-    else if (t < 0.20) label = '黎明前';
-    else if (t < 0.30) label = '日出';
-    else if (t < 0.45) label = '上午';
-    else if (t < 0.55) label = '正午';
-    else if (t < 0.70) label = '下午';
-    else if (t < 0.80) label = '日落';
-    else if (t < 0.90) label = '黄昏';
+    if (timeVal < 0.05 || timeVal >= 0.95) label = '半夜';
+    else if (timeVal < 0.20) label = '黎明前';
+    else if (timeVal < 0.30) label = '日出';
+    else if (timeVal < 0.45) label = '上午';
+    else if (timeVal < 0.55) label = '正午';
+    else if (timeVal < 0.70) label = '下午';
+    else if (timeVal < 0.80) label = '日落';
+    else if (timeVal < 0.90) label = '黄昏';
     else label = '入夜';
-    this.curTimeLabel.textContent = '(当前: ' + t.toFixed(3) + ' ' + label + ')';
+    this.curTimeLabel.textContent = t('(当前: {t} {l})', { t: timeVal.toFixed(3), l: t(label) });
   }
 
   _refreshModeHighlight() {

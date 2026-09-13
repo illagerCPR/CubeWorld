@@ -1,6 +1,7 @@
 // BossBar.js -- Boss 血条（屏幕顶部，每 Boss 一条紫/红条，实时刷新）
 // Idea-2D-②：由末影龙单条参数化为多 Boss 支持（末影龙 + 凋灵可并存各占一条）。
 // 新建型 UI 子系统：Game.start 创建、_disposeWorld 移除（与 MobManager 生命周期一致）
+import { tName } from '../i18n/name.js';
 export class BossBar {
   constructor() {
     this.el = document.createElement('div');
@@ -23,7 +24,7 @@ export class BossBar {
         text-align: center; font-size: 13px; font-weight: bold;
         text-shadow: 1px 1px 0 #000; margin-bottom: 3px; letter-spacing: 2px;
       `;
-      label.textContent = mob.type.displayName;
+      label.textContent = tName(mob.type.name, mob.type.displayName);
       const track = document.createElement('div');
       track.style.cssText = `
         width: 100%; height: 10px; background: rgba(10, 6, 18, 0.72);
@@ -57,7 +58,7 @@ export class BossBar {
     if (!show) return;
     for (const mob of alive) {
       const r = this._row(mob);
-      r.label.textContent = mob.type.displayName;
+      r.label.textContent = tName(mob.type.name, mob.type.displayName);
       const ratio = Math.max(0, Math.min(1, mob.health / mob.maxHealth));
       r.fill.style.width = (ratio * 100).toFixed(1) + '%';
     }

@@ -1,6 +1,18 @@
 // BeaconScreen.js -- 信标界面（Idea-2D-③：右键信标打开，选效果周期给玩家 buff）
 // 金字塔等级决定效果强度与作用范围；无完整基座只提示不放效果。
 // 生命周期与 ChestScreen 同款：show 设 controls.enabled=false + 退指针锁，hide 恢复。
+import { t } from '../i18n/index.js';
+
+// 信标效果表（[name, 中文 label, 中文 desc]）：BeaconScreen 渲染与 Game 激活提示共用；
+// label 为语言包键（简体原文），显示时经 t() 翻译。
+export const BEACON_EFFECTS = [
+  ['speed', '速度', '移速 +20%/级'],
+  ['haste', '急迫', '挖掘 +30%/级'],
+  ['resistance', '抗性', '受伤 -20%/级'],
+  ['jump_boost', '跳跃', '跳高 +25%/级'],
+  ['strength', '力量', '近战 +2/级'],
+];
+
 export class BeaconScreen {
   constructor(game) {
     this.game = game;
@@ -69,32 +81,25 @@ export class BeaconScreen {
   dispose() { this.el.remove(); }
 
   render() {
-    const EFFECTS = [
-      ['speed', '速度', '移速 +20%/级'],
-      ['haste', '急迫', '挖掘 +30%/级'],
-      ['resistance', '抗性', '受伤 -20%/级'],
-      ['jump_boost', '跳跃', '跳高 +25%/级'],
-      ['strength', '力量', '近战 +2/级'],
-    ];
-    const btns = EFFECTS.map(([name, label, desc]) => `
+    const btns = BEACON_EFFECTS.map(([name, label, desc]) => `
       <button data-effect="${name}" style="
         display:block; width: 100%; margin-bottom: 8px; padding: 9px 12px; text-align: left;
         background: ${this.selected === name ? '#3d5a3d' : '#3a3a4c'};
         border: 2px solid ${this.selected === name ? '#8f8' : '#555'};
         color: #fff; cursor: pointer; font-size: 14px;">
-        <b>${label}</b> <span style="font-size: 12px; color: #aab;">${desc}</span>
+        <b>${t(label)}</b> <span style="font-size: 12px; color: #aab;">${t(desc)}</span>
       </button>`).join('');
     this.panel.innerHTML = `
-      <div style="font-size: 19px; font-weight: bold; margin-bottom: 4px;">✦ 信标</div>
+      <div style="font-size: 19px; font-weight: bold; margin-bottom: 4px;">${t('✦ 信标')}</div>
       <div style="font-size: 12px; color: #ffb; margin-bottom: 12px;">${
         this.power > 0
-          ? `金字塔 ${this.power} 级 · 效果等级 ${Math.min(2, this.power)} · 范围 ${this.power * 10} 格`
-          : '需要完整金字塔基座（铁/金/钻石/绿宝石块，1~4 层）'
+          ? t('金字塔 {n} 级 · 效果等级 {l} · 范围 {r} 格', { n: this.power, l: Math.min(2, this.power), r: this.power * 10 })
+          : t('需要完整金字塔基座（铁/金/钻石/绿宝石块，1~4 层）')
       }</div>
       ${this.power > 0 ? btns : ''}
       <div style="display:flex; gap: 10px; margin-top: 10px; justify-content: center;">
-        ${this.power > 0 ? `<button id="beacon-confirm" style="padding: 8px 22px; background:#3d5a3d; border:2px solid #8f8; color:#fff; cursor:pointer;">确认激活</button>` : ''}
-        <button id="beacon-cancel" style="padding: 8px 22px; background:#4a3a3a; border:2px solid #a77; color:#fff; cursor:pointer;">关闭</button>
+        ${this.power > 0 ? `<button id="beacon-confirm" style="padding: 8px 22px; background:#3d5a3d; border:2px solid #8f8; color:#fff; cursor:pointer;">${t('确认激活')}</button>` : ''}
+        <button id="beacon-cancel" style="padding: 8px 22px; background:#4a3a3a; border:2px solid #a77; color:#fff; cursor:pointer;">${t('关闭')}</button>
       </div>
     `;
   }
