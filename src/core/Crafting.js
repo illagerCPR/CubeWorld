@@ -133,6 +133,8 @@ addShaped('chest', 1, ['oak_planks','oak_planks','oak_planks','oak_planks', null
 // 潜影盒（Idea-2C）：壳/箱/壳 竖排（原版式）
 addShaped('shulker_box', 1, [['shulker_shell'],['chest'],['shulker_shell']]);
 addShaped('tnt', 1, ['gunpowder','gunpowder','gunpowder','sand','sand','sand','sand','sand','sand']);
+// 信标（Idea-2D-③，原版式）：顶排 3 玻璃 + 中央下界之星 + 黑曜石 5（十字臂）
+addShaped('beacon', 1, ['glass','glass','glass','obsidian','nether_star','obsidian','obsidian','obsidian','obsidian']);
 
 // 红石
 addShaped('redstone_torch_item', 1, [['redstone'],['stick']]);

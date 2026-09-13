@@ -18,6 +18,7 @@ import { Hud } from '../ui/Hud.js';
 import { InfoBar } from '../ui/InfoBar.js';
 import { InventoryScreen } from '../ui/InventoryScreen.js';
 import { ChestScreen } from '../ui/ChestScreen.js';
+import { BeaconScreen } from '../ui/BeaconScreen.js';
 import { FurnaceScreen } from '../ui/FurnaceScreen.js';
 import { RecipeViewer } from '../ui/RecipeViewer.js';
 import { TradeScreen } from '../ui/TradeScreen.js';
@@ -97,6 +98,7 @@ export class Game {
     this.hotbar = null;
     this.inventoryScreen = null;
     this.chestScreen = null;
+    this.beaconScreen = null;
     this.tradeScreen = null;
     this.pauseMenu = null;
     this.deathScreen = null;
@@ -163,6 +165,7 @@ export class Game {
       if (this.chatBox && this.chatBox.input) return; // 聊天输入中不弹暂停
       if (this.inventoryScreen && this.inventoryScreen.visible) return;
       if (this.chestScreen && this.chestScreen.visible) return;
+      if (this.beaconScreen && this.beaconScreen.visible) return;
       if (this.furnaceScreen && this.furnaceScreen.visible) return;
       if (this.tradeScreen && this.tradeScreen.visible) return;
       if (this.commandPanel && this.commandPanel.visible) return;
@@ -207,6 +210,7 @@ export class Game {
       this.inventoryScreen = null;
     }
     if (this.chestScreen) { this.chestScreen.dispose(); this.chestScreen = null; }
+    if (this.beaconScreen) { this.beaconScreen.dispose(); this.beaconScreen = null; }
     if (this.furnaceScreen) { this.furnaceScreen.dispose(); this.furnaceScreen = null; }
     if (this.recipeViewer) { this.recipeViewer.dispose(); this.recipeViewer = null; }
     if (this.tradeScreen) { this.tradeScreen.dispose(); this.tradeScreen = null; }
@@ -274,9 +278,9 @@ export class Game {
     // 耕种：作物登记表钩子（setBlock 全路径收口：种/长/收/破坏/远端同步）+ 生长计时复位
     this.world.onCropBlockChange = (x, y, z, oldId, newId) => this._trackCrop(x, y, z, oldId, newId);
     this._cropTimer = 0;
-    // 重置跨存档共享的玩家运行时状态（避免上一存档的 invulnerable / 凋零残留）
+    // 重置跨存档共享的玩家运行时状态（避免上一存档的 invulnerable / 状态效果残留）
     this.player.invulnerable = 0;
-    this.player.withered = 0;
+    this.player.clearEffects();
     // 受击红屏：所有调用 player.hurt(amount, ..., true) 的源都触发
     this.player.onHurt = (amount, source) => {
       if (this.hud) this.hud.flashDamage(amount);
@@ -414,6 +418,8 @@ export class Game {
       for (const s of this.witherSkulls) this.renderer.scene.remove(s.mesh);
     }
     this.witherSkulls = [];
+    // Idea-2D-③：信标激活状态（内存级——效果选择随会话，方块本身走账本；换世界清光柱）
+    this._clearBeaconState();
     this._meshBuildSeq = 0; // B-②：网格派发版本号（跨存档共享实例，单调递增即可）
     this._bowCharging = false; // 存档切换：清掉上一存档的蓄力状态
     this._bowCharge = 0;
@@ -448,6 +454,7 @@ export class Game {
     await this.hotbar.update();
     this.inventoryScreen = new InventoryScreen(this.inventory, this.player, this);
     this.chestScreen = new ChestScreen(this);
+    this.beaconScreen = new BeaconScreen(this); // Idea-2D-③：信标效果选择（新建型：_disposeWorld 移除）
     this.furnaceScreen = new FurnaceScreen(this);
     this.recipeViewer = new RecipeViewer(this);
     this.tradeScreen = new TradeScreen(this);
@@ -520,6 +527,7 @@ export class Game {
       if (e.code === 'KeyE') {
         if (this.paused || this.spectating || (this.deathScreen && this.deathScreen.visible)) return;
         if (this.chestScreen && this.chestScreen.visible) { this.chestScreen.hide(); return; }
+        if (this.beaconScreen && this.beaconScreen.visible) { this.beaconScreen.hide(); return; }
         if (this.furnaceScreen && this.furnaceScreen.visible) { this.furnaceScreen.hide(); return; }
         if (this.tradeScreen && this.tradeScreen.visible) { this.tradeScreen.hide(); return; }
         if (this.inventoryScreen) {
@@ -542,6 +550,7 @@ export class Game {
         if (!this.recipeViewer) return;
         const containerOpen = (this.inventoryScreen && this.inventoryScreen.visible) ||
           (this.chestScreen && this.chestScreen.visible) ||
+          (this.beaconScreen && this.beaconScreen.visible) ||
           (this.furnaceScreen && this.furnaceScreen.visible) ||
           (this.tradeScreen && this.tradeScreen.visible);
         if (containerOpen) {
@@ -739,7 +748,9 @@ export class Game {
       this.sky.update(dt, this.player.position);
     } else {
       const move = this.controls.getMoveVector();
-      const speed = this.player.flying ? 12 : (this.player.survival ? 4.3 : 5.6);
+      // 信标速度效果（Idea-2D-③）：每级 +20% 移速
+      const speed = (this.player.flying ? 12 : (this.player.survival ? 4.3 : 5.6))
+        * (1 + 0.2 * (this.player.getEffectLevel ? this.player.getEffectLevel('speed') : 0));
       const sprint = this.controls.isSprinting() ? 1.3 : 1;
       
       if (this.player.flying || this.player.spectator) {
@@ -763,7 +774,12 @@ export class Game {
       } else {
         this.player.velocity.x = move.x * speed * sprint;
         this.player.velocity.z = move.z * speed * sprint;
-        if (this.controls.isJumping()) this.physics.jump(this.player);
+        if (this.controls.isJumping()) {
+          this.physics.jump(this.player);
+          // 信标跳跃效果（Idea-2D-③）：每级 +25% 跳跃初速
+          const jb = this.player.getEffectLevel ? this.player.getEffectLevel('jump_boost') : 0;
+          if (jb > 0 && this.player.velocity.y > 0) this.player.velocity.y *= 1 + 0.25 * jb;
+        }
       }
       
       this.physics.collide(this.player, dt);
@@ -961,8 +977,12 @@ export class Game {
     // 弓箭投射物 + 凋灵之首弹射物（Idea-2D-②）
     if (this.arrows.length) this._updateArrows(dt);
     if (this.witherSkulls.length) this._updateWitherSkulls(dt);
-    if (this.hud && this.player) this.hud.setWithered(this.player.withered > 0);
+    // 状态效果计时（信标 buff / 凋零 debuff 统一 tick）+ 凋零滤镜
+    if (this.player) this.player.tickEffects(dt);
+    if (this.hud && this.player) this.hud.setWithered(this.player.getEffectLevel('wither') > 0);
     this.updatePortalParticles(dt);
+    // 信标脉冲（Idea-2D-③）：每 4s 给范围内玩家刷新已激活信标的效果
+    this._updateBeaconPulse(dt);
 
     // A-② 音频：脚步/落地（距离驱动步频）+ 环境风声/BGM 计划调度
     this._updateFootsteps(dt);
@@ -1351,6 +1371,7 @@ export class Game {
         if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
         audio.blockBreak(def);
         if (def.name === 'chest') this._breakChest(hit.block, false);
+        if (def.name === 'beacon') this._breakBeacon(hit.block.x, hit.block.y, hit.block.z); // Idea-2D-③：清激活状态+光柱
         if (def.name === 'shulker_box') this._breakShulkerBox(hit.block, false); // Idea-2C：创造也掉盒（内容跟随）
         if (def.name === 'furnace') this._breakFurnace(hit.block);
         if (def.name === 'end_crystal') this._breakCrystal(hit.block.x, hit.block.y, hit.block.z);
@@ -1363,8 +1384,11 @@ export class Game {
         const hardness = def.hardness;
         if (hardness < 0 || def.fluid) { this.controls.mouseLeft = false; return; }
         const held = this._heldToolItem();
-        const speedMul = held && held.tool === def.tool
-          ? (held.name.startsWith('gold_') ? 9 : (TOOL_TIER_SPEED[held.tier] || 1)) : 1;
+        // 信标急迫效果（Idea-2D-③）：每级 +30% 挖掘速度（叠加在工具速度倍率上）
+        const haste = this.player.getEffectLevel ? this.player.getEffectLevel('haste') : 0;
+        const speedMul = (held && held.tool === def.tool
+          ? (held.name.startsWith('gold_') ? 9 : (TOOL_TIER_SPEED[held.tier] || 1)) : 1)
+          * (1 + 0.3 * haste);
         // 阶段11：挥动节奏与挖掘进度联动——挥动周期 ≈ 实际挖穿耗时（硬块深而慢、软块轻快）
         const breakTime = Math.min(10, Math.max(0.1, hardness / speedMul));
         this.hand.miningPeriod = Math.min(1.0, Math.max(0.25, breakTime));
@@ -1384,6 +1408,7 @@ export class Game {
           if (this.particles) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y, hit.block.z + 0.5, def, this.world);
           audio.blockBreak(def);
           if (def.name === 'chest') this._breakChest(hit.block, true);
+          if (def.name === 'beacon') this._breakBeacon(hit.block.x, hit.block.y, hit.block.z); // Idea-2D-③：清激活状态+光柱
           if (def.name === 'shulker_box') this._breakShulkerBox(hit.block, true); // Idea-2C：内容跟随盒体
           if (def.name === 'furnace') this._breakFurnace(hit.block);
           if (def.name === 'end_crystal') this._breakCrystal(hit.block.x, hit.block.y, hit.block.z);
@@ -1495,6 +1520,12 @@ export class Game {
         // T5：右键箱子/潜影盒打开容器界面（创造/生存都可；旁观不可）
         if (targetDef && (targetDef.name === 'chest' || targetDef.name === 'shulker_box') && this.chestScreen && !this.player.spectator) {
           this.chestScreen.show(hit.block.x, hit.block.y, hit.block.z);
+          this.controls.mouseRight = false;
+          return;
+        }
+        // Idea-2D-③：右键信标打开效果选择界面（旁观不可）
+        if (targetDef && targetDef.name === 'beacon' && this.beaconScreen && !this.player.spectator) {
+          this.beaconScreen.show(hit.block.x, hit.block.y, hit.block.z);
           this.controls.mouseRight = false;
           return;
         }
@@ -1933,6 +1964,105 @@ export class Game {
       }
     }
     return false;
+  }
+
+  // ── 信标（Idea-2D-③）────────────────────────────────────────
+  // 金字塔基座（铁/金/钻石/绿宝石块 1~4 层）激活；右键 BeaconScreen 选效果后
+  // 每 4s 给范围内玩家刷新效果（12s 时长，金字塔等级决定强度与范围）。
+  // 效果选择为内存级状态（随会话）；方块本身走账本；光柱为纯视觉 mesh。
+
+  // 金字塔等级：从信标正下方逐层向上检测（层 1=5×5 … 层 4=11×11），断层即停
+  _getBeaconPower(x, y, z) {
+    if (!this.world) return 0;
+    const VALID = new Set(['iron_block', 'gold_block', 'diamond_block', 'emerald_block'].map(n => BlockRegistry.getId(n)));
+    let power = 0;
+    for (let l = 1; l <= 4; l++) {
+      const half = l + 1; // 层 1 → 5×5，层 4 → 11×11
+      let ok = true;
+      for (let dx = -half; dx <= half && ok; dx++) {
+        for (let dz = -half; dz <= half && ok; dz++) {
+          if (!VALID.has(this.world.getBlock(x + dx, y - l, z + dz))) ok = false;
+        }
+      }
+      if (!ok) break;
+      power = l;
+    }
+    return power;
+  }
+
+  // BeaconScreen 确认回调：记录激活状态 + 建光柱 + 立即脉冲一次
+  setBeaconEffect(x, y, z, name, level) {
+    const key = `${x},${y},${z}`;
+    this.beacons.set(key, { x, y, z, effect: name, level, lastPower: level });
+    this._ensureBeaconBeam(key, x, y, z);
+    this._pulseBeacon(this.beacons.get(key), level);
+    if (this.chatBox) this.chatBox.add(`信标已激活：${name} ×${Math.min(2, level)}`, '#ffd');
+  }
+
+  _pulseBeacon(b, power) {
+    const range = 10 * power;
+    const p = this.player;
+    if (!p || p.dead) return;
+    const dx = p.position.x - (b.x + 0.5), dy = p.position.y - b.y, dz = p.position.z - (b.z + 0.5);
+    if (dx * dx + dy * dy + dz * dz <= range * range) {
+      p.applyEffect(b.effect, Math.min(2, power), 12); // 12s 时长 > 4s 脉冲周期，效果无缝续期
+    }
+  }
+
+  _updateBeaconPulse(dt) {
+    if (!this.beacons || !this.beacons.size) return;
+    this._beaconPulseTimer = (this._beaconPulseTimer || 0) - dt;
+    if (this._beaconPulseTimer > 0) return;
+    this._beaconPulseTimer = 4;
+    for (const [key, b] of this.beacons) {
+      const power = this._getBeaconPower(b.x, b.y, b.z);
+      if (power <= 0) {
+        // 基座被拆：信标失效（清效果选择 + 光柱）
+        this.beacons.delete(key);
+        this._removeBeaconBeam(key);
+        continue;
+      }
+      if (power !== b.lastPower) {
+        b.lastPower = power;
+        b.level = Math.min(2, power); // 基座变化实时调整效果等级
+        this._ensureBeaconBeam(key, b.x, b.y, b.z);
+      }
+      this._pulseBeacon(b, power);
+    }
+  }
+
+  _ensureBeaconBeam(key, x, y, z) {
+    if (!this.renderer || !this.renderer.scene) return;
+    this._removeBeaconBeam(key);
+    const h = Math.max(16, 250 - y);
+    const geo = new THREE.BoxGeometry(0.4, h, 0.4);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xf2f0dc, transparent: true, opacity: 0.22, depthWrite: false });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x + 0.5, y + h / 2, z + 0.5);
+    this.renderer.scene.add(mesh);
+    this._beaconBeams.set(key, mesh);
+  }
+
+  _removeBeaconBeam(key) {
+    const mesh = this._beaconBeams && this._beaconBeams.get(key);
+    if (!mesh) return;
+    this.renderer.scene.remove(mesh);
+    mesh.geometry.dispose();
+    mesh.material.dispose();
+    this._beaconBeams.delete(key);
+  }
+
+  _breakBeacon(x, y, z) {
+    const key = `${x},${y},${z}`;
+    if (this.beacons) this.beacons.delete(key);
+    this._removeBeaconBeam(key);
+  }
+
+  _clearBeaconState() {
+    if (!this._beaconBeams) this._beaconBeams = new Map();
+    for (const key of [...this._beaconBeams.keys()]) this._removeBeaconBeam(key);
+    this.beacons = new Map();
+    this._beaconPulseTimer = 0;
   }
 
   // 打火石点火传送门：点击框体 → 内部候选格 = 点击面外邻格 → 框校验 → 填充门方块。
@@ -2514,10 +2644,9 @@ export class Game {
       this.player.health -= dt * 6;
     }
 
-    // 凋零 II（Idea-2D-②）：每秒扣 1 血持续到秒数耗尽；可致死（统一死亡判定在下方）；
+    // 凋零 II（Idea-2D-②）：每秒扣 1 血持续到效果到期；可致死（统一死亡判定在下方）；
     // 持续伤害口径不走红屏，视觉走 Hud 紫黑滤镜（update 内 setWithered）
-    if (this.player.withered > 0 && !this.player.creative && !this.player.spectator) {
-      this.player.withered = Math.max(0, this.player.withered - dt);
+    if (this.player.getEffectLevel('wither') > 0 && !this.player.creative && !this.player.spectator) {
       this._witherTick = (this._witherTick || 0) + dt;
       if (this._witherTick >= 1) {
         this._witherTick -= 1;
@@ -2548,7 +2677,7 @@ export class Game {
     this.player.exhaustion = 0;
     this.player.onFire = 0;
     this.player.invulnerable = 0;
-    this.player.withered = 0;
+    this.player.clearEffects();
     this._witherTick = 0;
     this.player.gliding = false;
     if (this.hud) this.hud.setGliding(false);
@@ -2773,11 +2902,13 @@ export class Game {
 
   getAttackDamage() {
     const sel = this.inventory.getSelected();
-    if (!sel) return 1;
+    // 信标力量效果（Idea-2D-③）：每级 +2 近战伤害
+    const str = this.player.getEffectLevel ? this.player.getEffectLevel('strength') : 0;
+    if (!sel) return 1 + 2 * str;
     const item = ItemRegistry.getByName(sel.name);
-    if (item && item.tool === 'sword') return 2 + (item.tier || 1) + 2;
-    if (item && item.tool === 'axe') return 2 + (item.tier || 1);
-    return 1;
+    if (item && item.tool === 'sword') return 2 + (item.tier || 1) + 2 + 2 * str;
+    if (item && item.tool === 'axe') return 2 + (item.tier || 1) + 2 * str;
+    return 1 + 2 * str;
   }
 
   // 射线检测远端玩家（简化球体检测，半径 0.5，高度 1.8），返回命中的 RemotePlayer 或 null

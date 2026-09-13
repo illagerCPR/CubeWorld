@@ -1479,6 +1479,27 @@ reg('wither_skeleton_skull', { displayName: '凋零骷髅头颅', hardness: 1,
   textures: { top: 'wither_skull_top', side: 'wither_skull_side', bottom: 'wither_skull_top' } },
   { wither_skull_top: witherSkullBlockTex(131, false), wither_skull_side: witherSkullBlockTex(132, true) });
 
+// 信标（Idea-2D-③，**文件末尾追加**防方块 ID 错位）：金字塔基座激活，右键选效果周期给玩家 buff
+function beaconTex() {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb([26, 28, 40], 0.9 + hash2(x, y, 141) * 0.2); // 深夜蓝底
+  }
+  // 中央下界之星纹样（暖白四芒）
+  const star = [240, 238, 220];
+  fillRect(px, 7, 2, 8, 13, rgb(star, 0.95));
+  fillRect(px, 2, 7, 13, 8, rgb(star, 0.95));
+  fillRect(px, 6, 6, 9, 9, rgb([255, 255, 245]));
+  setPx(px, 5, 5, rgb(star)); setPx(px, 10, 5, rgb(star));
+  setPx(px, 5, 10, rgb(star)); setPx(px, 10, 10, rgb(star));
+  // 四角金饰
+  for (const [cx, cy] of [[1, 1], [14, 1], [1, 14], [14, 14]]) {
+    fillRect(px, cx, cy, cx + 1, cy + 1, rgb([226, 184, 92]));
+  }
+  return pixelSvg(px);
+}
+reg('beacon', { displayName: '信标', light: 15, hardness: 3, tool: 'pickaxe' }, { beacon: beaconTex() });
+
 export const BlockSVGDefinitions = svgMap;
 
 export function getBlockCount() {
