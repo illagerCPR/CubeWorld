@@ -43,6 +43,9 @@ export const MSG = {
   // 箭矢（Idea-2B，事件式：只广播初速，各端本地确定性积分；伤害由射端走 mob_attack 权威结算）
   ARROW_SHOT: 'arrow_shot',
 
+  // 凋灵之首（Idea-2D-②，事件式同箭矢：只广播初速；命中本地玩家由各端本地结算）
+  WITHER_SKULL: 'wither_skull',
+
   // 玩家
   PLAYER_STATE: 'player_state',
   PLAYER_FULL: 'player_full',

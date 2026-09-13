@@ -321,6 +321,7 @@ const VOICE_PRESETS = {
   enderman: { tones: [{ from: 170, to: 260, type: 'sine', dur: 0.35, gain: 0.08 }, { when: 0.36, from: 250, to: 150, type: 'sine', dur: 0.4, gain: 0.07 }] },
   iron_golem: { tones: [{ from: 62, to: 48, type: 'sine', dur: 0.6, gain: 0.14 }] },
   dragon: { tones: [{ from: 75, to: 42, type: 'sawtooth', dur: 0.9, gain: 0.16 }], noise: { filter: 'lowpass', freq: 400, dur: 0.8, gain: 0.1 } },
+  wither: { tones: [{ from: 66, to: 40, type: 'sawtooth', dur: 0.8, gain: 0.16 }, { when: 0.3, from: 55, to: 36, type: 'sine', dur: 0.7, gain: 0.12 }], noise: { filter: 'lowpass', freq: 350, dur: 0.7, gain: 0.09 } },
   shulker: { tones: [{ from: 640, to: 520, type: 'square', dur: 0.12, gain: 0.06 }] },
   wisp: { tones: [{ from: 540, to: 680, type: 'sine', dur: 0.3, gain: 0.06 }] },
   aether_guard: { tones: [{ from: 480, to: 600, type: 'triangle', dur: 0.35, gain: 0.07 }] },

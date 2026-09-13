@@ -4,6 +4,7 @@ import { Entity } from './Entity.js';
 import { MobTypes } from './MobTextures.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { updateDragonAI } from './DragonAI.js';
+import { updateWitherAI } from './WitherAI.js';
 import { audio } from '../audio/AudioEngine.js';
 
 export class Mob extends Entity {
@@ -29,6 +30,7 @@ export class Mob extends Entity {
     this.neutral = type.neutral || false;       // 中立：受击才激怒索敌
     this.flying = type.flying || false;         // 悬浮：物理跳过重力，竖直悬停控制
     this.igniteOnHit = type.igniteOnHit || false; // 攻击命中点燃玩家
+    this.witherOnHit = type.witherOnHit || false; // 攻击命中附加凋零 II（凋灵）
 
     // AI 状态
     this.target = null;
@@ -86,6 +88,14 @@ export class Mob extends Entity {
     if (this.typeName === 'dragon') {
       // 末影龙：DragonAI 全接管（盘旋/俯冲/栖息回血），不走通用索敌链
       updateDragonAI(this, dt, player);
+      physics.collide(this, dt);
+      if (this.position.y < -20) this.dead = true;
+      return;
+    }
+
+    if (this.typeName === 'wither') {
+      // 凋灵：WitherAI 全接管（升空/环绕/齐射/狂暴），不走通用索敌链
+      updateWitherAI(this, dt, player, mobManager);
       physics.collide(this, dt);
       if (this.position.y < -20) this.dead = true;
       return;
@@ -445,6 +455,7 @@ export class Mob extends Entity {
       if (hit) {
         this.knockbackPlayer(player);
         if (this.igniteOnHit) player.onFire = Math.max(player.onFire || 0, 3); // 烈焰人命中点燃
+        if (this.witherOnHit && player.applyWither) player.applyWither(10); // 凋灵命中：凋零 II 10s
       }
     }
   }

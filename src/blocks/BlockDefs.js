@@ -1455,6 +1455,30 @@ for (let s = 0; s <= 7; s++) {
 reg('tall_grass', { displayName: '草丛', transparent: true, solid: false, hardness: 0, renderType: 'cross' },
   { tall_grass: tallGrassTex(62) });
 
+// 凋零骷髅头颅方块（Idea-2D-②，**文件末尾追加**防方块 ID 错位）：
+// 与同名物品互通——放置消耗物品、破坏掉回同名物品；T 型摆塔（4 灵魂沙 + 3 头）召唤凋灵
+function witherSkullBlockTex(seed, withFace) {
+  const px = makeTex();
+  const bone = [64, 64, 70], boneD = [44, 44, 50], boneHi = [92, 92, 98], socket = [14, 14, 18];
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb(bone, 0.9 + hash2(x, y, seed) * 0.2);
+  }
+  fillRect(px, 0, 3, 15, 3, rgb(boneD));   // 颅缝暗线
+  if (withFace) {
+    fillRect(px, 3, 6, 5, 7, rgb(socket));    // 左眼窝
+    fillRect(px, 10, 6, 12, 7, rgb(socket));  // 右眼窝
+    fillRect(px, 7, 9, 8, 10, rgb(socket));   // 鼻腔
+    for (const x of [4, 6, 9, 11]) {          // 獠牙列
+      setPx(px, x, 12, rgb(boneHi));
+      setPx(px, x, 13, rgb(boneD));
+    }
+  }
+  return pixelSvg(px);
+}
+reg('wither_skeleton_skull', { displayName: '凋零骷髅头颅', hardness: 1,
+  textures: { top: 'wither_skull_top', side: 'wither_skull_side', bottom: 'wither_skull_top' } },
+  { wither_skull_top: witherSkullBlockTex(131, false), wither_skull_side: witherSkullBlockTex(132, true) });
+
 export const BlockSVGDefinitions = svgMap;
 
 export function getBlockCount() {

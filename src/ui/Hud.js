@@ -118,6 +118,19 @@ export class Hud {
     document.body.appendChild(this.fireOverlay);
     this._onFireShown = false;
 
+    // 凋零滤镜（Idea-2D-②：紫黑边缘，凋零 II 生效时常驻；持续状态不打红屏）
+    this.witherOverlay = document.createElement('div');
+    this.witherOverlay.style.cssText = `
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 5; opacity: 0;
+      background: radial-gradient(ellipse at center,
+        rgba(40, 10, 50, 0) 40%,
+        rgba(48, 12, 58, 0.30) 75%,
+        rgba(30, 4, 40, 0.55) 100%);
+      transition: opacity 0.4s ease-out;
+    `;
+    document.body.appendChild(this.witherOverlay);
+
     // 初始全隐藏（主菜单不显示准星/血条）；进游戏后 update()/updateVisibility() 按模式设置
     this.el.style.display = 'none';
     this.xpBar.style.display = 'none';
@@ -145,6 +158,7 @@ export class Hud {
     this.armorRow.style.display = 'none';
     this.glideTag.style.display = 'none';
     this.versionTag.style.display = 'none';
+    this.witherOverlay.style.opacity = '0'; // 回菜单复位凋零滤镜（防上一存档残留）
   }
 
   // 着火滤镜开关（同款幂等开关）
@@ -152,6 +166,11 @@ export class Hud {
     if (this._onFireShown === on) return;
     this._onFireShown = on;
     this.fireOverlay.style.opacity = on ? '1' : '0';
+  }
+
+  // 凋零滤镜开关（Idea-2D-②：凋零 II 剩余秒数 > 0 时常驻）
+  setWithered(on) {
+    this.witherOverlay.style.opacity = on ? '1' : '0';
   }
 
   heartSvg(filled, half = false) {

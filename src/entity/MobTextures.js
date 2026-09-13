@@ -504,6 +504,47 @@ function witherSkeletonSkinSVG() {
   return buildSkinSVG(cells);
 }
 
+// 凋灵 Boss（Idea-2D-②）：三颅骨 + 暗脊柱 + 肋排 + 双尾椎（row0=颅骨，row1=脊柱，row2=肋排，row3=尾椎）
+function witherBossSkinSVG() {
+  const boneBase = noisy(C.wBone, 8, 291);
+
+  // 颅骨脸：深黑眼窝 + 白色眉痕 + 獠牙（中央头与左右头共用 row0）
+  const headFront = (x, y) => {
+    if (y >= 5 && y <= 8 && ((x >= 3 && x <= 6) || (x >= 9 && x <= 12))) return C.black;
+    if (y === 4 && ((x >= 3 && x <= 6) || (x >= 9 && x <= 12))) return C.wBoneHi;
+    if (y >= 12 && y <= 13 && ((x >= 3 && x <= 4) || (x >= 7 && x <= 8) || (x >= 11 && x <= 12))) return C.wBoneHi;
+    if (y >= 14 && y <= 15) return C.wBoneD;
+    return null;
+  };
+  const headBack = (x, y) => (y >= 6 && y <= 12 && hash01(x, y, 292) < 0.3 ? C.wBoneD : null);
+  const headSide = (x, y) => (y >= 5 && y <= 10 && x >= 5 && x <= 10 ? C.wBoneD : null);
+  const headTop = () => C.wBoneHi;
+  const headBot = () => C.wBoneD;
+
+  // 脊柱：竖直骨节（横节纹）
+  const spineAll = (x, y) => (y % 3 === 0 ? C.wBoneHi : (y % 3 === 1 ? null : C.wBoneD));
+  const spineTop = () => C.wBoneHi;
+  const spineBot = () => C.wBoneD;
+
+  // 肋排：横向亮暗交替（炭黑骨架胸笼）
+  const ribsAll = (x, y) => (y % 2 === 0 ? C.wBoneD : C.black);
+  const ribsTop = () => C.wBoneHi;
+  const ribsBot = () => C.wBoneD;
+
+  // 尾椎：小节骨（横向分节 + 暗端）
+  const tailAll = (x, y) => (y >= 12 ? C.wBoneD : (y % 4 === 0 ? C.wBoneHi : null));
+  const tailTop = () => C.wBoneHi;
+  const tailBot = () => C.wBoneD;
+
+  const cells = [
+    ...partCells(0, boneBase, { front: headFront, back: headBack, left: headSide, right: headSide, top: headTop, bot: headBot }),
+    ...partCells(1, boneBase, { front: spineAll, back: spineAll, left: spineAll, right: spineAll, top: spineTop, bot: spineBot }),
+    ...partCells(2, boneBase, { front: ribsAll, back: ribsAll, left: ribsAll, right: ribsAll, top: ribsTop, bot: ribsBot }),
+    ...partCells(3, boneBase, { front: tailAll, back: tailAll, left: tailAll, right: tailAll, top: tailTop, bot: tailBot }),
+  ];
+  return buildSkinSVG(cells);
+}
+
 function blazeSkinSVG() {
   const headBase = noisy(C.bGold, 10, 271);
   const coreBase = mottle(C.bCore, C.bCoreD, 6, 272);
@@ -702,6 +743,18 @@ const DRAGON_PARTS = [
   { name: 'legFR', row: 3, box: [ 0.25, 0.85,  0.75,  0.70, 1.90,  1.45] },
   { name: 'legBL', row: 3, box: [-0.62, 0.85, -1.55, -0.20, 1.90, -0.85] },
   { name: 'legBR', row: 3, box: [ 0.20, 0.85, -1.55,  0.62, 1.90, -0.85] },
+];
+
+// 凋灵 Boss（Idea-2D-②）：三颅骨横排 + 细脊柱 + 肋排块 + 双尾椎斜下（Boss 体型 ~2 格宽 3.3 高）
+// row 复用：row0=颅骨（三头共用），row1=脊柱，row2=肋排，row3=尾椎
+const WITHER_BOSS_PARTS = [
+  { name: 'head',  row: 0, box: [-0.35, 2.55, -0.35,  0.35, 3.25, 0.35] },
+  { name: 'headL', row: 0, box: [-1.15, 2.45, -0.35, -0.55, 3.10, 0.30] },
+  { name: 'headR', row: 0, box: [ 0.55, 2.45, -0.35,  1.15, 3.10, 0.30] },
+  { name: 'spine', row: 1, box: [-0.12, 1.40, -0.12,  0.12, 2.60, 0.12] },
+  { name: 'ribs',  row: 2, box: [-0.45, 0.95, -0.30,  0.45, 1.65, 0.30] },
+  { name: 'tail1', row: 3, box: [-0.22, 0.60, -0.75,  0.22, 1.00,  0.05] },
+  { name: 'tail2', row: 3, box: [-0.15, 0.25, -1.30,  0.15, 0.60, -0.60] },
 ];
 
 // 潜影贝：深紫底座 + 淡紫壳（原地附着，蓄力弹幕；row0=壳，row1=底座）
@@ -959,6 +1012,7 @@ export function generateMobSkinSVGs() {
     villager:          villagerSkinSVG(),
     zombified_piglin:  zombifiedPiglinSkinSVG(),
     wither_skeleton:   witherSkeletonSkinSVG(),
+    wither:            witherBossSkinSVG(),
     blaze:             blazeSkinSVG(),
     dragon:            dragonSkinSVG(),
     shulker:           shulkerSkinSVG(),
@@ -1144,6 +1198,26 @@ export const MobTypes = {
     model: { parts: DRAGON_PARTS, kind: 'cuboid' },
     drops: [
       { name: 'dragon_egg', min: 1, max: 1 },
+    ],
+  },
+  wither: {
+    name: 'wither',
+    displayName: '凋灵',
+    width: 0.9,
+    height: 3.3,         // 中央颅骨顶点（命中球半径 = height/2）
+    health: 300,
+    damage: 8,
+    speed: 2.6,
+    attackRange: 2.6,
+    detectionRange: 48,
+    burningInDay: false,
+    flying: true,        // 全程飞行（WitherAI 接管全部速度/朝向）
+    boss: true,          // 不进自然生成表；免疫击退；Boss 血条
+    witherOnHit: true,   // 近战命中附加凋零 II（弹射物命中由 Game 结算）
+    xp: 200,
+    model: { parts: WITHER_BOSS_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'nether_star', min: 1, max: 1 },
     ],
   },
   shulker: {

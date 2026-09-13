@@ -274,8 +274,9 @@ export class Game {
     // 耕种：作物登记表钩子（setBlock 全路径收口：种/长/收/破坏/远端同步）+ 生长计时复位
     this.world.onCropBlockChange = (x, y, z, oldId, newId) => this._trackCrop(x, y, z, oldId, newId);
     this._cropTimer = 0;
-    // 重置跨存档共享的玩家运行时状态（避免上一存档的 invulnerable 残留）
+    // 重置跨存档共享的玩家运行时状态（避免上一存档的 invulnerable / 凋零残留）
     this.player.invulnerable = 0;
+    this.player.withered = 0;
     // 受击红屏：所有调用 player.hurt(amount, ..., true) 的源都触发
     this.player.onHurt = (amount, source) => {
       if (this.hud) this.hud.flashDamage(amount);
@@ -337,6 +338,8 @@ export class Game {
     };
     // 末影龙击败事件（本地死亡链 + 远端同步入口，幂等）：置击败标记 + M3 建返回门/折跃门
     this.mobManager.onDragonDefeated = (mob) => this._onDragonDefeated(mob);
+    // 凋灵齐射回调（Idea-2D-②）：WitherAI 经此生成三发凋灵之首（本地弹 + 联机广播）
+    this.mobManager.onWitherShoot = (mob, player) => this._spawnWitherSkullVolley(mob, player);
     this.mobManager.onMobXpAward = (mob, xp) => { if (this.player.survival) this.player.addXp(xp); };
     // 新建的粒子系统按视频设置套密度（其余项已在构造时套用，跨存档不变）
     applySettings(this);
@@ -407,6 +410,10 @@ export class Game {
       for (const a of this.arrows) this.renderer.scene.remove(a.mesh);
     }
     this.arrows = [];
+    if (this.witherSkulls) {
+      for (const s of this.witherSkulls) this.renderer.scene.remove(s.mesh);
+    }
+    this.witherSkulls = [];
     this._meshBuildSeq = 0; // B-②：网格派发版本号（跨存档共享实例，单调递增即可）
     this._bowCharging = false; // 存档切换：清掉上一存档的蓄力状态
     this._bowCharge = 0;
@@ -912,9 +919,11 @@ export class Game {
       };
       this.mobManager.update(dt, this.player, this.sky);
     }
-    // Boss 血条（存活末影龙）
+    // Boss 血条（存活的 type.boss 实体：末影龙 / 凋灵可并存各占一条）
     if (this.bossBar) {
-      this.bossBar.update(this.mobManager ? this.mobManager.mobs.find(m => m.typeName === 'dragon') : null);
+      this.bossBar.update(this.mobManager
+        ? this.mobManager.mobs.filter(m => m.type && m.type.boss)
+        : []);
     }
     
     // 红石系统
@@ -949,8 +958,10 @@ export class Game {
     // 末影之眼飞行（寻要塞指引）
     if (this.eyeFlight) this._updateEyeFlight(dt);
 
-    // 弓箭投射物
+    // 弓箭投射物 + 凋灵之首弹射物（Idea-2D-②）
     if (this.arrows.length) this._updateArrows(dt);
+    if (this.witherSkulls.length) this._updateWitherSkulls(dt);
+    if (this.hud && this.player) this.hud.setWithered(this.player.withered > 0);
     this.updatePortalParticles(dt);
 
     // A-② 音频：脚步/落地（距离驱动步频）+ 环境风声/BGM 计划调度
@@ -1560,6 +1571,7 @@ export class Game {
           audio.blockPlace(blockDef);
           if (this.redstone) this.redstone.onBlockChange(placeX, placeY, placeZ);
           this._trySummonIronGolem(placeX, placeY, placeZ); // Idea-2E：铁傀儡召唤检测（南瓜/铁块完成 T 型）
+          this._trySummonWither(placeX, placeY, placeZ); // Idea-2D-②：凋灵召唤检测（灵魂沙 + 头颅 T 型）
           // Idea-2C：潜影盒放置——物品内容落入容器账本并整箱广播（远端账本一致）
           if (blockDef.name === 'shulker_box') {
             const items = Array.isArray(sel.data) ? sel.data.slice(0, 27) : [];
@@ -1736,6 +1748,88 @@ export class Game {
     this.arrows.splice(i, 1);
   }
 
+  // ── 凋灵之首弹射物（Idea-2D-②）────────────────────────────────
+  // 各端本地积分、命中本地玩家本地结算（同怪咬人语义：怪物 host 权威生成后各端自模拟）；
+  // 广播仅视觉同步（服务器 except 发起者转发）。直线微坠弹，命中附加凋零 II。
+
+  _ensureWitherSkullAssets() {
+    if (!Game._skullGeo) Game._skullGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
+    if (!Game._skullMat) Game._skullMat = new THREE.MeshBasicMaterial({ color: 0x33333c });
+  }
+
+  // WitherAI 齐射回调：三发扇形（中央直射 + 左右 ±偏航），从胸前高度射出
+  _spawnWitherSkullVolley(mob, player) {
+    const start = mob.position.clone();
+    start.y += mob.height * 0.75;
+    const base = player.position.clone().add(new THREE.Vector3(0, 1, 0)).sub(start).normalize();
+    for (let i = -1; i <= 1; i++) {
+      const yaw = i * 0.14;
+      const dir = new THREE.Vector3(
+        base.x * Math.cos(yaw) - base.z * Math.sin(yaw),
+        Math.max(-0.25, base.y + i * 0.05),
+        base.x * Math.sin(yaw) + base.z * Math.cos(yaw)
+      ).normalize();
+      this._spawnWitherSkull(start.clone().addScaledVector(dir, 0.9), dir);
+    }
+  }
+
+  _spawnWitherSkull(pos, dir) {
+    this._ensureWitherSkullAssets();
+    const mesh = new THREE.Mesh(Game._skullGeo, Game._skullMat);
+    mesh.position.copy(pos);
+    this.renderer.scene.add(mesh);
+    this.witherSkulls.push({ mesh, pos: pos.clone(), vel: dir.clone().multiplyScalar(16), life: 6 });
+    if (this.networkMode && this.net) this.net.sendWitherSkull(pos, dir); // 初速广播（纯视觉）
+  }
+
+  // 联机：远端凋灵弹初速回执——本地生成弹射物（不再广播，防回声环）
+  spawnRemoteWitherSkull(x, y, z, dx, dy, dz) {
+    this._ensureWitherSkullAssets();
+    const pos = new THREE.Vector3(x, y, z);
+    const dir = new THREE.Vector3(dx, dy, dz);
+    const mesh = new THREE.Mesh(Game._skullGeo, Game._skullMat);
+    mesh.position.copy(pos);
+    this.renderer.scene.add(mesh);
+    this.witherSkulls.push({ mesh, pos, vel: dir.multiplyScalar(16), life: 6 });
+  }
+
+  _updateWitherSkulls(dt) {
+    for (let i = this.witherSkulls.length - 1; i >= 0; i--) {
+      const s = this.witherSkulls[i];
+      s.life -= dt;
+      if (s.life <= 0) { this._despawnWitherSkull(i); continue; }
+      s.vel.y -= 2.5 * dt; // 微坠（原版黑色头颅直线弹的轻度重力近似）
+      s.pos.addScaledVector(s.vel, dt);
+      // 命中本地玩家：水平 0.6 格半径 + 身高 1.8 线段距离（AABB 近似）
+      const p = this.player;
+      if (p && !p.dead && !p.spectator && !p.creative) {
+        const clampedY = Math.max(0, Math.min(1.8, s.pos.y - p.position.y));
+        const dx = s.pos.x - p.position.x, dz = s.pos.z - p.position.z;
+        const dy = s.pos.y - (p.position.y + clampedY);
+        if (dx * dx + dz * dz < 0.36 && dy * dy < 0.09) {
+          if (p.hurt(8, 'mob', true) && p.applyWither) p.applyWither(10); // 8 伤 + 凋零 II 10s
+          audio.arrowHit();
+          this._despawnWitherSkull(i);
+          continue;
+        }
+      }
+      // 命中方块：湮灭（钉墙语义不适用弹射物——原版凋灵之首触爆）
+      const bdef = BlockRegistry.getById(this.world.getBlock(Math.floor(s.pos.x), Math.floor(s.pos.y), Math.floor(s.pos.z)));
+      if (bdef && bdef.solid && !bdef.fluid) {
+        audio.arrowHit();
+        this._despawnWitherSkull(i);
+        continue;
+      }
+      s.mesh.position.copy(s.pos);
+    }
+  }
+
+  _despawnWitherSkull(i) {
+    const s = this.witherSkulls[i];
+    this.renderer.scene.remove(s.mesh);
+    this.witherSkulls.splice(i, 1);
+  }
+
   // A-② 脚步/落地音：水平位移累计达步长触发（走速 4.3m/s ≈ 每 0.5s 一步），涉水步长更短播水花；
   // 落地 = 上一帧下落速度 >8m/s 且本帧触地（inWater 落水不播闷响）
   _updateFootsteps(dt) {
@@ -1803,6 +1897,42 @@ export class Game {
     this.mobManager._spawnAt('iron_golem', hx + 0.5, hy - 2 + 0.1, hz + 0.5);
     if (this.chatBox) this.chatBox.add('铁傀儡从方块中苏醒了…', '#cfc');
     return true;
+  }
+
+  // Idea-2D-②：凋灵召唤检测——底层 4 灵魂沙横排 + 上层 3 头颅（原版 T 型）。
+  // 只在本地放置成功路径调用（同铁傀儡：远端 block_set 不检测，防多端重复召唤）；
+  // 命中则移除 7 块（setBlock 自动广播账本）并就地召唤凋灵（联机经 mob_spawn 回执全端创建）。
+  // 图案枚举：轴向 x/z 两种 × 头排相对底排两种对齐（头排 3 连续，底排 4 连续左/右对齐）。
+  _trySummonWither(x, y, z) {
+    if (!this.world || !this.mobManager) return false;
+    const SAND = BlockRegistry.getId('soul_sand');
+    const SKULL = BlockRegistry.getId('wither_skeleton_skull');
+    if (!SAND || !SKULL) return false;
+    const get = (bx, by, bz) => this.world.getBlock(bx, by, bz);
+    const placed = get(x, y, z);
+    if (placed !== SAND && placed !== SKULL) return false;
+    // 头/沙的层位由放置物决定：放头 → 头层 y、底层 y-1；放沙 → 底层 y、头层 y+1
+    const hy = placed === SKULL ? y : y + 1;
+    const by = placed === SKULL ? y - 1 : y;
+    for (const [ax, az] of [[1, 0], [0, 1]]) {       // 水平轴向：x / z
+      for (let h0 = -3; h0 <= 3; h0++) {             // 头排起点相对放置点（沿轴标量；校验保证正确性）
+        for (const off of [0, -1]) {                 // 底排相对头排两种对齐
+          const hx = x + ax * h0, hz = z + az * h0;
+          const bx0 = hx + ax * off, bz0 = hz + az * off;
+          let ok = true;
+          for (let i = 0; i < 3 && ok; i++) if (get(hx + ax * i, hy, hz + az * i) !== SKULL) ok = false;
+          for (let i = 0; i < 4 && ok; i++) if (get(bx0 + ax * i, by, bz0 + az * i) !== SAND) ok = false;
+          if (!ok) continue;
+          for (let i = 0; i < 3; i++) this.world.setBlock(hx + ax * i, hy, hz + az * i, 0);
+          for (let i = 0; i < 4; i++) this.world.setBlock(bx0 + ax * i, by, bz0 + az * i, 0);
+          const cx = bx0 + ax * 1.5, cz = bz0 + az * 1.5;
+          this.mobManager._spawnAt('wither', cx, by + 1 + 0.1, cz);
+          if (this.chatBox) this.chatBox.add('凋灵从方块中苏醒了…', '#c9c');
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   // 打火石点火传送门：点击框体 → 内部候选格 = 点击面外邻格 → 框校验 → 填充门方块。
@@ -2384,6 +2514,17 @@ export class Game {
       this.player.health -= dt * 6;
     }
 
+    // 凋零 II（Idea-2D-②）：每秒扣 1 血持续到秒数耗尽；可致死（统一死亡判定在下方）；
+    // 持续伤害口径不走红屏，视觉走 Hud 紫黑滤镜（update 内 setWithered）
+    if (this.player.withered > 0 && !this.player.creative && !this.player.spectator) {
+      this.player.withered = Math.max(0, this.player.withered - dt);
+      this._witherTick = (this._witherTick || 0) + dt;
+      if (this._witherTick >= 1) {
+        this._witherTick -= 1;
+        this.player.health = Math.max(0, this.player.health - 1);
+      }
+    }
+
     if (this.player.health <= 0) {
       this.player.health = 0;
       if (this.deathScreen && !this.deathScreen.visible) {
@@ -2407,6 +2548,8 @@ export class Game {
     this.player.exhaustion = 0;
     this.player.onFire = 0;
     this.player.invulnerable = 0;
+    this.player.withered = 0;
+    this._witherTick = 0;
     this.player.gliding = false;
     if (this.hud) this.hud.setGliding(false);
     // 末地死亡回主世界重生（原版语义；防"败龙前死亡软锁在末地"）：

@@ -1100,9 +1100,11 @@ export class MobManager {
         if (closest.healthBarSprite.material) closest.healthBarSprite.material.opacity = 1;
         this._updateHealthBar(closest);
       }
-      // 击退（强化版：水平 6.5、上抛 5，更接近原版击退距离）
-      closest.knockback.add(rayDir.clone().multiplyScalar(6.5));
-      closest.knockback.y = 5;
+      // 击退（强化版：水平 6.5、上抛 5，更接近原版击退距离）；Boss（龙/凋灵）免疫击退
+      if (!closest.type.boss) {
+        closest.knockback.add(rayDir.clone().multiplyScalar(6.5));
+        closest.knockback.y = 5;
+      }
       // 联机：上报攻击事件（含位置校正），其它端同步扣血/受击/对齐位置
       if (closest.netId != null && this.mobNet) {
         this.mobNet.sendMobAttack(closest.netId, damage, closest.position.x, closest.position.y, closest.position.z);

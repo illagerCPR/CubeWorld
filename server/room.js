@@ -436,6 +436,7 @@ export class Room {
       case MSG.MOB_DIED: this.onMobDied(player, msg); break;
       case MSG.REDSTONE_STATE: this.onRedstoneState(player, msg); break;
       case MSG.ARROW_SHOT: this.onArrowShot(player, msg); break;
+      case MSG.WITHER_SKULL: this.onWitherSkull(player, msg); break;
       case MSG.PLAYER_STATE: this.onPlayerState(player, msg); break;
       case MSG.PLAYER_FULL: this.onPlayerFull(player, msg); break;
       case MSG.ATTACK_PLAYER: this.onAttack(player, msg); break;
@@ -591,6 +592,14 @@ export class Room {
     if (!raw.every((v) => typeof v === 'number' && Number.isFinite(v))) return; // 脏包丢弃
     const [x, y, z, dx, dy, dz] = raw;
     this.broadcastDim(MSG.ARROW_SHOT, { id: player.id, x, y, z, dx, dy, dz }, player.dim, player.id);
+  }
+
+  // 凋灵之首（Idea-2D-②）：同箭矢事件转发 except 发起者（发射端已本地生成）；不进账本
+  onWitherSkull(player, msg) {
+    const raw = [msg.x, msg.y, msg.z, msg.dx, msg.dy, msg.dz];
+    if (!raw.every((v) => typeof v === 'number' && Number.isFinite(v))) return; // 脏包丢弃
+    const [x, y, z, dx, dy, dz] = raw;
+    this.broadcastDim(MSG.WITHER_SKULL, { id: player.id, x, y, z, dx, dy, dz }, player.dim, player.id);
   }
 
   onPlayerState(player, msg) {

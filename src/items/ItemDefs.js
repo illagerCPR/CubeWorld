@@ -882,6 +882,19 @@ reg('wheat_seeds', { stack: 64 }, art(g => {
 }));
 reg('bone_meal_item', { displayName: '骨粉', stack: 64 }, dustPileArt('rgb(252,252,246)', 'rgb(206,204,190)', 121));
 
+// 下界之星（Idea-2D-②）：凋灵掉落，信标合成核心材料。八芒星：十字长芒 + 对角短芒 + 亮核
+reg('nether_star', { displayName: '下界之星', stack: 64 }, art(g => {
+  const W = P.white, cD = 'rgb(190,190,165)';
+  g.vl(8, 1, 15, W[1]); g.hl(8, 1, 15, W[1]);      // 十字主芒
+  for (let i = 3; i <= 6; i++) {                    // 对角短芒
+    g.s(i, i, W[1]); g.s(15 - i, i, W[1]); g.s(i, 15 - i, W[1]); g.s(15 - i, 15 - i, W[1]);
+  }
+  g.vl(8, 3, 13, W[0]); g.hl(3, 8, 13, W[0]);      // 内层提亮
+  g.d(8, 8, 2, 2, W[0]);                            // 中心亮核
+  g.s(8, 8, 'rgb(255,255,255)');
+  g.s(8, 1, cD); g.s(8, 15, cD); g.s(1, 8, cD); g.s(15, 8, cD);  // 芒尖收细
+}));
+
 export const ItemSVGDefinitions = svgMap;
 
 export function getItemCount() {

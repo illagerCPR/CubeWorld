@@ -1,4 +1,4 @@
-// test-idea2.mjs -- Idea-2B 服务器回归：箭矢事件同步（arrow_shot 转发 / 无回声 / 脏包丢弃）
+// test-idea2.mjs -- Idea-2 服务器回归：箭矢/凋灵之首事件同步（转发 / 无回声 / 脏包丢弃）+ 潜影盒 data 通道
 // 用法：node server/test-idea2.mjs   （先启动 server/index.mjs，端口 3001；跑批前清空 server/world/ 与 server/config.json）
 import { WebSocket } from 'ws';
 
@@ -81,6 +81,20 @@ function waitFor(p, pred, timeout = 3000) {
   send(a, 'arrow_shot', { x: NaN, y: 70, z: 0, dx: 1, dy: 1, dz: 1 });
   await sleep(400);
   assert('脏包被服务器丢弃', !b.inbox.some((m) => m.t === 'arrow_shot'));
+
+  // Idea-2D-②：凋灵之首同款事件转发（甲发 → 乙收初速 + 射者 id；甲无回声；脏包丢弃）
+  const skull = { x: 2.5, y: 72.25, z: -4.75, dx: 15.2, dy: -1.4, dz: 3.2 };
+  send(a, 'wither_skull', skull);
+  const gotSkull = await waitFor(b, (m) => m.t === 'wither_skull');
+  assert('乙收到 wither_skull', !!gotSkull);
+  assert('凋灵之首初速字段一致', !!gotSkull && Math.abs(gotSkull.x - skull.x) < 1e-6 && Math.abs(gotSkull.dx - skull.dx) < 1e-6,
+    gotSkull ? `x=${gotSkull.x} dx=${gotSkull.dx}` : '');
+  assert('凋灵之首携带射者 id', !!gotSkull && gotSkull.id === a.id);
+  b.inbox.length = 0;
+  send(a, 'wither_skull', { x: 'abc', y: 70, z: 0, dx: 1, dy: 1, dz: 1 });
+  send(a, 'wither_skull', { x: 1, y: Infinity, z: 0, dx: 1, dy: 1, dz: 1 });
+  await sleep(400);
+  assert('凋灵之首脏包被丢弃', !b.inbox.some((m) => m.t === 'wither_skull'));
 
   a.ws.close(); b.ws.close();
 }

@@ -32,8 +32,15 @@ export class Player {
     this.onFire = 0;
     this.airTicks = 300; // 氧气（原版 300 tick = 15 秒）
     this.invulnerable = 0;     // 受击后无敌帧（秒），> 0 时阻止 hurt()
+    this.withered = 0;         // 凋零 II 剩余秒数（凋灵近战/弹射物附加；每秒扣 1 血，可致死）
     this.onHurt = null;          // 受击回调 (amount, source) => void，由 Game 注册
     this.onDeath = null;
+  }
+
+  // 凋零 II 附加（Idea-2D-②）：与 onFire 同款的秒数状态（取最大值刷新），扣血节拍在 Game 统一走
+  applyWither(seconds = 10) {
+    if (this.creative || this.spectator) return;
+    this.withered = Math.max(this.withered, seconds);
   }
 
   // 统一受击入口：处理无敌帧 + 触发 onHurt 回调。

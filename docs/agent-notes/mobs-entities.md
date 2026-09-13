@@ -75,3 +75,15 @@
 
 - `wither_skeleton_skull` 物品（焦黑颅骨图标，stack 64）；凋零骷髅 drops 增 10% 掉率（原版 2.5%+抢夺，本作无附魔取 10%，200 次采样实测 8.5%）。凋零骷髅本身早已全挂钩生成表（`pickNetherSpawn` 纯函数：要塞 10%/灵魂沙峡谷 45%/其余 15%，有单测）——本批只补头颅。
 - **凋灵 Boss + 信标维持独立立项**（TODO.md D 节）：召唤检测复用 `_trySummonIronGolem`/`detectEndRing` 套路，Boss 三段血条可参考 DragonAI + BossBar，玩家 buff 系统是 Player 状态机新领域——立项时先评审。
+
+### Idea-2D-② 批次备忘（防回退）—— 凋灵 Boss + 头颅方块化
+
+- **命名陷阱**：`WITHER_PARTS` 常量早已被**凋零骷髅**占用——凋灵 Boss 部件必须用 `WITHER_BOSS_PARTS`（勿复用旧名）。
+- **头颅方块化**：BlockDefs 文件**末尾**追加 `wither_skeleton_skull` 方块（追加位置防 ID 错位）；与同名物品互通 = 放置走 `BlockRegistry.getByName(sel.name)` 命中（Game.js 通用放置分支）、破坏走 `_blockDropName` 默认同名词掉回物品——**零额外掉落/放置代码**。方块纹理三张（top/side/bottom，face 只在 side）。
+- **召唤检测 `_trySummonWither`**：底排 4 灵魂沙 + 头排 3 头颅（头排相对底排左/右两种对齐 × x/z 两轴）；头/沙层位由**放置物**决定（放头→头层 y 底层 y-1；放沙→底层 y 头层 y+1）；h0 枚举 [-3,3] 由校验保证正确性（宽枚举无害）。只在本地放置分支调用（同铁傀儡防多端重复）；移除 7 块 setBlock 自动广播 + `_spawnAt('wither')`（联机自动 mob_spawn 回执，零额外协议）。
+- **WitherAI**（`src/entity/WitherAI.js`）：rise（升空蓄能 4s）→ hover（绕玩家 8 格切向引导点，同 DragonAI circle 套路 + 正弦浮沉）→ 血量 <50% 狂暴（速度 ×1.45、射程 1.6s）。齐射经 `mobManager.onWitherShoot` 回调（Game.start 注入 `_spawnWitherSkullVolley` 三发扇形 ±0.14rad）——AI 不直接碰渲染层。Mob.js 分发插在 dragon 分支后、**传 mobManager**（dragon 分支不传）。
+- **弹射物语义**（凋灵之首）：各端本地积分 + **命中本地玩家本地结算**（同怪咬人语义，非箭矢"射端权威"——箭矢打怪、弹丸打人）；广播纯视觉（服务器 `WITHER_SKULL` 同 arrow_shot except 发起者转发，server/room.js `onWitherSkull`）。命中判定 = 水平 0.6 格半径 + 1.8 身高线段（AABB 近似）；`spawnRemoteWitherSkull` 不再广播（防回声环）。限速：tierOf 未列出 → 天然不限速。
+- **凋零 II**：`player.withered` 秒数（`applyWither` 取最大值刷新，创造/旁观拒绝）；**扣血节拍在 Game.updateSurvival**（每秒 1 血直扣不走 hurt、可致死、统一死亡判定在函数尾部）；**满食物回血会抵消凋零扣血**——验证时先 `player.food = 5`，否则 hp 不变误判失效。视觉 `Hud.setWithered` 紫黑滤镜（update 每帧同步 >0），hideAll 复位 + Game.start 重置 withered（Player 是共享型子系统）。
+- **BossBar 多实例**：`update(mobs[])` 改传 **type.boss 数组**（Game 917 行 find 单龙旧调用勿回退）；内部 Map<typeName, row> 惰性建行，凋灵红条/龙紫条；新增 Boss 类型在 `_row` 补配色分支。
+- **免击退**：`attackMob` 击退段包 `if (!closest.type.boss)`——只包玩家攻击路径，mobAttackMob 不动（铁傀儡仍可击退凋灵，可接受）。
+- **实测锚点**：召唤→hover 索敌 41→28.5 收敛；自动齐射 skulls 0→2；弹丸命中 8 伤 + withered 8.4s；击杀掉 rotten_flesh+nether_star；BossBar fill 100%→1.7%；模型 168 顶点（7 部件 ×24）/皮肤 96×64。**冒烟陷阱**：召唤点选玩家脚下——上方有实心方块时 mob 嵌入被 collide 钳制（位置不动非 AI 失效），先传送开阔地再验；headless 页面 RAF 会停转（截图冻结帧），恢复 `g.running=true + requestAnimationFrame(g.loop)`，逻辑验证一律手动 `g.update(1/60)` 步进。
