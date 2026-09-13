@@ -203,6 +203,7 @@ LAN 联机阶段 0-11 已全部完成（`https://github.com/illagerCPR/CubeWorld
 **版本号与发布规则（2026-09-13 确立）**：
 - 版本格式 **Alpha Build X**；X 从 1 起，**每次功能交付完成（批次 push + CI 绿）递增 1**，一个批次 = 一个 Release。
 - 版本常量唯一来源 `src/version.js`（`BUILD` 数字 + `VERSION_LABEL` 模板）：递增版本只改这一个数字，其他地方一律引用常量，禁止硬编码版本文本。
+- **版本号同步纪律（2026-09-13 补强）**：每次变动版本号（BUILD 递增）**必须在同一批次提交内更新 `src/version.js` 的 `BUILD`**——主界面与游戏内左下角均引用 `VERSION_LABEL` 常量自动跟随，改常量即改界面，勿漏；发布 Release 前先核对 `src/version.js` 的 BUILD 数值 = 目标 Build 号（曾发生连发 3 个 Release 而常量停在 1、界面显示与实际版本脱节的失误）。
 - 显示规则：主界面（`MenuScreen.versionEl`）与游戏内（`Hud.versionTag`）**左下角**常驻文本 `CubeWorld Alpha Build X`，格式勿改；新增 UI 不得遮挡/移除该元素（主菜单元素挂 body 勿挂 `MenuScreen.el`——`render()` 重建 innerHTML 会清除）。
 - 发布：每批 CI 绿后 `gh release create alpha-build-<X> --repo illagerCPR/CubeWorld --title "CubeWorld Alpha Build <X>" --notes "<本批内容简述>"`，tag 指向已绿的 master 提交。
 
