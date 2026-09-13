@@ -3,15 +3,23 @@
 // 语言选择持久化在 Settings.language（VideoSettings 下拉切换，即选即存）。
 import { zhTW } from './locales/zh-TW.js';
 import { en } from './locales/en.js';
+import { fr } from './locales/fr.js';
+import { de } from './locales/de.js';
+import { ja } from './locales/ja.js';
+import { ko } from './locales/ko.js';
 
-// 语言清单（顺序即 VideoSettings 下拉顺序；label 各用本语言自称）
+// 语言清单（顺序即 VideoSettings 语言行循环顺序；label 各用本语言自称）
 export const LOCALES = [
   { id: 'zh-CN', label: '简体中文' },
   { id: 'zh-TW', label: '繁體中文' },
   { id: 'en', label: 'English' },
+  { id: 'fr', label: 'Français' },
+  { id: 'de', label: 'Deutsch' },
+  { id: 'ja', label: '日本語' },
+  { id: 'ko', label: '한국어' },
 ];
 
-const PACKS = { 'zh-TW': zhTW, 'en': en };
+const PACKS = { 'zh-TW': zhTW, 'en': en, 'fr': fr, 'de': de, 'ja': ja, 'ko': ko };
 
 let locale = 'zh-CN';
 const changeListeners = new Set();

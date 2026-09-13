@@ -616,7 +616,11 @@ export class Game {
           this.commandPanel.hide();
           return;
         }
-        if (this.inventoryScreen && this.inventoryScreen.visible) return;
+        // 物品栏打开时 ESC 关闭（Build 6 修复：原为裸 return 什么都不做，与其他容器不一致）
+        if (this.inventoryScreen && this.inventoryScreen.visible) {
+          this.inventoryScreen.hide();
+          return;
+        }
         if (this.chestScreen && this.chestScreen.visible) {
           this.chestScreen.hide();
           return;

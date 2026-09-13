@@ -78,3 +78,10 @@
 - **服务器侧文本不翻译**（踢出原因/房间开关提示等随协议下发）——客户端 `chatBox.add` 里对 `fromId===0` 服务器系统回复原样显示；本批只本地化客户端自身文案（Game.js ~25 条系统提示已 t() 化）。
 - **存档时间本地化**：MenuScreen 槽位 `toLocaleString(getLocale())`（原硬编码 'zh-CN'）。
 - **验证锚点**：视频设置切 English → 主菜单/HUD/暂停/信标界面全英文；`localStorage['cubeworld-settings'].language` 持久化；刷新后仍英文；方块名（快捷栏气泡/准星）三语切换。
+
+### Build 6 扩语批次备忘（防回退）
+
+- **七语言**：zh-CN（键）/ zh-TW / en / fr / de / ja / ko——`LOCALES`（VideoSettings 语言行循环顺序）与 `PACKS` 在 `i18n/index.js`；名称字典 `names.js` **七列数组** `[简,繁,En,Fr,De,Ja,Ko]`，`name.js` 的 `LANG_IDX` 按语言 id 映射下标——**新增语言三处同步**：index.js（LOCALES+PACKS）、name.js（LANG_IDX）、names.js（扩列）+ 新 locales 文件；Settings.language 白名单走 `LOCALES.some` 自动放行，无需改。
+- **多语言包生成口径**：以 en.js 键集为基准逐键翻译（键一字不改、值按 MC 对应官方语言 fr_fr/de_de/ja_jp/ko_kr 术语），完成后程序化校验三件事——键集 missing/extra 双向为零、占位符 `{n}…` 多重集一致、`node --check`。自创词全书统一（Nether/l'End/Aether、wisp=Aspiritelle/Irrlicht/ウィスプ/위스프 等）。
+- **⚠️ eval 探针验 i18n 的实例分裂扩展**：页面模块链被 HMR 编辑过（如 Game.js）后，裸 `import('/src/i18n/index.js')` 是新实例——对它 setLocale 后再用页面实例的 tName 读会得到**切换前的语言值**（假象）。验语言切换走 UI 真实路径（语言行点击 + 断言主菜单按钮文本），不要裸 import 探针。
+- **Esc 关闭物品栏（Build 6 修复）**：Game.js ESC 分支原对 `inventoryScreen.visible` 裸 `return`（什么都不做，与其他容器 hide 不一致）——改为 `inventoryScreen.hide()` 后 return；`_setupPauseOnUnlock` 已排除全部界面，Esc 关背包不会误弹暂停。
