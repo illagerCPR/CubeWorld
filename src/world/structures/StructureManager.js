@@ -265,6 +265,8 @@ export class StructureManager {
         if (name === 'aether_temple') return '天空神殿';
         if (name === 'aether_tower') return '浮空瞭望塔';
         if (name === 'aether_ship') return '天域沉船';
+        if (name === 'aether_well') return '漩风井';
+        if (name === 'aether_gate') return '天海之门遗迹';
         return name;
       }
     }

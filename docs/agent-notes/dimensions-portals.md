@@ -74,3 +74,16 @@
 - **i18n 固化为永久测试**：`tests/i18n-parity.mjs`（10 包键集对齐 + 每键占位符多重集对齐 + **静态 t() ∪ 动态键表**（群系名/碑文/lore/信标效果/分类标签）覆盖审计 + 文本级重复键扫描）——碑文/lore 走 `t(表[key])` 动态路径，静态扫描盲区（§16 教训）必须显式并集；本批 master=236 键 × 10 包全绿。
 - **eval import 实例分裂（§16 陷阱再次命中）**：browser eval 里 `import('/src/i18n/index.js')` 得到**第二模块实例**，setLocale 改的是副本、游戏 t() 无感——实时语言验证必须走真实 UI（主菜单「语言」按钮循环切换）后再进世界断言。
 - **冒烟全绿**：创造搜索（星髓→4 项/残页→3 项）、tooltip 中英双语渲染（名称+灰斜体 lore 行）、石碑三路径（未注册→无字碑 / meta 注册→第一章 / 右键路由）、E 关闭还原 controls、控制台 0 错误；测试存档已删、语言已还原简体。
+
+### 天域群风与众生批次（批次 B，2026-09-14 交付，未发布——随 Build 14 统一发布）—— 生物/结构/气流
+
+- **结构新增**：漩风井（aether_well，cell12/attempts2/chance0.5/salt7264，石环+wind_current 柱 20 格）/ 天海之门遗迹（aether_gate，cell24/attempts4/chance0.5/salt7265，半埋荧石拱+rng 腐蚀塌顶+核心石碑）；catalog.js 登记；structureNameAt 增中文名。**测试扫描 ±4 cell 找不到低密度结构时先放大扫描半径（well 需 R≥6）再怀疑生成参数**。
+- **神殿内殿改造**：solveTemple 追加 ⑥ 段——下沉 3×3×3 圣所（净空 y0-2..y0、底 y0-3）+ 恒昼祭坛 + 双碑（sundering/command）+ 第三箱 aether_sanctum + 东侧地板开口两级踏步（1 格跳距闭环）+ 殿心海晶灯改封门星髓块（挖开坠入）。结构块**后写覆盖先写**（air 开口压地板层，同 solveTemple 门的旧例）。
+- **出生岛引路碑**：aether.js generateChunk 原点区块 (8,8) 列置 wind_stele + structureManager.steles 注册 prologue；**碑位列跳过 _decorate**（防树干覆盖成浮叶）；decorate=false 探针不置碑不注册（防递归路径污染）。注意石碑上方可能有邻树树叶——顶扫首个非空格不一定是碑（冒烟扫描要按 id 找）。
+- **BlockRegistry 白名单字段**：新增 `updraft`——与 ItemRegistry lore 同款陷阱：register 白名单外的 def 字段**静默丢弃**，新字段必须同步加白名单。
+- **气流渲染纪律（曾真错）**：solid 材质 `alphaTest:0.1 + transparent:false` → **rgba 半透明像素按不透明 RGB 画成色块**；wind_current 必须 `renderType:'cross'` + 二值 alpha（全画/全透，火把同款）；rgba 只在 transparent 材质（水面）可用。
+- **上升气流实现**：`_updateUpdraftState()`（足/身任一格 def.updraft）+ 移动分支（水平弱操控 0.6x、Shift -4 下潜脱出）+ **physics.collide 之后**追加升力 `vy=min(6, vy+45dt)`——升力若加在 collide 前会被当帧重力抵消；只作用玩家（flying/spectator/inWater/gliding 全跳过）；实测 3s 升 ~10 格、柱顶悬停回落再托举。风阵块放置 `_writeGaleColumn` 上方 12 格逐格 setBlock（联机 World.setBlock 钩子自动逐格上报），拆块 `_clearGaleColumn` 顺柱清除（遇非风流格即停）。
+- **云绒块免摔落**：摔落判定（impactVy<-15）先查 `_blockUnderFoot()`，cloud_wool 全免；生存模式对照实测：石头 30 格 20→11.7 血 / 云绒 20→20。**创造模式 hurt 恒 false——摔落/伤害类冒烟必须切生存**（CommandPanel 生存按钮），且面板开着 update 暂停、物理不走。
+- **生物三新增**：cloud_lamb（陆行被动，掉云絮 2-3——云絮唯一常规来源）/ gale_hawk（flying 敌对 3 伤）/ tide_echo（flying 中立）；`Mob.passive` 无实例字段（构造器只抄 neutral/flying），断言用 `type.passive`；生成表 **pickAetherSpawn→pickAetherSpawnV2**（crystal 守卫40/潮鸣30/风灵30；frost 守卫10/岚隼12/风灵余；草地岚隼8/风灵余；神殿周边守卫主导不变）；aether 被动群生成并入 trySpawn 草地块（`overworld||aether`，aether 组=cloud_lamb）。
+- **angerTideEchoes**：MobManager 新方法（挖矿触发器版同族群怒，末影人 attackMob 模式换触发器）；挂 creative+survival 两破坏路径（与 _breakBeacon 同位）；真实鼠标冒烟：挖穿星髓矿石 → 16 格内潮鸣 aggro=true。
+- **测试**：aether-mobs 351 断言（V2 分布 + 真实 MobManager 激怒链路）/ aether-structures 126 断言 ×2 seeds（新结构选址/石碑三向 meta↔方块↔sm.steles/内殿/引路碑/探针防护）/ aether-content 156 断言（cross+updraft/gale_block）。

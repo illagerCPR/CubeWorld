@@ -737,6 +737,37 @@ export class Game {
     }
   }
 
+  // 上升气流检测（天域批次 B）：足部/身体任一格 def.updraft → 本帧处于气流柱内。
+  // 只作用于玩家（怪物运动不接气流，避免 AI 被抬飞出控）；联机纯本地物理零协议。
+  _updateUpdraftState() {
+    const p = this.player;
+    const bx = Math.floor(p.position.x);
+    const bz = Math.floor(p.position.z);
+    const yFeet = Math.floor(p.position.y + 0.1);
+    const yBody = Math.floor(p.position.y + 1.0);
+    const d1 = BlockRegistry.getById(this.world.getBlock(bx, yFeet, bz));
+    const d2 = BlockRegistry.getById(this.world.getBlock(bx, yBody, bz));
+    this._inUpdraft = !!(d1 && d1.updraft) || !!(d2 && d2.updraft);
+  }
+
+  // 风阵块放置：上方 12 格写风流柱（只填空气格；逐格 setBlock → 联机逐格自动上报）
+  _writeGaleColumn(x, y, z) {
+    const wid = BlockRegistry.getId('wind_current');
+    for (let h = 1; h <= 12; h++) {
+      if (y + h >= CHUNK_HEIGHT) break;
+      if (this.world.getBlock(x, y + h, z) === 0) this.world.setBlock(x, y + h, z, wid);
+    }
+  }
+
+  // 拆风阵块：同步清除其上方气流柱（遇非风流格即停，玩家建筑不受影响）
+  _clearGaleColumn(x, y, z) {
+    const wid = BlockRegistry.getId('wind_current');
+    for (let h = 1; h <= 12; h++) {
+      if (this.world.getBlock(x, y + h, z) !== wid) break;
+      this.world.setBlock(x, y + h, z, 0);
+    }
+  }
+
   // 燃烧表现：着火实体喷火焰+烟，玩家着火叠屏幕火光
   _updateFireEffects(dt) {
     // 玩家自身
@@ -775,6 +806,8 @@ export class Game {
   update(dt) {
     // 检测玩家是否在水中（眼睛位置）
     this._updateWaterState();
+    // 检测玩家是否在上升气流柱内（天域批次 B：足部/身体任一格为 wind_current）
+    this._updateUpdraftState();
     // 鞘翅滑翔折叠判定（水中/落地等环境变化要在移动分支前收口，gliding 不得跨分支残留）
     this._updateGlideFold();
 
@@ -830,6 +863,13 @@ export class Game {
         if (this.controls.isJumping()) this.player.velocity.y = 4.0;
         else if (this.controls.isSneaking()) this.player.velocity.y = -4.0;
         // 其余交给 Physics 的水中重力与阻力
+      } else if (this._inUpdraft && !this.player.gliding) {
+        // 上升气流（天域批次 B）：水平弱操控（保留跃出动量感）；Shift 下潜脱出；
+        // 竖直抬升在 physics.collide 之后结算（抵消当帧重力并反超，钳上限）
+        const gustSpeed = speed * 0.6 * sprint;
+        this.player.velocity.x = move.x * gustSpeed;
+        this.player.velocity.z = move.z * gustSpeed;
+        if (this.controls.isSneaking()) this.player.velocity.y = -4.0;
       } else if (this._updateGlideAero(dt)) {
         // 鞘翅滑翔帧：速度由动量主导（俯冲推进/拉起刹车已在 _updateGliding 内结算），
         // 不走地面移动的速度覆写，否则动量每帧被清成 4.3m/s 滑翔无从谈起
@@ -845,6 +885,11 @@ export class Game {
       }
       
       this.physics.collide(this.player, dt);
+      // 气流抬升（批次 B）：物理重力落地后追加升力（净加速 +13 m/s²，钳 +6 m/s）
+      if (this._inUpdraft && !this.controls.isSneaking() &&
+          !this.player.flying && !this.player.spectator && !this.player.inWater && !this.player.gliding) {
+        this.player.velocity.y = Math.min(6, this.player.velocity.y + 45 * dt);
+      }
       this.player.updateCamera();
       this.sky.update(dt, this.player.position);
     }
@@ -1437,6 +1482,8 @@ export class Game {
         if (def.name === 'shulker_box') this._breakShulkerBox(hit.block, false); // Idea-2C：创造也掉盒（内容跟随）
         if (def.name === 'furnace') this._breakFurnace(hit.block);
         if (def.name === 'end_crystal') this._breakCrystal(hit.block.x, hit.block.y, hit.block.z);
+        if (def.name === 'star_marrow_ore') this.mobManager?.angerTideEchoes(hit.block.x, hit.block.y, hit.block.z); // 批次 B：潮鸣激怒
+        if (def.name === 'gale_block') this._clearGaleColumn(hit.block.x, hit.block.y, hit.block.z); // 批次 B：拆风阵块清气流柱
         this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
         removeConnectedPortals(this.world, hit.block.x, hit.block.y, hit.block.z);
         if (this.redstone) this.redstone.onBlockChange(hit.block.x, hit.block.y, hit.block.z);
@@ -1474,6 +1521,8 @@ export class Game {
           if (def.name === 'shulker_box') this._breakShulkerBox(hit.block, true); // Idea-2C：内容跟随盒体
           if (def.name === 'furnace') this._breakFurnace(hit.block);
           if (def.name === 'end_crystal') this._breakCrystal(hit.block.x, hit.block.y, hit.block.z);
+          if (def.name === 'star_marrow_ore') this.mobManager?.angerTideEchoes(hit.block.x, hit.block.y, hit.block.z); // 批次 B：潮鸣激怒
+          if (def.name === 'gale_block') this._clearGaleColumn(hit.block.x, hit.block.y, hit.block.z); // 批次 B：拆风阵块清气流柱
           this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
           removeConnectedPortals(this.world, hit.block.x, hit.block.y, hit.block.z);
           if (this.redstone) this.redstone.onBlockChange(hit.block.x, hit.block.y, hit.block.z);
@@ -1678,6 +1727,8 @@ export class Game {
             this.world.setContainer(placeX, placeY, placeZ, items);
             if (this.networkMode && this.net) this.net.sendContainerSet(placeX, placeY, placeZ, items);
           }
+          // 天域批次 B：风阵块放置 → 上方 12 格写风流柱（逐格 setBlock，联机自动逐格上报）
+          if (blockDef.name === 'gale_block') this._writeGaleColumn(placeX, placeY, placeZ);
           if (this.player.survival) {
             this.inventory.removeSelected(1);
             this.hotbar.update();
@@ -2719,11 +2770,15 @@ export class Game {
     
     // 摔落伤害（读落地前的冲击速度 impactVy——moveAxis 落地会把 velocity.y 清零，
     // 旧写法 onGround && velocity.y<-15 永远为假，摔落从未生效，本批修复）
+    // 天域批次 B：落点为云绒块 → 免摔落（群岛基建核心，绒毛卸掉全部冲击）
     const impactVy = this.player.impactVy || 0;
     if (this.player.onGround && impactVy < -15) {
-      const dmg = Math.floor(-impactVy / 3 - 3);
-      if (dmg > 0) {
-        this.player.hurt(dmg, 'fall', true);
+      const landDef = this._blockUnderFoot();
+      if (!landDef || landDef.name !== 'cloud_wool') {
+        const dmg = Math.floor(-impactVy / 3 - 3);
+        if (dmg > 0) {
+          this.player.hurt(dmg, 'fall', true);
+        }
       }
     }
 

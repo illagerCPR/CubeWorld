@@ -178,7 +178,15 @@ export class AetherGenerator {
           blocks[idx(y, z, x)] = id;
         }
         if (decorate && x >= 2 && x <= 13 && z >= 2 && z <= 13) {
-          this._decorate(chunk, x, z, wx, wz, span, biome, ids);
+          // 出生岛引路碑（批次 B）：原点区块 (8,8) 列必置风纹石碑——新玩家 30 秒内接触故事。
+          // 碑位列跳过树木/晶柱装饰（防断干浮叶）；章节注册进 structureManager.steles
+          //（键与 steleChapterAt 一致）；decorate=false 的选址/出生探针不注册（防递归污染）。
+          if (cx === 0 && cz === 0 && x === 8 && z === 8) {
+            blocks[idx(top + 1, z, x)] = BlockRegistry.getId('wind_stele');
+            this.structureManager.steles.set(`8,${top + 1},8`, 'prologue');
+          } else {
+            this._decorate(chunk, x, z, wx, wz, span, biome, ids);
+          }
         }
       }
     }

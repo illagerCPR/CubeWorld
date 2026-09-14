@@ -28,6 +28,7 @@ const BLOCKS = {
   wind_stele: { displayName: '风纹石碑', hardness: -1 },
   aether_altar: { displayName: '恒昼祭坛', light: 13, hardness: -1 },
   wind_current: { displayName: '气流', solid: false, transparent: true },
+  gale_block: { displayName: '风阵块', light: 0 },
 };
 for (const [name, want] of Object.entries(BLOCKS)) {
   const b = BlockRegistry.getByName(name);
@@ -41,7 +42,10 @@ for (const [name, want] of Object.entries(BLOCKS)) {
 }
 ok(BlockRegistry.getByName('cloud_wool').solid === true, 'cloud_wool solid');
 ok(BlockRegistry.getByName('wind_current').hardness === 0.3, 'wind_current 可破坏（0.3）');
+ok(BlockRegistry.getByName('wind_current').renderType === 'cross', 'wind_current cross 渲染（solid 材质 alphaTest 纪律）');
+ok(BlockRegistry.getByName('wind_current').updraft === true, 'wind_current updraft 标记（Game._updateUpdraftState 消费）');
 ok(BlockRegistry.getByName('star_marrow_ore').hardness === 3, 'star_marrow_ore hardness 3');
+ok(BlockRegistry.getByName('gale_block').updraft === false, 'gale_block 本体非气流（发射器只写柱）');
 
 // ── ② 物品 ──
 const ITEMS = {
@@ -71,7 +75,7 @@ for (const [name, want] of Object.entries(ITEMS)) {
 // ── ③ 创造分类 ──
 const WANT_CAT = {
   star_marrow_ore: 'nature', star_marrow_block: 'building', cloud_wool: 'building',
-  wind_stele: 'functional', aether_altar: 'functional', wind_current: 'functional',
+  wind_stele: 'functional', aether_altar: 'functional', wind_current: 'functional', gale_block: 'functional',
   cloud_fluff: 'materials', star_marrow: 'materials', storm_core: 'materials',
   page_rising: 'misc', page_marrow: 'misc', page_sunder: 'misc',
   storm_totem: 'misc', heart_shard: 'misc', wind_brand: 'tools', gale_cloak: 'tools',
@@ -101,7 +105,7 @@ ok(sm.steleChapterAt(1, 2, 3) === 'prologue', '键格式 "x,y,z" 一致');
 
 // ── ⑥ 追加纪律（防存档 id 错位）──
 const beaconId = BlockRegistry.getId('beacon');
-for (const name of Object.keys(BLOCKS)) {
+for (const name of [...Object.keys(BLOCKS)]) {
   ok(BlockRegistry.getId(name) > beaconId, `id 追加纪律: ${name} (${BlockRegistry.getId(name)}) > beacon (${beaconId})`);
 }
 

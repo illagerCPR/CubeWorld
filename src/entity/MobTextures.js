@@ -164,6 +164,10 @@ const C = {
   chWhite: [240, 238, 230], chWhiteD: [214, 210, 200], chBeak: [232, 176, 60], chWattle: [206, 62, 52], chLeg: [216, 158, 78],
   // 末影人:纯黑 + 品红眼带
   eBlack: [16, 12, 20], eBlackD: [10, 8, 14], eBlackHi: [28, 22, 34], eEye: [198, 132, 250],
+  // 天域批次 B：云绒兽（雪绒白 + 粉褐脸） / 岚隼（石板蓝羽 + 琥珀眼） / 潮鸣（潮髓青晶 + 辉白核）
+  clFluff: [243, 243, 238], clFluffD: [214, 216, 212], clFace: [222, 198, 186], clHoof: [128, 116, 106],
+  ghFeather: [98, 112, 140], ghFeatherD: [66, 78, 102], ghBelly: [168, 178, 198], ghBeak: [226, 172, 66], ghEye: [36, 30, 26],
+  teCrystal: [110, 228, 210], teCrystalD: [64, 158, 142], teTent: [52, 128, 116], teCore: [222, 255, 248], teEye: [255, 255, 255],
 };
 
 // === 各怪皮肤 SVG 生成（原版风） ===
@@ -783,6 +787,105 @@ const AETHER_GUARD_PARTS = [
   { name: 'legR',  row: 3, box: [ 0.06, 0,    -0.14,  0.22, 0.78, 0.14] },
 ];
 
+// 云绒兽（批次 B）：蓬松四足——天海浮游生物退化的食草者，绒毛存着旧海湿气
+const CLOUD_LAMB_PARTS = [
+  { name: 'head',  row: 0, box: [-0.22, 0.86, 0.44,  0.22, 1.26, 0.90] },
+  { name: 'body',  row: 1, box: [-0.42, 0.52, -0.68, 0.42, 1.12, 0.52] },
+  { name: 'legFL', row: 2, box: [ 0.16, 0.00, 0.34,  0.32, 0.54, 0.50] },
+  { name: 'legFR', row: 2, box: [-0.32, 0.00, 0.34, -0.16, 0.54, 0.50] },
+  { name: 'legBL', row: 3, box: [ 0.16, 0.00, -0.52, 0.32, 0.54, -0.36] },
+  { name: 'legBR', row: 3, box: [-0.32, 0.00, -0.52, -0.16, 0.54, -0.36] },
+];
+
+// 岚隼（批次 B）：潮退后诞生的小型掠食鸟——俯冲袭击
+const GALE_HAWK_PARTS = [
+  { name: 'head',  row: 0, box: [-0.14, 0.30, 0.30,  0.14, 0.52, 0.54] },
+  { name: 'body',  row: 1, box: [-0.18, 0.16, -0.30, 0.18, 0.40, 0.34] },
+  { name: 'wingL', row: 2, box: [-0.88, 0.30, -0.16, -0.14, 0.40, 0.20] },
+  { name: 'wingR', row: 2, box: [ 0.14, 0.30, -0.16,  0.88, 0.40, 0.20] },
+  { name: 'tail',  row: 3, box: [-0.14, 0.18, -0.54, 0.14, 0.28, -0.28] },
+];
+
+// 潮鸣（批次 B）：星髓里封存的潮之记忆——钟形晶罩 + 垂须，悬浮漂游
+const TIDE_ECHO_PARTS = [
+  { name: 'bell',   row: 0, box: [-0.36, 0.60, -0.36, 0.36, 1.04, 0.36] },
+  { name: 'core',   row: 1, box: [-0.13, 0.32, -0.13, 0.13, 0.64, 0.13] },
+  { name: 'tentFL', row: 2, box: [ 0.08, 0.00,  0.08, 0.20, 0.34, 0.20] },
+  { name: 'tentFR', row: 2, box: [-0.20, 0.00,  0.08, -0.08, 0.34, 0.20] },
+  { name: 'tentBL', row: 3, box: [ 0.08, 0.00, -0.20, 0.20, 0.34, -0.08] },
+  { name: 'tentBR', row: 3, box: [-0.20, 0.00, -0.20, -0.08, 0.34, -0.08] },
+];
+
+// 云绒兽皮肤：雪绒白 + 粉褐脸（黑豆眼）+ 浅灰蹄
+function cloudLambSkinSVG() {
+  const fluffBase = noisy(C.clFluff, 8, 321);
+  const legBase = noisy(C.clFluffD, 8, 322);
+  const headFront = (x, y) => {
+    if (y >= 6 && y <= 7 && ((x >= 4 && x <= 5) || (x >= 10 && x <= 11))) return C.black; // 豆眼
+    if (y >= 10 && y <= 12 && x >= 6 && x <= 9) return C.clFace;                           // 粉褐口鼻
+    if (y === 11 && x >= 7 && x <= 8) return C.clHoof;
+    return null;
+  };
+  const bodyFront = (x, y) => (hash01(x, y, 323) < 0.18 ? C.clFluffD : null); // 绒毛团块
+  const legFront = (x, y) => (y >= 6 ? C.clHoof : null);
+
+  const cells = [
+    ...partCells(0, fluffBase, { front: headFront, top: fluffBase }),
+    ...partCells(1, fluffBase, { front: bodyFront, top: fluffBase, bot: legBase }),
+    ...partCells(2, legBase, { front: legFront, top: legBase, bot: legBase }),
+    ...partCells(3, legBase, { front: legFront, top: legBase, bot: legBase }),
+  ];
+  return buildSkinSVG(cells);
+}
+
+// 岚隼皮肤：石板蓝背羽 + 亮腹 + 琥珀喙 + 羽纹翼
+function galeHawkSkinSVG() {
+  const featherBase = noisy(C.ghFeather, 8, 331);
+  const bellyBase = noisy(C.ghBelly, 8, 332);
+  const headFront = (x, y) => {
+    if (y >= 6 && y <= 6 && ((x >= 4 && x <= 5) || (x >= 10 && x <= 11))) return C.ghEye; // 黑眼（琥珀由喙提亮）
+    if (y >= 9 && y <= 12 && x >= 6 && x <= 9) return C.ghBeak;                            // 喙
+    return null;
+  };
+  const headTop = () => C.ghFeatherD;
+  const wingFront = (x) => (x % 4 < 2 ? C.ghFeatherD : null); // 羽纹
+  const tailFront = (x) => (x % 3 === 0 ? C.ghFeatherD : null);
+  const bodyFront = (x, y) => (y >= 9 ? C.ghBelly : (hash01(x, y, 333) < 0.15 ? C.ghFeatherD : null));
+
+  const cells = [
+    ...partCells(0, featherBase, { front: headFront, top: headTop }),
+    ...partCells(1, featherBase, { front: bodyFront, top: featherBase, bot: bellyBase }),
+    ...partCells(2, featherBase, { front: wingFront, back: wingFront, top: featherBase, bot: featherBase }),
+    ...partCells(3, featherBase, { front: tailFront, top: featherBase, bot: featherBase }),
+  ];
+  return buildSkinSVG(cells);
+}
+
+// 潮鸣皮肤：青晶钟罩（棱面高光）+ 辉白核 + 暗青垂须 + 白亮眼点
+function tideEchoSkinSVG() {
+  const bellBase = noisy(C.teCrystal, 8, 341);
+  const coreBase = noisy(C.teCore, 6, 342);
+  const tentBase = noisy(C.teTent, 6, 343);
+  const bellFront = (x, y) => {
+    if (y >= 6 && y <= 6 && ((x >= 4 && x <= 5) || (x >= 10 && x <= 11))) return C.teEye; // 白亮眼
+    // 棱面高光：对角斜带
+    if ((x + y) % 6 === 0) return C.teCore;
+    if ((x + y) % 6 === 3) return C.teCrystalD;
+    return null;
+  };
+  const bellTop = () => C.teCrystalD;
+  const bellBot = () => C.teCrystalD;
+  const tentFront = (x) => (x % 3 === 0 ? C.teCrystalD : null);
+
+  const cells = [
+    ...partCells(0, bellBase, { front: bellFront, top: bellTop, bot: bellBot }),
+    ...partCells(1, coreBase, {}),
+    ...partCells(2, tentBase, { front: tentFront, top: tentBase, bot: tentBase }),
+    ...partCells(3, tentBase, { front: tentFront, top: tentBase, bot: tentBase }),
+  ];
+  return buildSkinSVG(cells);
+}
+
 // 风灵：白青发光核心（青蓝豆眼 + 微光斑）+ 淡青尾 + 淡金星屑
 function wispSkinSVG() {
   const coreBase = noisy(C.wCore, 8, 301);
@@ -1018,6 +1121,9 @@ export function generateMobSkinSVGs() {
     shulker:           shulkerSkinSVG(),
     wisp:              wispSkinSVG(),
     aether_guard:      aetherGuardSkinSVG(),
+    cloud_lamb:        cloudLambSkinSVG(),
+    gale_hawk:         galeHawkSkinSVG(),
+    tide_echo:         tideEchoSkinSVG(),
     cow:               cowSkinSVG(),
     sheep:             sheepSkinSVG(),
     chicken:           chickenSkinSVG(),
@@ -1275,6 +1381,62 @@ export const MobTypes = {
     drops: [
       { name: 'glowstone', min: 0, max: 2, chance: 0.7 },
       { name: 'gold_ingot', min: 0, max: 1, chance: 0.35 },
+    ],
+  },
+  cloud_lamb: {
+    name: 'cloud_lamb',
+    displayName: '云绒兽',
+    width: 0.9,
+    height: 1.2,
+    health: 8,
+    damage: 0,
+    speed: 1.0,
+    attackRange: 0,
+    detectionRange: 0,
+    burningInDay: false,  // 永昼不燃烧
+    passive: true,        // cow/sheep 同款被动 AI 分支
+    xp: 2,
+    model: { parts: CLOUD_LAMB_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'cloud_fluff', min: 2, max: 3 },  // 云絮唯一常规来源（塔/船箱补充）
+    ],
+  },
+  gale_hawk: {
+    name: 'gale_hawk',
+    displayName: '岚隼',
+    width: 0.8,
+    height: 0.6,
+    health: 12,
+    damage: 3,
+    speed: 2.8,
+    attackRange: 2.0,
+    detectionRange: 16,
+    burningInDay: false,  // 永昼不燃烧
+    flying: true,         // 悬浮追击（aether_guard 同款）
+    xp: 5,
+    model: { parts: GALE_HAWK_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'feather', min: 0, max: 2, chance: 0.6 },
+    ],
+  },
+  tide_echo: {
+    name: 'tide_echo',
+    displayName: '潮鸣',
+    width: 0.8,
+    height: 1.1,
+    health: 20,
+    damage: 3,
+    speed: 1.6,
+    attackRange: 2.0,
+    detectionRange: 16,
+    burningInDay: false,  // 永昼不燃烧
+    flying: true,         // 悬浮漂游
+    neutral: true,        // 中立：挖星髓矿石被激怒（MobManager.angerTideEchoes，16 格同族传播）
+    xp: 8,
+    model: { parts: TIDE_ECHO_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'star_marrow', min: 0, max: 1, chance: 0.35 },  // 潮之骨头碎屑
+      { name: 'glowstone', min: 0, max: 1, chance: 0.3 },
     ],
   },
   cow: {

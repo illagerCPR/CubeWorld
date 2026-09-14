@@ -67,24 +67,33 @@ const TABLES = {
     ['diamond', 1, 3, 10], ['emerald', 2, 6, 10], ['golden_apple', 1, 2, 8],
     ['experience_bottle', 2, 5, 8], ['ender_pearl', 1, 3, 8], ['iron_ingot', 3, 8, 10],
   ],
-  // 天空神殿：金饰/钻石/发光系（箱子在殿内对角×2）
+  // 天空神殿：金饰/钻石/发光系（箱子在殿内对角×2）——批次 B 增补裂潮残页/星髓
   aether_temple: [
     ['golden_apple', 1, 2, 6], ['diamond', 1, 3, 8], ['gold_ingot', 2, 5, 12],
     ['iron_ingot', 2, 6, 12], ['emerald', 1, 3, 10], ['glowstone', 2, 6, 10],
     ['sea_lantern', 1, 3, 8], ['experience_bottle', 2, 5, 10], ['bread', 1, 3, 10],
-    ['quartz_block', 2, 6, 8],
+    ['quartz_block', 2, 6, 8], ['page_sunder', 1, 1, 4], ['star_marrow', 1, 2, 5],
   ],
-  // 浮空瞭望塔：巡逻补给（顶部瞭望台单箱）
+  // 浮空瞭望塔：巡逻补给（顶部瞭望台单箱）——批次 B 增补云絮/涨潮残页
   aether_tower: [
     ['bread', 1, 3, 16], ['arrow', 4, 12, 12], ['coal', 3, 8, 12],
     ['iron_ingot', 1, 3, 10], ['emerald', 1, 2, 8], ['torch', 4, 8, 10],
     ['apple', 1, 3, 10], ['experience_bottle', 1, 2, 6], ['feather', 2, 4, 6],
+    ['cloud_fluff', 1, 3, 10], ['page_rising', 1, 1, 5],
   ],
-  // 天域沉船：远航货物（甲板/舱室两箱）
+  // 天域沉船：远航货物（甲板/舱室两箱）——批次 B 增补星髓残页/星髓
   aether_ship: [
     ['iron_ingot', 2, 6, 12], ['gold_ingot', 1, 4, 10], ['diamond', 1, 2, 6],
     ['emerald', 1, 4, 10], ['bread', 2, 5, 12], ['experience_bottle', 1, 3, 8],
     ['glowstone', 1, 4, 8], ['ender_pearl', 1, 1, 4],
+    ['page_marrow', 1, 1, 6], ['star_marrow', 1, 2, 6],
+  ],
+  // 天域瞭望塔/神殿批次 B 增补：云絮与残页（叙事收集线）——已并入上方对应表
+  // 天空神殿·内殿圣所（批次 B）：星髓 FORCED 保底 + 裂潮残页 + 神殿档次杂项
+  aether_sanctum: [
+    ['golden_apple', 1, 2, 8], ['diamond', 1, 3, 10], ['emerald', 2, 4, 10],
+    ['gold_ingot', 2, 6, 12], ['glowstone', 2, 5, 10], ['quartz_block', 2, 6, 10],
+    ['experience_bottle', 2, 5, 10], ['cloud_fluff', 2, 5, 12], ['page_sunder', 1, 1, 10],
   ],
 };
 
@@ -92,6 +101,7 @@ const TABLES = {
 // 旧表无条目 → rng 流与行为完全不变（联机箱子内容一致性不受影响）。
 const FORCED = {
   end_ship_captain: [['elytra', 1, 1]],
+  aether_sanctum: [['star_marrow', 2, 4]], // 批次 B：内殿圣所星髓保底（新表，不影响旧表流）
 };
 
 // 生成箱子内容：27 槽数组（索引 0-26），空槽为 null

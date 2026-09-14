@@ -216,7 +216,7 @@
 - 测试：注册完备性单测、碑文内容表完整断言；`node --check` 全量。
 - 收尾：批次内单测 + `node --check` 全绿即完成（**不 bump BUILD、不发 Release**，见发布节奏）。
 
-### 批次 B：群风与众生（生物/结构/气流）
+### 批次 B：群风与众生（生物/结构/气流）✅ 已交付（2026-09-14，未发布——随 Build 14 统一发布）
 - 生物：云绒兽/岚隼/潮鸣 + `pickAetherSpawnV2`（纯函数 + 分布单测）；MobTextures 三套 cuboid 模型。
 - 结构：引路碑/漩风井/天海之门遗迹/神殿内殿改造 + 内殿战利品表；`tests/aether-structures.mjs`（选址确定性/落地/箱表/维度作用域）接入 run-all-tests.sh。
 - 机制：上升气流（`_updateUpdraftState` + 风阵块放置写柱）+ 云绒块免摔落。

@@ -111,6 +111,10 @@ addShaped('glowstone', 1, ['glowstone_dust','glowstone_dust','glowstone_dust','g
 addShaped('iron_block', 1, ['iron_ingot','iron_ingot','iron_ingot','iron_ingot','iron_ingot','iron_ingot','iron_ingot','iron_ingot','iron_ingot']);
 addShaped('gold_block', 1, ['gold_ingot','gold_ingot','gold_ingot','gold_ingot','gold_ingot','gold_ingot','gold_ingot','gold_ingot','gold_ingot']);
 addShaped('diamond_block', 1, ['diamond','diamond','diamond','diamond','diamond','diamond','diamond','diamond','diamond']);
+// 天域（批次 B）：云绒块 / 星髓块 / 风阵块（气流发射器）
+addShaped('cloud_wool', 1, ['cloud_fluff','cloud_fluff','cloud_fluff','cloud_fluff']);
+addShaped('star_marrow_block', 1, ['star_marrow','star_marrow','star_marrow','star_marrow','star_marrow','star_marrow','star_marrow','star_marrow','star_marrow']);
+addShaped('gale_block', 1, [null,'cloud_wool',null,'cloud_wool','star_marrow','cloud_wool',null,'cloud_wool',null]);
 
 // 食物
 addShapeless('bread', 1, ['wheat','wheat','wheat']);

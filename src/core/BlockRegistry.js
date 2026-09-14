@@ -32,6 +32,7 @@ function register(def) {
     light: def.light ?? 0,
     fluid: def.fluid ?? false,
     renderType: def.renderType || 'cube',
+    updraft: def.updraft ?? false, // 天域批次 B：上升气流柱（Game._updateUpdraftState 消费）
     ambientParticles: def.ambientParticles ?? false,
     color: def.color || null
   };

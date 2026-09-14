@@ -49,7 +49,7 @@ export function solveTemple(rng, ax, y0, az) {
   const SL = blockId('sea_lantern');
   const CH = blockId('chest');
   const blocks = [];
-  const meta = { kind: 'aether_temple', chests: [] };
+  const meta = { kind: 'aether_temple', chests: [], steles: [] };
 
   // ① 底台 15×15 白石英（悬浮感基座）+ 台面 11×11
   floorBox(blocks, ax - 7, az - 7, ax + 7, az + 7, y0 - 1, QB);
@@ -85,6 +85,30 @@ export function solveTemple(rng, ax, y0, az) {
   meta.chests.push([ax - 2, y0 + 1, az - 2, 'aether_temple'], [ax + 2, y0 + 1, az + 2, 'aether_temple']);
   for (const [lx, lz] of [[ax - 3, az + 3], [ax + 3, az - 3]]) blocks.push([lx, y0 + 4, lz, GL]);
   for (const c of meta.chests) blocks.push([c[0], c[1], c[2], CH]);
+
+  // ⑥ 内殿圣所（批次 B）：殿心下沉 3×3×3（净空 y0-2..y0，底 y0-3）
+  const SM = blockId('star_marrow_block');
+  const AL = blockId('aether_altar');
+  const ST = blockId('wind_stele');
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+    for (let yy = y0; yy >= y0 - 2; yy--) blocks.push([ax + dx, yy, az + dz, 0]); // 凿空（含地板层）
+    blocks.push([ax + dx, y0 - 3, az + dz, QB]); // 圣所地面
+  }
+  // 恒昼祭坛居中（light 13 兼任圣所照明）；双碑记史；第三箱（内殿表）
+  blocks.push([ax, y0 - 2, az, AL]);
+  blocks.push([ax - 1, y0 - 2, az - 1, ST]);
+  blocks.push([ax + 1, y0 - 2, az + 1, ST]);
+  meta.steles.push([ax - 1, y0 - 2, az - 1, 'sundering'], [ax + 1, y0 - 2, az + 1, 'command']);
+  meta.chests.push([ax - 1, y0 - 2, az + 1, 'aether_sanctum']);
+  blocks.push([ax - 1, y0 - 2, az + 1, CH]);
+  // 出入阶梯（殿内东侧地板开口 + 两级踏步，1 格跳距闭环）
+  blocks.push([ax + 3, y0, az, 0]);
+  blocks.push([ax + 2, y0, az, 0]);
+  blocks.push([ax + 2, y0 - 1, az, 0]);
+  blocks.push([ax + 3, y0 - 1, az, QB]);
+  blocks.push([ax + 2, y0 - 2, az, QB]);
+  // 封门星髓块：殿心地板海晶灯改封门——挖开即坠入圣所的另一入口（铁镐以上）
+  blocks.push([ax, y0, az, SM]);
 
   return { blocks, meta };
 }
@@ -210,4 +234,88 @@ export const AETHER_SHIP_DEF = {
   dims: ['aether'],
   place: placeShip,
   solve: solveShip,
+};
+
+// ── 漩风井（批次 B）：石环 + 中央气流柱 20 格——天然跳岛基础设施 ────────
+// 全确定性布局（不消耗 rng 流）；风口从环心地面起抬，入环心即被托举
+export function solveWindWell(rng, ax, y0, az) {
+  const SB = blockId('stone_bricks');
+  const QB = blockId('quartz_block');
+  const WC = blockId('wind_current');
+  const blocks = [];
+  const meta = { kind: 'aether_well', chests: [], steles: [] };
+
+  // 5×5 石环（环心开放）立于岛面
+  for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+    if (Math.abs(dx) === 2 || Math.abs(dz) === 2) blocks.push([ax + dx, y0, az + dz, SB]);
+  }
+  // 中央气流柱（y0+1..y0+20）
+  for (let h = 1; h <= 20; h++) blocks.push([ax, y0 + h, az, WC]);
+  // 四角石英灯柱尖
+  for (const [dx, dz] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) blocks.push([ax + dx, y0 + 1, az + dz, QB]);
+
+  return { blocks, meta };
+}
+
+function placeWell(gen, ax, az) { return probeIsland(gen, ax, az, ['verdant', 'autumn', 'frost'], 6, 3); }
+
+// ── 天海之门遗迹（批次 B）：半埋的巨型荧石拱门 + 核心石碑——年表主证物 ──
+// 塌顶横梁从中央向两侧 rng 腐蚀（穿界之门章节的见证）
+export function solveSeaGate(rng, ax, y0, az) {
+  const GL = blockId('glowstone');
+  const QB = blockId('quartz_block');
+  const SB = blockId('stone_bricks');
+  const WS = blockId('wind_stele');
+  const blocks = [];
+  const meta = { kind: 'aether_gate', chests: [], steles: [] };
+
+  // 半埋基座 11×5（y0-1 层）
+  floorBox(blocks, ax - 5, az - 2, ax + 5, az + 2, y0 - 1, QB);
+  // 双柱：左全 6 高，右断 4 高（裂潮残响）
+  for (let h = 1; h <= 6; h++) blocks.push([ax - 4, y0 - 1 + h, az, GL]);
+  for (let h = 1; h <= 4; h++) blocks.push([ax + 4, y0 - 1 + h, az, GL]);
+  for (const px of [ax - 4, ax + 4]) for (const dx of [-1, 1]) blocks.push([px + dx, y0, az, QB]); // 柱础加宽
+  // 塌顶横梁（y0+5 层）：中央塌口 + rng 腐蚀
+  for (let dx = -3; dx <= 3; dx++) {
+    if (Math.abs(dx) <= 1) continue;
+    if (rng() < 0.4) continue;
+    blocks.push([ax + dx, y0 + 5, az, GL]);
+  }
+  // 散落砾石
+  for (let i = 0; i < 6; i++) {
+    const dx = Math.floor(rng() * 9) - 4, dz = Math.floor(rng() * 5) - 2;
+    blocks.push([ax + dx, y0, az + dz, SB]);
+  }
+  // 核心石碑（第五章·穿界之门）——最后写入压过同格砾石
+  blocks.push([ax, y0, az + 2, WS]);
+  meta.steles.push([ax, y0, az + 2, 'gate']);
+
+  return { blocks, meta };
+}
+
+function placeSeaGate(gen, ax, az) { return probeIsland(gen, ax, az, ['verdant', 'autumn', 'frost', 'crystal'], 8, 5); }
+
+// ── 批次 B 结构类型定义 ─────────────────────────────────────────────
+// 密度：well 常见小结构（跳岛基建节奏，与 tower 相近但占地更小网格更密）；
+// gate 稀有大型（神殿同档稀度、全群系门）。salt 与既有类型错开。
+export const AETHER_WELL_DEF = {
+  cell: 12,          // 12 区块网格（192 格）——小占地高节奏
+  attempts: 2,
+  chance: 0.5,
+  radius: 16,
+  salt: 7264,
+  dims: ['aether'],
+  place: placeWell,
+  solve: solveWindWell,
+};
+
+export const AETHER_GATE_DEF = {
+  cell: 24,          // 24 区块网格（384 格）——稀有证物级
+  attempts: 4,
+  chance: 0.5,
+  radius: 22,
+  salt: 7265,
+  dims: ['aether'],
+  place: placeSeaGate,
+  solve: solveSeaGate,
 };

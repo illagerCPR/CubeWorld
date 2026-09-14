@@ -36,13 +36,26 @@ export function pickNetherSpawn(biome, inFortress, rand) {
   return rand() < 0.15 ? 'wither_skeleton' : 'zombified_piglin';
 }
 
-// 天域自然生成表（纯函数便于单测）：永昼白天表——风灵为主点缀氛围；
-// 水晶秘境守卫加成；天空神殿周边守卫主导（守箱巡逻）
-export function pickAetherSpawn(biome, nearTemple, rand) {
+// 天域自然生成表 V2（批次 B，纯函数便于单测）：永昼白天表——风灵全群系氛围底色；
+// 水晶秘境 = 守卫 + 潮鸣（星髓看守）；银霜/翡翠/秋色 = 低频岚隼；神殿周边守卫主导（守箱巡逻）。
+// 云绒兽走被动群生成分支（trySpawn aether 草地组），不进敌对表。
+export function pickAetherSpawnV2(biome, nearTemple, rand) {
   if (nearTemple) return rand() < 0.55 ? 'aether_guard' : 'wisp';
-  if (biome === 'crystal') return rand() < 0.40 ? 'aether_guard' : 'wisp';
-  if (biome === 'frost') return rand() < 0.12 ? 'aether_guard' : 'wisp';
-  return rand() < 0.06 ? 'aether_guard' : 'wisp';
+  if (biome === 'crystal') {
+    const r = rand();
+    if (r < 0.40) return 'aether_guard';
+    if (r < 0.70) return 'tide_echo';
+    return 'wisp';
+  }
+  if (biome === 'frost') {
+    const r = rand();
+    if (r < 0.10) return 'aether_guard';
+    if (r < 0.22) return 'gale_hawk';
+    return 'wisp';
+  }
+  const r = rand();
+  if (r < 0.08) return 'gale_hawk';
+  return 'wisp';
 }
 
 // 皮肤 atlas 各 face 的 col 索引映射（96×64 atlas：col 4=top，col 5=bottom 独立 cell，
@@ -220,10 +233,13 @@ export class MobManager {
     if (headId !== 0) return;
 
     // 被动动物（牛/羊/鸡）：白天草地成群生成，不挤敌对名额（独立上限）
-    if (this.world.dimension === 'overworld' && !isNight &&
+    // 天域（批次 B）：云绒兽群——翡翠/秋色草地（云絮来源），同款被动名额
+    if ((this.world.dimension === 'overworld' || this.world.dimension === 'aether') && !isNight &&
         this.world.getBlock(x, y - 1, z) === BlockRegistry.getId('grass_block') &&
         this._passiveCount() < MAX_PASSIVE && Math.random() < 0.5) {
-      const group = ['cow', 'sheep', 'chicken'][Math.floor(Math.random() * 3)];
+      const group = this.world.dimension === 'aether'
+        ? 'cloud_lamb'
+        : ['cow', 'sheep', 'chicken'][Math.floor(Math.random() * 3)];
       this._spawnAt(group, x + 0.5, y, z + 0.5);
       const n = 2 + Math.floor(Math.random() * 2); // 2-3 只小群
       for (let i = 1; i < n; i++) {
@@ -252,7 +268,7 @@ export class MobManager {
     } else if (this.world.dimension === 'aether') {
       const gen = this.world.generator;
       const biome = typeof gen.getBiome === 'function' ? gen.getBiome(x, z) : null;
-      typeName = pickAetherSpawn(biome, !!this._aetherTempleAt(x, z), Math.random);
+      typeName = pickAetherSpawnV2(biome, !!this._aetherTempleAt(x, z), Math.random);
     } else {
       const choices = isNight
         ? (Math.random() < 0.1 ? ['enderman'] : ['zombie', 'zombie', 'skeleton', 'creeper', 'spider'])
@@ -1211,6 +1227,30 @@ export class MobManager {
       return true;
     }
     return false;
+  }
+
+  // 天域批次 B：潮鸣——玩家挖掘星髓矿石时，16 格内潮鸣激怒 25s + 同族一层传播
+  //（末影人 attackMob 群怒模式换触发器：盗掘者的第一课）
+  angerTideEchoes(x, y, z) {
+    const center = new THREE.Vector3(x, y, z);
+    const angered = [];
+    for (const mob of this.mobs) {
+      if (mob.dead || mob.dyingAnim || mob.typeName !== 'tide_echo') continue;
+      if (mob.position.distanceTo(center) < 16) {
+        mob.aggro = true;
+        mob.aggroTimer = 25;
+        angered.push(mob);
+      }
+    }
+    for (const src of angered) {
+      for (const m of this.mobs) {
+        if (m.dead || m.dyingAnim || m.typeName !== 'tide_echo' || m.aggro) continue;
+        if (m.position.distanceTo(src.position) < 16) {
+          m.aggro = true;
+          m.aggroTimer = 25;
+        }
+      }
+    }
   }
 
   // 仅查找屏幕中央射线命中的最近怪物（不伤害）。返回 { mob, distance } 或 null。

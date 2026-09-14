@@ -745,7 +745,7 @@ const BlockCN = {
   white_concrete: '白色混凝土', white_wool: '白色羊毛', white_terracotta: '白色陶瓦', white_bed: '白色床',
   chest: '箱子',
   star_marrow_ore: '星髓矿石', star_marrow_block: '星髓块', cloud_wool: '云绒块',
-  wind_stele: '风纹石碑', aether_altar: '恒昼祭坛', wind_current: '气流',
+  wind_stele: '风纹石碑', aether_altar: '恒昼祭坛', wind_current: '气流', gale_block: '风阵块',
 };
 
 function reg(name, def, svgs) {
@@ -1572,17 +1572,35 @@ reg('aether_altar', { light: 13, hardness: -1 }, { aether_altar: altarTex(155) }
 
 function windCurrentTex() {
   const px = makeTex();
-  // 气流：近乎全透 + 三道淡青竖向波纹（上升气流的视觉提示；null = 透明像素）
+  // 气流：cross 渲染 + 二值 alpha（solid 材质 alphaTest 0.1 且 transparent:false——
+  // 半透明像素会被按不透明画成色块，只有 0/全透二值才安全，火把同款纪律）
   for (let y = 0; y < 16; y++) {
-    for (const bx of [3, 8, 13]) {
+    for (const bx of [4, 11]) {
       const x = (bx + Math.round(Math.sin(y * 0.8) * 1.5) + 16) % 16;
-      px[y * 16 + x] = y % 3 === 0 ? 'rgba(190,235,255,0.30)' : 'rgba(210,242,255,0.18)';
+      px[y * 16 + x] = y % 4 === 0 ? 'rgb(200,240,255)' : 'rgb(168,226,244)';
     }
   }
   return pixelSvg(px);
 }
-reg('wind_current', { solid: false, transparent: true, hardness: 0.3 },
+reg('wind_current', { solid: false, transparent: true, renderType: 'cross', updraft: true, hardness: 0.3 },
   { wind_current: windCurrentTex() });
+
+// 风阵块（天域批次 B）：合成气流发射器——放置时上方 12 格写风流柱（Game._placeGaleBlock）
+function galeBlockTex(seed) {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    // 云白底 + 青色回旋纹（风眼）
+    const t = hash2(x >> 1, y >> 1, seed);
+    px[y * 16 + x] = t < 0.2 ? rgb([208, 222, 236], 1) : rgb([240, 246, 251], 1);
+  }
+  for (let a = 0; a < 24; a++) {
+    const r = 2 + (a % 3) * 1.6, ang = a / 24 * Math.PI * 2;
+    const x = 8 + Math.round(Math.cos(ang) * r), y = 8 + Math.round(Math.sin(ang) * r);
+    if (x >= 0 && x < 16 && y >= 0 && y < 16) px[y * 16 + x] = a % 2 ? rgb([96, 232, 210]) : rgb([120, 210, 226]);
+  }
+  return pixelSvg(px);
+}
+reg('gale_block', { hardness: 1.2, tool: 'pickaxe' }, { gale_block: galeBlockTex(156) });
 
 export const BlockSVGDefinitions = svgMap;
 
