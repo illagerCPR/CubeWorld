@@ -119,3 +119,10 @@
 
 - **全局 keydown 三层守卫（输入法安全）**：① Game.setupKeyBindings 顶部——`editable`(INPUT/TEXTAREA/isContentEditable) 或 `e.isComposing || e.keyCode === 229` 直接 return（不触发快捷键、不 preventDefault 防打断合成）；放行集 = 非聊天态 ESC（关界面）+ F5（走手动保存防浏览器刷新），聊天输入的 ESC/Enter 由 ChatBox 自理不放行；② Controls.onKeyDown——editable/composing **不记录 keys[]**（输入法打断会吞 keyup → 按键卡死"按键失灵"），onKeyUp 永远清位**不得加对称守卫**（否则另一方向卡死）；③ ChatBox._onKey——editable/composing 中 T 不抢开聊天。
 - **keyCode 229 = IME 合成 keydown 的特征值**（isComposing 不可靠跨浏览器）；KeyboardEvent 构造器可派发 `{keyCode: 229}` 模拟合成态测试。测试脚本注意：改 settings.language 后裸 import setLocale 不重绘菜单（实例分裂），必须 reload 页面。
+
+### i18n 补漏批次备忘（Build 12 后，未发布）—— JEI 提示 + 维度群系名翻译
+
+- **JEI 面板 5 处漏 t()**：收藏夹空态两串（'对物品按 A 键收藏'/'对物品按 A 键加入收藏夹'）+ '无匹配物品' + '仅显示前 {n} 个，搜索可缩小范围'（400 从模板字面量提为参数）+ 熔炼燃料 tooltip 模板串（改 `t('熔炉 {t}s · 燃料如煤炭（煤可烧 {n} 个）', {t, n})`）。**漏因**：这些行用模板字面量/裸赋值绕过了 t()，正则审计 `t('…')` 扫不出来——审计脚本要同时扫"含 CJK 但未包 t 的赋值行"。
+- **维度群系名 14 键 ×10 包（233→252）**：InfoBar 显示路径 `t(generator.biomeNames[biome])` 一直存在，但下界 5/末地 4/天域 5 的名表值从未进语言包（t() 缺项回落中文）。各语言术语对齐既有维度名（ru Незер/Энд/Эфир、ja ネザー/ジ・エンド、zh-TW 地獄/終界+靈魂砂、ar النيثر/النهاية）；原版自带群系按官方译名（Nether Wastes/Soul Sand Valley/End Highlands/Small End Islands 等）。
+- **三重校验升级**：除键集双向/占位符/node --check 外，本次跑了"静态 t() 键 + 生物群系名表值 全量 ⊆ en 键集"审计（误报只有注释里的 t('...') 示例）；>400 截断提示实际物品总数 253 < 400，属防御分支。
+- **实测口径**：主世界/下界/末地/天域四维 InfoBar 断言（en）+ 游戏内暂停菜单实时切日语断言（翠緑の浮島）+ JEI 收藏空态/无匹配/燃料 tooltip 断言；语言屏重渲染后 refs 全部失效，agent-browser 必须每次重 snapshot 再取 ref。

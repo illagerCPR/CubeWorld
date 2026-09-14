@@ -356,8 +356,8 @@ export class RecipeViewer {
     this.favGrid.style.gridTemplateColumns = `repeat(${this._favCols}, ${CELL}px)`;
     if (this.favorites.length === 0) {
       const empty = document.createElement('div');
-      empty.textContent = '对物品按 A 键收藏';
-      empty.title = '对物品按 A 键加入收藏夹';
+      empty.textContent = t('对物品按 A 键收藏');
+      empty.title = t('对物品按 A 键加入收藏夹');
       empty.style.cssText = `grid-column: 1 / -1; color: #555; font-size: 11px; text-align: center; padding: 8px 2px; line-height: 1.5;`;
       this.favGrid.appendChild(empty);
     } else {
@@ -382,12 +382,12 @@ export class RecipeViewer {
     }
     if (shown === 0) {
       const empty = document.createElement('div');
-      empty.textContent = '无匹配物品';
+      empty.textContent = t('无匹配物品');
       empty.style.cssText = 'grid-column: 1 / -1; color: #444; font-size: 12px; padding: 6px;';
       this.listGrid.appendChild(empty);
     } else if (shown >= 400 && !filter) {
       const tip = document.createElement('div');
-      tip.textContent = '仅显示前 400 个，搜索可缩小范围';
+      tip.textContent = t('仅显示前 {n} 个，搜索可缩小范围', { n: 400 });
       tip.style.cssText = 'grid-column: 1 / -1; color: #444; font-size: 10px; padding: 4px;';
       this.listGrid.appendChild(tip);
     }
@@ -474,7 +474,7 @@ export class RecipeViewer {
     row.appendChild(this._itemCell(r.input, 36));
     const fuel = document.createElement('div');
     fuel.textContent = '🔥';
-    fuel.title = `熔炉 ${SMELT_TIME}s · 燃料如煤炭（煤可烧 ${Math.floor(getFuelTime('coal') / SMELT_TIME)} 个）`;
+    fuel.title = t('熔炉 {t}s · 燃料如煤炭（煤可烧 {n} 个）', { t: SMELT_TIME, n: Math.floor(getFuelTime('coal') / SMELT_TIME) });
     fuel.style.cssText = 'font-size: 14px;';
     row.appendChild(fuel);
     row.appendChild(this._itemCell(r.output, 36, { count: r.count }));
