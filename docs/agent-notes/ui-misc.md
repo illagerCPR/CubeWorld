@@ -126,3 +126,10 @@
 - **维度群系名 14 键 ×10 包（233→252）**：InfoBar 显示路径 `t(generator.biomeNames[biome])` 一直存在，但下界 5/末地 4/天域 5 的名表值从未进语言包（t() 缺项回落中文）。各语言术语对齐既有维度名（ru Незер/Энд/Эфир、ja ネザー/ジ・エンド、zh-TW 地獄/終界+靈魂砂、ar النيثر/النهاية）；原版自带群系按官方译名（Nether Wastes/Soul Sand Valley/End Highlands/Small End Islands 等）。
 - **三重校验升级**：除键集双向/占位符/node --check 外，本次跑了"静态 t() 键 + 生物群系名表值 全量 ⊆ en 键集"审计（误报只有注释里的 t('...') 示例）；>400 截断提示实际物品总数 253 < 400，属防御分支。
 - **实测口径**：主世界/下界/末地/天域四维 InfoBar 断言（en）+ 游戏内暂停菜单实时切日语断言（翠緑の浮島）+ JEI 收藏空态/无匹配/燃料 tooltip 断言；语言屏重渲染后 refs 全部失效，agent-browser 必须每次重 snapshot 再取 ref。
+
+### Build 13 批次备忘（防回退）—— 创造模式原版化：开局空背包 + 光标取物
+
+- **创造开局不再有预设物品**：Game.start 的 `mode==='creative'` 分支从 `fillCreative(前9个注册物品)` 改为直接清空 `inventory.slots`；`Inventory.fillCreative` 已删（grep 全仓零残留）。生存初始物品分支与 respawn 联机重生物品**原样保留**（respawn 无条件给生存初始物，创造玩家不会死、不构成问题）。
+- **创造网格取物 = 容器式光标拿取（同步原版）**：左键点创造物品 → `setCursorItem(name, 64)` 一整组上光标（原版 doClick 语义：空手拿整组/同类 grow 封顶/异类替换——三分支在"上限 64"下同一条语句即可表达）；放置走既有槽位事件（swapCursorWithSlot 左键换/合、rightClickSlot 右键放 1）；右键创造物品=拿 1 个（保留）；✗ 摧毁槽销毁光标物品；关闭物品栏光标物品自动 `inventory.add` 回包（hide 既有逻辑，创造下同样成立）。
+- **eval 引用别名读数陷阱**：断言 `cursorItem` 后又对它做变更操作的同一 IIFE 里，先前捕获的是**对象引用**——序列化发生在 return 时，读数是变更后的值（本次右键拿 1 显示 count:0 实为放置后递减）——要快照值就 `[...item]` 浅拷贝或分两次 eval。
+- **i18n 补漏批（同车，未随 Build 12 发布）**：JEI 5 处漏 t() + 14 个维度群系名 ×10 包（233→252 键），详见上一节备忘；本批随 Build 13 一并发布。

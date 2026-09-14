@@ -435,8 +435,8 @@ export class Game {
     if (loadData && loadData.inventory) {
       this.inventory.deserialize(loadData.inventory);
     } else if (mode === 'creative') {
-      const items = [...BlockRegistry.all(), ...ItemRegistry.all()].filter(b => b.name !== 'air').slice(0, 9);
-      this.inventory.fillCreative(items);
+      // 创造开局空背包（原版式：物品自取自放，从物品栏拿取）
+      this.inventory.slots = new Array(this.inventory.size).fill(null);
     } else {
       // 生存初始物品
       this.inventory.add('wood_pickaxe');

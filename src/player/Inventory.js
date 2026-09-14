@@ -81,17 +81,6 @@ export class Inventory {
     this.slots[j] = t;
   }
 
-  // 创造模式：填充所有物品
-  fillCreative(items) {
-    this.slots = new Array(this.size).fill(null);
-    let i = 0;
-    for (const item of items) {
-      if (i >= 9) break; // 只填快捷栏
-      this.slots[i] = { name: item.name, count: 64, data: null };
-      i++;
-    }
-  }
-
   serialize() {
     const enc = (s) => s ? { n: s.name, c: s.count, d: s.data } : null;
     // V2：对象形 {slots, armor}；旧版数组形仅 slots（deserialize 双形兼容）

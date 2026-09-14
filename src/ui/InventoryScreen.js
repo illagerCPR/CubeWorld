@@ -322,10 +322,8 @@ export class InventoryScreen {
       const slot = this.makeSlotEl();
       this.fillSlotEl(slot, item.name, 64);
       slot.addEventListener('click', () => {
-        // 左键直接放入选中快捷栏
-        this.inventory.slots[this.inventory.hotbarSelected] = { name: item.name, count: 64, data: null };
-        this.game.hotbar.update();
-        this.bindSlots();
+        // 原版式取物：左键 = 光标拿取一整组（光标已有同类则补满到一组，异类直接替换）；放置仍点击普通槽位
+        this.setCursorItem(item.name, 64);
       });
       slot.addEventListener('contextmenu', (e) => {
         e.preventDefault();
