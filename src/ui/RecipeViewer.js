@@ -40,6 +40,9 @@ export class RecipeViewer {
     this._layoutKey = null;   // 布局 dirty-check（panel rect + 视口 + 弹窗开关）
     this._favCols = FAV_DEFAULT_COLS;
     this._listCols = LIST_DEFAULT_COLS;
+    // Build 10：内嵌模式（背包「配方」页签内嵌本面板；false=既有伴随模式贴容器两侧）
+    this._embedded = false;
+    this._tabShown = false;   // 内嵌模式下页签当前是否可见（InventoryScreen 同步）
 
     // 收藏夹面板：贴物品栏左侧（加宽为多列格子）
     this.favEl = this._makePanel(35);
@@ -190,17 +193,75 @@ export class RecipeViewer {
   // 每帧同步：跟随容器界面（背包/箱子/合成台/熔炉/交易）显隐 + 维护布局
   updateFrame() {
     const g = this.game;
+    const invOpen = !!(g.inventoryScreen && g.inventoryScreen.visible);
+    // Build 10：背包打开 → 面板内嵌进「配方」页签；否则回归伴随模式服务其它容器
+    this._ensureEmbedded(invOpen);
     this.containerVisible = !!(
-      (g.inventoryScreen && g.inventoryScreen.visible) ||
+      !invOpen &&
       (g.chestScreen && g.chestScreen.visible) ||
       (g.furnaceScreen && g.furnaceScreen.visible) ||
       (g.tradeScreen && g.tradeScreen.visible)
     );
     this._syncDisplay();
-    if (this._shown) this._layout();
+    if (this._shown && !this._embedded) this._layout();
+    if (this._shown && this.current) this._layoutPopup(); // 弹窗定位（两种模式都需要）
+  }
+
+  // 内嵌模式切换：面板 reparent 进背包页签宿主 / 回归 body 伴随模式（幂等，按父子关系判定）
+  _ensureEmbedded(on) {
+    if (this._embedded === on) return;
+    const inv = this.game.inventoryScreen;
+    if (on) {
+      const host = inv && inv.recipeHost;
+      if (!host) { this._embedded = false; return; } // 无宿主（页签未渲染）→ 保持伴随
+      this._embedded = true;
+      if (this.favEl.parentElement !== host) {
+        host.appendChild(this.favEl);
+        host.appendChild(this.listEl);
+        // 内嵌样式：文档流内固定尺寸（覆盖伴随模式的 fixed 定位与动态宽高）
+        for (const [el, w] of [[this.favEl, FAV_DEFAULT_COLS * STEP + 14], [this.listEl, 8 * STEP + 14]]) {
+          el.style.position = 'static';
+          el.style.left = '';
+          el.style.top = '';
+          el.style.width = w + 'px';
+          el.style.height = '360px';
+          el.style.display = 'flex';
+        }
+      }
+    } else {
+      this._embedded = false;
+      if (this.favEl.parentElement === document.body) return; // 已在 body，无需还原
+      document.body.appendChild(this.favEl);
+      document.body.appendChild(this.listEl);
+      for (const el of [this.favEl, this.listEl]) {
+        el.style.position = 'fixed';
+        el.style.width = '';
+        el.style.height = '';
+        el.style.left = '';
+        el.style.top = '';
+        el.style.display = 'none';
+      }
+      this._layoutKey = null; // 回伴随模式后由 _layout 重新定位
+    }
+  }
+
+  // InventoryScreen 同步页签可见性（内嵌模式下据此显隐与重绘弹窗）
+  setTabVisible(v) {
+    this._tabShown = !!v;
+    if (this._embedded) this._syncDisplay();
   }
 
   _syncDisplay() {
+    // Build 10：内嵌模式——面板显隐由页签宿主 DOM 决定，这里只同步 _shown 语义（弹窗跟随）
+    if (this._embedded) {
+      const want = this._tabShown;
+      if (want === this._shown) return;
+      this._shown = want;
+      this.visible = want;
+      if (!want) this._hoverName = null;
+      this.renderRecipe();
+      return;
+    }
     const want = this.containerVisible && this.userEnabled;
     if (want === this._shown) return;
     this._shown = want;
@@ -255,17 +316,23 @@ export class RecipeViewer {
       this.listEl.style.left = Math.min(vw - listW - 4, r.right + PANEL_GAP) + 'px';
       this.listEl.style.top = top + 'px';
     }
-    // 弹窗：覆盖物品栏正上方（居中于物品栏）
-    if (popOn) {
-      const popW = Math.min(420, vw - 16);
-      const popH = Math.min(Math.round(vh * 0.78), 620);
-      const left = Math.max(4, Math.min(r.left + r.width / 2 - popW / 2, vw - popW - 4));
-      const top = Math.max(4, Math.min(r.top + r.height / 2 - popH / 2, vh - popH - 4));
-      this.popEl.style.width = popW + 'px';
-      this.popEl.style.height = popH + 'px';
-      this.popEl.style.left = left + 'px';
-      this.popEl.style.top = top + 'px';
-    }
+    this._layoutPopup();
+  }
+
+  // 弹窗定位：覆盖物品栏正上方（居中于物品栏；内嵌/伴随两模式共用）
+  _layoutPopup() {
+    const panel = this._visiblePanel();
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const popW = Math.min(420, vw - 16);
+    const popH = Math.min(Math.round(vh * 0.78), 620);
+    const left = Math.max(4, Math.min(r.left + r.width / 2 - popW / 2, vw - popW - 4));
+    const top = Math.max(4, Math.min(r.top + r.height / 2 - popH / 2, vh - popH - 4));
+    this.popEl.style.width = popW + 'px';
+    this.popEl.style.height = popH + 'px';
+    this.popEl.style.left = left + 'px';
+    this.popEl.style.top = top + 'px';
   }
 
   // 从物品打开配方视图（容器界面内 hover 按 R）
@@ -435,7 +502,7 @@ export class RecipeViewer {
     ops.innerHTML = t('R 配方 · U 用途 · A 收藏当前/悬浮物品');
     this.popScroll.appendChild(ops);
 
-    this._layout(); // 弹窗当帧立即定位（覆盖物品栏之上）
+    this._layoutPopup(); // 弹窗当帧立即定位（覆盖物品栏之上）
   }
 
   // 一条合成配方：材料格 → 箭头 → 产出

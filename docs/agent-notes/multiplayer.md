@@ -80,3 +80,10 @@
 - **可见性**：`Room.info()` 玩家带 `dropped`（status 3s 轮询直出面板「限速丢包」列）；聚合日志走 10s sweep + **WeakMap 增量快照**（`_rateReported`），只对增量>0 的玩家写一条 `rate-limit` 日志——勿逐包写（200 条环形缓冲瞬间刷爆）。
 - **默认阈值锚定实测**：player_state 20Hz=1200/min → state 1800；挖放峰值 ~15/s → block 900；人工聊天 → chat 30。0=不限制。测试把三档收紧到 3 再还原；**收尾必须 POST /config 还原默认**（rateLimits/backup*/roomSettings 清空）防污染后续套件。
 - **测试**：test-idea4.mjs 增至 42 断言（跑批中含鉴权 viewer 403 两条）；备份/限速 API 全部过 op token。
+
+### Build 10 掉落物原版化批次备忘（防回退）—— drop_spawn 速度透传 + 岩浆销毁清账本
+
+- **drop_spawn 可选速度字段**：`sendDropSpawn(x,y,z,name,count,data,vel)` 追加 `vx/vy/vz`（Number.isFinite 校验后携带）；服务器 `onDropSpawn` clamp ±16 后入账本 entry + 广播 back，**快照恢复与断线重放回放都带**（store.js 落盘走 `{id, ...d}` 展开自动持久化，room.js 快照 apply 是字段白名单须显式恢复）；客户端 `spawnRemoteDrop(..., vel)` 缺省仍按 id 哈希派生——**向后兼容旧客户端**。Q 丢弃联机不建本地实体，等服务器回执（与联机挖矿同惯例），代价是 RTT 级延迟。
+- **联机禁用本地合并**：掉落物是服务器账本实体（id 权威），本地合并会两端分裂——`mobManager.isMultiplayer`（Game.start 注入）为 true 时跳过合并扫描；同类合并仅单机。若未来做联机合并必须服务器权威（Room 定期合并账本 + 新消息广播）。
+- **岩浆销毁清账本**：掉落物入岩浆即焚——销毁端若 `drop.id != null`（联机实体）必须发 `drop_taken`，否则账本残留 → 其他端可"幽灵拾取"已被焚毁的物品（服务器 drop_taken 广播正好复用既有通道，无需新消息）。
+- **单机挖矿掉落直接进背包**（既有设计）：物理掉落物的主要来源 = 怪物掉落 / 容器洒落 / Q 丢弃——表现优化全部走这三条路径验证。

@@ -237,4 +237,15 @@ export const fr = {
   '正在切换到「{d}」…': 'Changement pour « {d} »…',
   '已切换到「{d}」': 'Arrivée dans « {d} »',
   '观战中 · {who} · F5 切换目标 / R 重生': 'Spectateur · {who} · F5 changer de cible / R réapparaître',
+  // ── 物品栏页签（Build 10） ──
+  '建筑方块': 'Blocs de construction',
+  '自然': 'Naturel',
+  '功能方块': 'Fonctionnel',
+  '红石': 'Redstone',
+  '工具与战斗': 'Outils et combat',
+  '食物': 'Nourriture',
+  '材料': 'Ingrédients',
+  '杂项': 'Divers',
+  '配方': 'Recettes',
+  '摧毁物品': 'Détruire l\'objet',
 };

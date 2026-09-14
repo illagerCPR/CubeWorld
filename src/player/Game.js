@@ -597,7 +597,7 @@ export class Game {
           return;
         }
         this.recipeViewer.setUserEnabled(true);
-        if (this.inventoryScreen) this.inventoryScreen.show(2);
+        if (this.inventoryScreen) this.inventoryScreen.show(2, 'recipes'); // Build 10：直落配方页签
       }
       // R/U/A：配方查询键。浮层内作用于悬浮/当前物品；
       // 背包/箱子/熔炉界面内悬浮物品按 R 查配方、按 U 查用途

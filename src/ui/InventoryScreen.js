@@ -4,6 +4,7 @@ import { SVGTextures } from '../render/SVGTextures.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
 import { matchRecipe } from '../core/Crafting.js';
+import { CREATIVE_CATEGORIES, CATEGORY_LABEL_KEYS, getItemCategory } from '../core/ItemCategories.js';
 import { t } from '../i18n/index.js';
 import { getDisplayName } from './itemName.js';
 
@@ -17,6 +18,11 @@ export class InventoryScreen {
     this.creativeScroll = 0;
     this.craftSize = 2; // 2x2 背包合成，3x3 工作台合成
     this.craftGrid = []; // 合成网格物品 {name,count,data} | null
+    // Build 10 页签：生存 = inv(背包) | recipes(配方)；创造 = 分类 id
+    this.activeTab = 'inv';
+    this.creativeTab = 'building';
+    this.creativeSearch = '';
+    this.recipeHost = null; // 配方页签的 JEI 面板宿主（RecipeViewer 内嵌 reparent 目标）
     
     this.el = document.createElement('div');
     this.el.style.cssText = `
@@ -92,12 +98,14 @@ export class InventoryScreen {
     };
   }
 
-  show(craftSize = 2) {
+  show(craftSize = 2, tab = null) {
     this.visible = true;
     this.craftSize = craftSize;
     this.craftGrid = new Array(craftSize * craftSize).fill(null);
+    this.activeTab = tab || 'inv'; // J 键打开时传 'recipes' 直落配方页签
     this.el.style.display = 'flex';
     this.render();
+    this._syncRecipeTab();
     if (this.game && this.game.controls) {
       this.game.controls.enabled = false;
       this.game.controls.mouseLeft = false;
@@ -112,8 +120,16 @@ export class InventoryScreen {
     this.visible = false;
     this.el.style.display = 'none';
     this._hoverName = null;
+    this._syncRecipeTab(); // 配方页签随界面关闭（JEI 内嵌面板显隐跟随）
     if (this.game && this.game.controls) {
       this.game.controls.enabled = true;
+    }
+  }
+
+  // 同步配方页签可见性给 RecipeViewer（内嵌模式显隐语义）
+  _syncRecipeTab() {
+    if (this.game && this.game.recipeViewer) {
+      this.game.recipeViewer.setTabVisible(this.visible && this.activeTab === 'recipes');
     }
   }
 
@@ -156,7 +172,22 @@ export class InventoryScreen {
   renderSurvival() {
     this.panel.innerHTML = '';
     this.panel.style.width = 'max-content';
-    
+
+    // 页签行（Build 10）：背包 | 配方
+    const tabBar = this.makeTabBar([
+      ['inv', t('背包')],
+      ['recipes', t('配方')],
+    ], () => { this._syncRecipeTab(); });
+    this.panel.appendChild(tabBar);
+    if (this.activeTab === 'recipes') {
+      // 配方页签：宿主容器，JEI 面板由 RecipeViewer.updateFrame reparent 进来
+      this.recipeHost = document.createElement('div');
+      this.recipeHost.style.cssText = 'display:flex; gap:10px; justify-content:center; align-items:flex-start; min-height:360px;';
+      this.panel.appendChild(this.recipeHost);
+      this._syncRecipeTab();
+      return;
+    }
+
     const title = document.createElement('div');
     title.textContent = this.craftSize === 3 ? t('工作台') : t('背包');
     title.style.cssText = 'font-size: 14px; margin-bottom: 8px; color: #333;';
@@ -211,25 +242,96 @@ export class InventoryScreen {
     this.updateCraftOutput();
   }
 
+  // 页签行构建（Build 10）：onClickExtra 在切换后回调（同步 JEI 页签显隐等）
+  makeTabBar(tabs, onClickExtra) {
+    const bar = document.createElement('div');
+    bar.style.cssText = 'display:flex; gap:4px; margin-bottom:8px; align-items:center;';
+    for (const [id, label] of tabs) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      const active = this.activeTab === id || (this.player && this.player.creative && this.creativeTab === id);
+      b.style.cssText = `padding:6px 14px; font-size:12px; cursor:pointer; border:2px solid #555; font-family:inherit;` +
+        (active
+          ? 'background:#e8e8e8; color:#222; font-weight:bold;'
+          : 'background:#9a9a9a; color:#333;');
+      b.addEventListener('click', () => {
+        this.activeTab = id;
+        if (id !== 'recipes' && this.game && this.game.recipeViewer) this.game.recipeViewer.setTabVisible(false);
+        if (onClickExtra) onClickExtra();
+        this.render();
+      });
+      bar.appendChild(b);
+    }
+    return bar;
+  }
+
   renderCreative() {
     this.panel.innerHTML = '';
     this.panel.style.width = 'max-content';
-    
-    const title = document.createElement('div');
-    title.textContent = t('创造模式 - 点击取物品');
-    title.style.cssText = 'font-size: 14px; margin-bottom: 8px; color: #333;';
-    this.panel.appendChild(title);
-    
-    // 所有物品列表
-    const grid = document.createElement('div');
-    grid.style.cssText = 'display: grid; grid-template-columns: repeat(9, 44px); gap: 2px; max-height: 320px; overflow-y: auto; background: #8b8b8b; padding: 4px;';
-    
+
+    // 分类页签行（Build 10）：建筑/自然/功能/红石/工具/食物/材料/杂项
+    const catTabs = CREATIVE_CATEGORIES.map(id => [id, t(CATEGORY_LABEL_KEYS[id])]);
+    this.activeTab = this.creativeTab;
+    const tabBar = this.makeTabBar(catTabs, () => { this.creativeTab = this.activeTab; });
+    this.panel.appendChild(tabBar);
+
+    // 搜索行：搜索框 + 摧毁槽（原版式右端）
+    const searchRow = document.createElement('div');
+    searchRow.style.cssText = 'display:flex; gap:8px; margin-bottom:8px; align-items:center;';
+    const search = document.createElement('input');
+    search.type = 'text';
+    search.value = this.creativeSearch;
+    search.placeholder = t('搜索物品…');
+    search.style.cssText = 'flex:1; padding:6px 10px; background:#8b8b8b; border:2px solid #555; color:#fff; font-size:13px; font-family:inherit;';
+    search.addEventListener('input', () => {
+      this.creativeSearch = search.value;
+      this._renderCreativeGrid(); // 只重绘网格，保持输入框焦点
+    });
+    searchRow.appendChild(search);
+    const destroy = this.makeSlotEl();
+    destroy.style.cssText += ' background:#a05050; justify-content:center; font-size:20px; color:#fff;';
+    destroy.textContent = '✗';
+    destroy.title = t('摧毁物品');
+    destroy.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      if (this.cursorItem) {
+        this.cursorItem = null; // 拖入光标物品直接销毁
+        this.cursorEl.style.display = 'none';
+        this.cursorEl.innerHTML = '';
+      }
+    });
+    searchRow.appendChild(destroy);
+    this.panel.appendChild(searchRow);
+
+    // 物品格网（按当前分类或搜索结果）
+    this._creativeGridEl = document.createElement('div');
+    this._creativeGridEl.style.cssText = 'display: grid; grid-template-columns: repeat(9, 44px); gap: 2px; max-height: 320px; overflow-y: auto; background: #8b8b8b; padding: 4px;';
+    this.panel.appendChild(this._creativeGridEl);
+    this._renderCreativeGrid();
+
+    // 快捷栏
+    const hb = this.makeGrid(9, 1, 'hotbar');
+    hb.style.marginTop = '8px';
+    this.panel.appendChild(hb);
+    this.bindSlots();
+    setTimeout(() => search.focus(), 0); // 打开即聚焦搜索（不影响游戏快捷键：界面内 controls 已禁用）
+  }
+
+  // 创造网格内容（搜索优先：非空时跨全部分类过滤）
+  _renderCreativeGrid() {
+    const grid = this._creativeGridEl;
+    if (!grid) return;
+    grid.innerHTML = '';
     // 方块优先；同名物品（lever/stone_button 在 Block/Item 双侧都注册）跳过避免重复
     const blocks = BlockRegistry.all().filter(b => b.name !== 'air');
     const seen = new Set(blocks.map(b => b.name));
     const items = ItemRegistry.all().filter(b => b.name !== 'air' && !seen.has(b.name));
     const allItems = [...blocks, ...items];
-    for (const item of allItems) {
+    const q = this.creativeSearch.trim().toLowerCase();
+    const list = q
+      ? allItems.filter(it => getDisplayName(it.name).toLowerCase().includes(q) || it.name.includes(q))
+      : allItems.filter(it => getItemCategory(it.name) === this.creativeTab);
+    for (const item of list) {
       const slot = this.makeSlotEl();
       this.fillSlotEl(slot, item.name, 64);
       slot.addEventListener('click', () => {
@@ -246,13 +348,12 @@ export class InventoryScreen {
       this._bindHover(slot, item.name);
       grid.appendChild(slot);
     }
-    this.panel.appendChild(grid);
-    
-    // 快捷栏
-    const hb = this.makeGrid(9, 1, 'hotbar');
-    hb.style.marginTop = '8px';
-    this.panel.appendChild(hb);
-    this.bindSlots();
+    if (list.length === 0) {
+      const empty = document.createElement('div');
+      empty.textContent = '…';
+      empty.style.cssText = 'grid-column: 1 / -1; text-align: center; color: #ddd; padding: 16px 0;';
+      grid.appendChild(empty);
+    }
   }
 
   makeGrid(cols, rows, prefix) {

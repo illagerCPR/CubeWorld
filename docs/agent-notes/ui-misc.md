@@ -98,3 +98,12 @@
 - **翻译口径**：en.js 键集基准逐键译（Build 9 起 223 键=222+新增'语言'），程序化校验三件套照旧（键集双向零差 + 占位符多重集 + node --check）。ru 术语 ru_ru 现代口径：Незер/Энд/Эфир、Редстоун 系、Бедрок、Визер/Визер-скелет、Маяк、Эндермен；es：Nether/End/Éter、Wither、Faro、Roca(圆石)；pt-BR：Nether/End/Éter、Wither、Farol、Pedregulho、Rocha matriz。自创词全书统一：wisp=Висп/Fuego fatuo/Fogo-fátuo，aether_guard=Страж Эфира/Guardián del Éter/Guardião do Éter。
 - **'语言' 漏接补修（Build 7 遗留，随 Build 9 顺带）**：LanguageScreen 标题与 MenuScreen 地球按钮 `t('语言')` 无此键——全部 10 包回填（zh-CN 走键本身零成本）。**全量审计法**：正则扫 src 内 `t('…')`/`t("…")` 字面量第一参（跳过注释行），与 en.js 键集比对——动态查表键（模式名/效果名等经变量传入）会被列为"未调用"，属正常勿误删。
 - **实测陷阱复刻**：裸 import 探针在 agent-browser eval 里再次出现实例分裂（`import('/src/i18n/index.js').getLocale()` 返回切换前值，而同 eval 里 name.js 的 tName 却返回新语言）——**UI 真实路径仍是唯一权威**（主菜单/暂停菜单语言按钮点击 + InfoBar 断言）；agent-browser 点击槽位卡片可能被内层 `.cw-stone-btn` 遮挡报 covered，改 eval 派发 `new MouseEvent('click', {bubbles:true})`。
+
+### Build 10 批次备忘（防回退）—— 掉落物原版化 + 物品栏页签
+
+- **掉落物渲染（DropMesh.js）**：复用 HeldItemMesh 模板（方块=六面贴图小立方 / 物品与 cross=像素挤出 / portal=薄片），掉落组 = 模型（缩放 0.25，自旋+触地正弦浮动）+ 阴影贴片 + 数量角标精灵（count≥2 显示，剩 1 自动隐藏）；模板异步就绪，resolve 时**必须自检 drop 仍存活**（拾取/焚毁可能早于模板完成）；模板进程级缓存共享 clone，drop 移除仅 scene.remove 不 dispose。getDropColor 色块方案已删，勿回退。
+- **掉落物物理**：逐轴点级碰撞（半径=模型半边 0.125，高速细分步 ≤4 防穿薄地板）、落地高速轻微弹跳（vy<-8 时 *-0.18）+ 落地摩擦、水中强阻尼浮力（耦合 10/s + 终端沉降 -2.5，入水快速减速漂浮——耦合 3/s 会**穿透单格水**沉底）、岩浆即焚、磁吸拾取（1.6 格吸附飞向玩家 / 0.9 格入包）、拾取延迟分级（方块 0.5s / 怪物 1.0s / Q 丢弃 2.0s）。
+- **物品栏页签（InventoryScreen）**：`activeTab` 生存 inv|recipes、创造 = 分类 id（ItemCategories.js 集中映射 253 物品，未登记落 misc）；创造页 = 分类页签 + 搜索框（input 事件**只重绘网格保焦点**，勿整面板重渲染）+ 摧毁槽（✗，mousedown 销毁光标物品）；配方页签宿主 `inventoryScreen.recipeHost`。
+- **JEI 内嵌模式（RecipeViewer）**：`_ensureEmbedded(invOpen)` 每帧幂等切换——**按 favEl.parentElement === host 判定**（页签宿主每次 render 重建，按 flag 判会漏重挂）；内嵌=static 定位固定尺寸（3 列收藏 + 8 列列表），伴随=fixed 由 _layout 动态定位；弹窗 popEl 恒驻 body（两种模式都覆盖物品栏居中，定位提取 `_layoutPopup`）；`_syncDisplay` 内嵌分支以 `_tabShown` 驱动 `visible/_shown`（R/U/A 弹窗依赖 visible）；J 键 = 开背包直落配方页签 show(2,'recipes')。**实测陷阱**：测试断言里 `div.textContent === '✗'` 会同时命中摧毁槽与其外层容器（input 无 textContent），要按 `title` 过滤；创造网格 slot 无 data-slot 属性，选择器用 children。
+- **i18n（Build 10）**：新增 10 键（8 分类 + 配方 + 摧毁物品）×10 包，键集 223→233；'背包' 复用既有键。
+- **环境坑**：`./start.sh stop` 会把 **Vite 与 LAN 服务器一起停**（本次实测踩到）——只想停服务器时用 `start.sh stop` 后记得重启 Vite，或直接 kill 3001 进程。

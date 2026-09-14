@@ -1,0 +1,88 @@
+// ItemCategories.js -- 创造模式物品栏分类映射（Build 10）
+// 键 = 注册名；未登记的物品自动落 misc（杂项）。集中维护一张表，不动注册侧签名。
+// 分类顺序即创造页签顺序（CREATIVE_CATEGORIES）。
+export const CREATIVE_CATEGORIES = ['building', 'nature', 'functional', 'redstone', 'tools', 'food', 'materials', 'misc'];
+
+// 页签 label 的 i18n 键（简体中文原文，走 t()）
+export const CATEGORY_LABEL_KEYS = {
+  building: '建筑方块',
+  nature: '自然',
+  functional: '功能方块',
+  redstone: '红石',
+  tools: '工具与战斗',
+  food: '食物',
+  materials: '材料',
+  misc: '杂项',
+};
+
+const MAP = {
+  // ---------- 建筑方块 ----------
+  stone: 'building', cobblestone: 'building', stone_bricks: 'building', mossy_stone_bricks: 'building',
+  cracked_stone_bricks: 'building', mossy_cobblestone: 'building', brick_block: 'building',
+  nether_bricks: 'building', sandstone: 'building', red_sandstone: 'building', quartz_block: 'building',
+  oak_planks: 'building', spruce_planks: 'building', birch_planks: 'building', dark_oak_planks: 'building',
+  acacia_planks: 'building', glass: 'building', white_concrete: 'building', white_terracotta: 'building',
+  white_wool: 'building', purpur_block: 'building', purpur_pillar: 'building', end_stone_bricks: 'building',
+  deepslate: 'building', obsidian: 'building', bedrock: 'building',
+  // ---------- 自然 ----------
+  grass_block: 'nature', dirt: 'nature', coarse_dirt: 'nature', sand: 'nature', red_sand: 'nature',
+  gravel: 'nature', clay: 'nature', snow_block: 'nature', snow_layer: 'nature', ice: 'nature',
+  packed_ice: 'nature', blue_ice: 'nature', oak_log: 'nature', spruce_log: 'nature', birch_log: 'nature',
+  dark_oak_log: 'nature', acacia_log: 'nature', oak_leaves: 'nature', spruce_leaves: 'nature',
+  birch_leaves: 'nature', acacia_leaves: 'nature', cactus: 'nature', pumpkin: 'nature', melon: 'nature',
+  hay_block: 'nature', mycelium: 'nature', lily_pad: 'nature', sunflower: 'nature', red_mushroom: 'nature',
+  brown_mushroom: 'nature', mushroom_stem: 'nature', mushroom_cap_red: 'nature', mushroom_cap_brown: 'nature',
+  farmland: 'nature', tall_grass: 'nature', netherrack: 'nature', end_stone: 'nature', soul_sand: 'nature',
+  magma_block: 'nature',
+  // ---------- 功能方块 ----------
+  crafting_table: 'functional', furnace: 'functional', chest: 'functional', white_bed: 'functional',
+  oak_door: 'functional', iron_door: 'functional', oak_trapdoor: 'functional', note_block: 'functional',
+  bookshelf: 'functional', beacon: 'functional', shulker_box: 'functional', torch: 'functional',
+  glowstone: 'functional', sea_lantern: 'functional', end_portal_frame: 'functional',
+  end_portal_frame_eye: 'functional', end_portal: 'functional', nether_portal: 'functional',
+  aether_portal: 'functional', end_gateway: 'functional',
+  // ---------- 红石 ----------
+  redstone_wire: 'redstone', redstone_torch: 'redstone', redstone_torch_item: 'redstone',
+  redstone_lamp: 'redstone', redstone_block: 'redstone', lever: 'redstone', stone_button: 'redstone',
+  oak_button: 'redstone', piston: 'redstone', sticky_piston: 'redstone', piston_head: 'redstone',
+  repeater: 'redstone', comparator: 'redstone', tnt: 'redstone',
+  // ---------- 工具与战斗 ----------
+  wood_pickaxe: 'tools', wood_axe: 'tools', wood_shovel: 'tools', wood_hoe: 'tools', wood_sword: 'tools',
+  stone_pickaxe: 'tools', stone_axe: 'tools', stone_shovel: 'tools', stone_hoe: 'tools', stone_sword: 'tools',
+  iron_pickaxe: 'tools', iron_axe: 'tools', iron_shovel: 'tools', iron_hoe: 'tools', iron_sword: 'tools',
+  gold_pickaxe: 'tools', gold_axe: 'tools', gold_shovel: 'tools', gold_hoe: 'tools', gold_sword: 'tools',
+  diamond_pickaxe: 'tools', diamond_axe: 'tools', diamond_shovel: 'tools', diamond_hoe: 'tools',
+  diamond_sword: 'tools', bow: 'tools', arrow: 'tools', shield: 'tools', flint_and_steel: 'tools',
+  fishing_rod: 'tools', shears: 'tools', leather_helmet: 'tools', iron_helmet: 'tools', gold_helmet: 'tools',
+  diamond_helmet: 'tools', leather_chestplate: 'tools', iron_chestplate: 'tools', gold_chestplate: 'tools',
+  diamond_chestplate: 'tools', leather_leggings: 'tools', iron_leggings: 'tools', gold_leggings: 'tools',
+  diamond_leggings: 'tools', leather_boots: 'tools', iron_boots: 'tools', gold_boots: 'tools',
+  diamond_boots: 'tools',
+  // ---------- 食物 ----------
+  apple: 'food', golden_apple: 'food', bread: 'food', cooked_beef: 'food', beef: 'food',
+  cooked_chicken: 'food', raw_chicken: 'food', cooked_cod: 'food', carrot: 'food', potato: 'food',
+  baked_potato: 'food', melon_slice: 'food', cookie: 'food',
+  // ---------- 材料 ----------
+  coal: 'materials', charcoal: 'materials', iron_ingot: 'materials', gold_ingot: 'materials',
+  diamond: 'materials', emerald: 'materials', lapis_lazuli: 'materials', copper_ingot: 'materials',
+  redstone: 'materials', quartz: 'materials', iron_nugget: 'materials', gold_nugget: 'materials',
+  diamond_nugget: 'materials', clay_ball: 'materials', brick: 'materials', nether_brick: 'materials',
+  string: 'materials', feather: 'materials', leather: 'materials', bone: 'materials', bone_meal: 'materials',
+  bone_meal_item: 'materials', wither_skeleton_skull: 'materials', gunpowder: 'materials',
+  slime_ball: 'materials', iron_ingot_raw: 'materials', gold_ingot_raw: 'materials',
+  copper_ingot_raw: 'materials', dye: 'materials', stick: 'materials', flint: 'materials',
+  wheat: 'materials', wheat_seeds: 'materials', sugar: 'materials', egg: 'materials',
+  blaze_rod: 'materials', ghast_tear: 'materials', blaze_powder: 'materials', ender_eye: 'materials',
+  shulker_shell: 'materials', chorus_fruit: 'materials', chorus_plant: 'materials', chorus_flower: 'materials',
+  nether_star: 'materials', wheat_crop_0: 'materials',
+  // ---------- 杂项（含未登记物品的兜底分类） ----------
+  bucket: 'misc', water_bucket: 'misc', lava_bucket: 'misc', milk_bucket: 'misc', saddle: 'misc',
+  name_tag: 'misc', minecart: 'misc', boat: 'misc', map: 'misc', compass: 'misc', clock: 'misc',
+  book: 'misc', enchanted_book: 'misc', ender_pearl: 'misc', elytra: 'misc', oak_sapling: 'misc',
+  spruce_sapling: 'misc', experience_bottle: 'misc', end_crystal: 'misc', dragon_egg: 'misc',
+};
+
+// 取物品分类（未登记 → 杂项）
+export function getItemCategory(name) {
+  return MAP[name] || 'misc';
+}
