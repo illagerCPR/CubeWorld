@@ -62,6 +62,10 @@ export class StructureManager {
     // T5 箱子注册表："x,y,z" -> loot 表名。记录求解时从 meta.chests 注册（确定性、可重复注册），
     // 打开箱子时 World.getOrOpenContainer 用它查表生成内容；查不到 = 玩家自放箱子 = 空容器。
     this.chests = new Map();
+    // 天域石碑注册表（批次 A）："x,y,z" -> 章节id（steles.js STELE_CHAPTERS 键）。
+    // 记录求解时从 meta.steles 注册；右键石碑时 Game 走 steleChapterAt 查表，
+    // 查不到 = 玩家自放石碑 → SteleScreen 回落无字碑。
+    this.steles = new Map();
   }
 
   // 由 cell 推导锚点记录（带缓存）。record: { name, ax, az, groundY, blocks, meta, minX..maxZ }
@@ -112,6 +116,12 @@ export class StructureManager {
       if (rec.meta.chests) {
         for (const c of rec.meta.chests) {
           this.chests.set(c[0] + ',' + c[1] + ',' + c[2], c[3]);
+        }
+      }
+      // 注册该结构的全部石碑（meta.steles: [[x,y,z,章节id],...]）——天域叙事基石（批次 A）
+      if (rec.meta.steles) {
+        for (const s of rec.meta.steles) {
+          this.steles.set(s[0] + ',' + s[1] + ',' + s[2], s[3]);
         }
       }
     }
@@ -234,6 +244,11 @@ export class StructureManager {
   // T5：坐标 → loot 表名（无注册 = 玩家自放箱子）
   chestTableAt(x, y, z) {
     return this.chests.get(x + ',' + y + ',' + z) || null;
+  }
+
+  // 天域石碑：坐标 → 章节id（无注册 = 玩家自放石碑，SteleScreen 回落无字碑）
+  steleChapterAt(x, y, z) {
+    return this.steles.get(x + ',' + y + ',' + z) || null;
   }
 
   // W2：玩家所处建筑名（荒野返回 null）。bbox 判定走 recordsAround（按需重求解，抗 LRU），

@@ -216,7 +216,7 @@ LAN 联机阶段 0-11 已全部完成（`https://github.com/illagerCPR/CubeWorld
 | 文件 | 涵盖批次 | 何时必读 |
 |---|---|---|
 | `docs/agent-notes/worldgen-structures.md` | 自然建筑/村庄/要塞、T5 战利品箱与村民交易、W 水面/洞穴、生物群系规模、群系扩展 | 地形生成、结构、群系、loot/容器/交易 |
-| `docs/agent-notes/dimensions-portals.md` | 维度基建/下界/末地/天域/联机同步、传送门、下界优化、末地完善（龙/末地城） | 维度、传送门、下界/末地、换维联机 |
+| `docs/agent-notes/dimensions-portals.md` | 维度基建/下界/末地/天域/联机同步、传送门、下界优化、末地完善（龙/末地城）、天域叙事基石（批次 A） | 维度、传送门、下界/末地、换维联机、天域内容注册/i18n 审计 |
 | `docs/agent-notes/survival-items.md` | P0 燧石/打火石/黑曜石、P1 挖掘/盔甲/经验、P2 床/掷眼、P3 桶/弓/耕种 | 生存机制、工具/盔甲/食物、合成/掉落 |
 | `docs/agent-notes/mobs-entities.md` | 怪物系统总备忘、受击反馈、被动动物/末影人、阶段 7 建模、阶段 8 朝向贴图 | 怪物/生物/AI/建模、实体物理 |
 | `docs/agent-notes/rendering-lighting.md` | 光照视觉增强（反射/云影/泛光/体积光）、阶段 9 材质重绘、Idea-3B-② 网格 Worker | 渲染、光照视觉、材质、后处理、网格构建 |

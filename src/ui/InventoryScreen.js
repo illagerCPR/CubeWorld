@@ -85,7 +85,15 @@ export class InventoryScreen {
   _bindHover(slot, name) {
     slot.onmouseenter = () => {
       if (!name) { this.tooltip.style.display = 'none'; this._hoverName = null; return; }
-      this.tooltip.textContent = getDisplayName(name);
+      const itemDef = ItemRegistry.getByName(name);
+      const lore = itemDef && itemDef.lore;
+      if (lore && lore.length) {
+        // 物品 lore（天域批次 A）：名称 + 灰蓝斜体残文行（语言包键，缺项回落简体）
+        const rows = lore.map((l) => `<div style="color:#9fb3c8; font-style:italic; margin-top:2px;">${t(l)}</div>`).join('');
+        this.tooltip.innerHTML = `<div>${getDisplayName(name)}</div>${rows}`;
+      } else {
+        this.tooltip.textContent = getDisplayName(name);
+      }
       this.tooltip.style.display = 'block';
       this._hoverEl = slot;
       this._hoverName = name; // R/U 配方查询目标

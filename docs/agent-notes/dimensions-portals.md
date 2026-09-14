@@ -62,3 +62,15 @@
 - **传送门屏幕特效**：`PortalOverlay.js` 纯表现层（只读 kind+progress，**不干预三件套**）；径向 vignette + conic 漩涡 + 末地系星点层，opacity=0.25+progress*0.75 线性渐强、离门 0.18s 渐隐；白闪 flash() 用 offsetWidth 重启动画；updatePortals 各早退分支（cooldown/未武装/离门）统一喂 update(null,0)——**未武装（到达站位在门内）不显特效**是防回弹语义的一部分。
 - **测试**：`tests/end-islands.mjs`（181 断言：群系在场/密度带宽/锚点确定性/群系→方块单一来源）+ `tests/end-dragon.mjs`（104 断言：类型/柱顶水晶×2 seeds/DragonAI 六场景/击败幂等/末地门控）+ `tests/end-gateway.mjs`（41 断言：折跃门注册/选址/建门/角度配对/喷泉布局/幂等门控）+ `tests/end-city.mjs`（111 断言：注册/漏斗/落地/箱子三向/loot 保底/双次一致）全接入 run-all-tests.sh。
 - **冒烟陷阱**：测试 eval 里建方块用 `BlockRegistry.getByName(name).id`（id 数字会变，勿硬编码 54/80——M5 冒烟曾因硬编码 id 误判"门未生成"）；站门特效采样必须先确认 `_portalArmed`（到达站位在门内时 armed=false 特效不显是正确语义）；换维窗口 10-20s，"未传送"结论前先排除窗口中。
+
+### 天域叙事基石批次（批次 A，2026-09-14 交付，未发布——随 Build 14 统一发布）—— 天海纪元内容底座
+
+- **发布单元订正**：天域四批（叙事基石/群风与众生/守誓巨像/复潮）为**开发里程碑**，中间批次只 push+CI 绿不 bump BUILD 不发 Release；BUILD=14 的递增放批次 D 提交内。设计总纲见 `docs/aether-storyline.md`。
+- **注册追加纪律（存档根基）**：BlockDefs/ItemDefs 新内容只能**文件末尾追加**（自 beacon 起惯例）——chunk 存档按方块 id 存数字，中途插入=全存档地形错位；`tests/aether-content.mjs` 断言新方块 id > beacon id 防回退。
+- **ItemRegistry 字段白名单陷阱（曾真出）**：`register()` 只拷贝白名单字段——def 里加新字段（本批 `lore`）必须同步在白名单加 `lore: def.lore || null`，否则**静默丢弃**（注册不报错、tooltip 永远空）。
+- **气流命名**：`wind_current` displayName 用「气流」（「风流」现代汉语歧义），zh-TW「氣流」，id 不变；null 像素=透明（pixelSvg 跳过 falsy），淡青竖纹直接 rgba 填 fill 作视觉提示；solid:false + hardness 0.3 可拆。
+- **石碑章节绑定**：`StructureManager` 新增 `steles` Map（"x,y,z"→章节id，键格式与 chests 注册表一致）+ `steleChapterAt()`；注册来源=结构 `meta.steles`（批次 B 起由 solve 填，与 meta.chests 同款幂等注册）；未注册石碑回落 `STELE_BLANK`（无字碑）。章节内容表 `src/world/steles.js`（9 章 + 无字碑，值=语言包键）。
+- **SteleScreen 生命周期**：BeaconScreen 同款（start 新建 / _disposeWorld dispose / _setupPauseOnUnlock 守卫 / KeyE + ESC + backdrop 关闭）；Game.js 集成共 10 处：import、构造置 null、pauseOnUnlock 守卫、_disposeWorld、start 创建、KeyE 分支、KeyQ 守卫、ESC 分支、右键路由（wind_stele → open，旁观拒绝）、`_blockDrops` 星髓矿石→star_marrow（复用 `_blockDropName` 的镐 tier 门控）。
+- **i18n 固化为永久测试**：`tests/i18n-parity.mjs`（10 包键集对齐 + 每键占位符多重集对齐 + **静态 t() ∪ 动态键表**（群系名/碑文/lore/信标效果/分类标签）覆盖审计 + 文本级重复键扫描）——碑文/lore 走 `t(表[key])` 动态路径，静态扫描盲区（§16 教训）必须显式并集；本批 master=236 键 × 10 包全绿。
+- **eval import 实例分裂（§16 陷阱再次命中）**：browser eval 里 `import('/src/i18n/index.js')` 得到**第二模块实例**，setLocale 改的是副本、游戏 t() 无感——实时语言验证必须走真实 UI（主菜单「语言」按钮循环切换）后再进世界断言。
+- **冒烟全绿**：创造搜索（星髓→4 项/残页→3 项）、tooltip 中英双语渲染（名称+灰斜体 lore 行）、石碑三路径（未注册→无字碑 / meta 注册→第一章 / 右键路由）、E 关闭还原 controls、控制台 0 错误；测试存档已删、语言已还原简体。

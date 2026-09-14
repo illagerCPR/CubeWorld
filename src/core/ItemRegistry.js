@@ -18,6 +18,7 @@ function register(def) {
     damage: def.damage ?? 0,
     armorSlot: def.armorSlot || null,
     armorPoints: def.armorPoints ?? 0,
+    lore: def.lore || null, // 天域批次 A：物品残文行（语言包键，InventoryScreen tooltip t() 渲染）
     blockName: def.blockName || null
   };
   items.set(id, item);

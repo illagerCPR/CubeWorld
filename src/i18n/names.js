@@ -281,4 +281,22 @@ export const NAME_I18N = {
   chicken: ['鸡', '雞', 'Chicken', 'Poule', 'Huhn', 'ニワトリ', '닭', 'دجاجة', "Курица", "Gallina", "Galinha"],
   enderman: ['末影人', '終界使者', 'Enderman', 'Enderman', 'Enderman', 'エンダーマン', '엔더맨', 'إندرمان', "Эндермен", "Enderman", "Enderman"],
   iron_golem: ['铁傀儡', '鐵魔像', 'Iron Golem', 'Golem de fer', 'Eisengolem', 'アイアンゴーレム', '아이언 골렘', 'جوليم حديدي', "Железный голем", "Gólem de hierro", "Gólem de ferro"],
+  // ---------- 天域叙事基石（批次 A） ----------
+  "star_marrow_ore": ["星髓矿石","星髓礦石","Star Marrow Ore","Minerai de moelle d'étoile","Sternmark-Erz","星の髄鉱石","스타마로우 광석","خام نخاع النجم","Руда звёздной сердцевины","Mena de médula estelar","Minério de medula estelar"],
+  "star_marrow_block": ["星髓块","星髓塊","Block of Star Marrow","Bloc de moelle d'étoile","Sternmark-Block","星の髄ブロック","스타마로우 덩이","كتلة نخاع النجم","Блок звёздной сердцевины","Bloque de médula estelar","Bloco de medula estelar"],
+  "cloud_wool": ["云绒块","雲絨塊","Cloud Wool","Laine de nuage","Wolkenwolle","雲の羊毛","구름 양털","صوف السحاب","Облачная шерсть","Lana de nube","Lã de nuvem"],
+  "wind_stele": ["风纹石碑","風紋石碑","Wind Stele","Stèle du vent","Windstele","風の石碑","바람 비석","مسلة الريح","Стела ветра","Estela del viento","Estela do vento"],
+  "aether_altar": ["恒昼祭坛","恆晝祭壇","Altar of the Long Noon","Autel du long midi","Altar des ewigen Mittags","常昼の祭壇","정오의 제단","مذبح الظهيرة الأبدية","Алтарь вечного полудня","Altar del mediodía eterno","Altar do meio-dia eterno"],
+  "wind_current": ["气流","氣流","Wind Current","Courant d'air","Luftstrom","上昇気流","상승 기류","تيار هوائي صاعد","Восходящий поток","Corriente de aire","Corrente de ar"],
+  "cloud_fluff": ["云絮","雲絮","Cloud Fluff","Duvet de nuage","Wolkenflausch","雲の綿","구름솜","وبر السحاب","Облачный пух","Pelusa de nube","Felpa de nuvem"],
+  "star_marrow": ["星髓","星髓","Star Marrow","Moelle d'étoile","Sternmark","星の髄","스타마로우","نخاع النجم","Звёздная сердцевина","Médula estelar","Medula estelar"],
+  "page_rising": ["潮汐残页·涨潮","潮汐殘頁·漲潮","Torn Page: Rising Tide","Page déchirée : Pleine mer","Zerrissene Seite: Flut","潮の残頁・満ち潮","찢어진 쪽: 밀물","صفحة ممزقة: المد الصاعد","Вырванная страница: Прилив","Página rasgada: Pleamar","Página rasgada: Maré cheia"],
+  "page_marrow": ["潮汐残页·星髓","潮汐殘頁·星髓","Torn Page: Star Marrow","Page déchirée : Moelle d'étoile","Zerrissene Seite: Sternmark","潮の残頁・星の髄","찢어진 쪽: 스타마로우","صفحة ممزقة: نخاع النجم","Вырванная страница: Звёздная сердцевина","Página rasgada: Médula estelar","Página rasgada: Medula estelar"],
+  "page_sunder": ["潮汐残页·裂潮","潮汐殘頁·裂潮","Torn Page: Sundered Tide","Page déchirée : Marée brisée","Zerrissene Seite: Gezeitenbruch","潮の残頁・裂ける潮","찢어진 쪽: 갈라진 물결","صفحة ممزقة: المد المتشقق","Вырванная страница: Раскол прилива","Página rasgada: Marea partida","Página rasgada: Maré partida"],
+  "storm_totem": ["风暴图腾","風暴圖騰","Storm Totem","Totem de tempête","Sturmtotem","嵐のトーテム","폭풍 토템","توتم العاصفة","Тотем бури","Tótem de tormenta","Totem de tempestade"],
+  "storm_core": ["风暴之核","風暴之核","Storm Core","Cœur de tempête","Sturmkern","嵐の核","폭풍의 핵","نواة العاصفة","Ядро бури","Núcleo de tormenta","Núcleo de tempestade"],
+  "heart_shard": ["心核碎片","心核碎片","Heart Shard","Éclat de cœur","Herzsplitter","心核の欠片","하트 조각","شظية القلب","Осколок сердца","Fragmento de corazón","Fragmento de coração"],
+  "wind_brand": ["缚风之剑","縛風之劍","Windbrand","Lame du vent","Windklinge","風縛の剣","바람의 검","سيف الريح","Клинок ветра","Filo del viento","Lâmina do vento"],
+  "gale_cloak": ["御风斗篷","禦風斗篷","Gale Cloak","Cape de la bourrasque","Sturmumhang","嵐のマント","폭풍 망토","عباءة العاصفة","Плащ бури","Capa del vendaval","Capa do vendaval"],
+
 };

@@ -287,6 +287,10 @@ const ItemCN = {
   lever: '拉杆', stone_button: '石按钮',
   oak_sapling: '橡树树苗', spruce_sapling: '云杉树苗', wheat_seeds: '小麦种子',
   bone_meal_item: '骨粉',
+  cloud_fluff: '云絮', star_marrow: '星髓',
+  page_rising: '潮汐残页·涨潮', page_marrow: '潮汐残页·星髓', page_sunder: '潮汐残页·裂潮',
+  storm_totem: '风暴图腾', storm_core: '风暴之核', heart_shard: '心核碎片',
+  wind_brand: '缚风之剑', gale_cloak: '御风斗篷',
 };
 
 function reg(name, def, svg) {
@@ -893,6 +897,111 @@ reg('nether_star', { displayName: '下界之星', stack: 64 }, art(g => {
   g.d(8, 8, 2, 2, W[0]);                            // 中心亮核
   g.s(8, 8, 'rgb(255,255,255)');
   g.s(8, 1, cD); g.s(8, 15, cD); g.s(1, 8, cD); g.s(15, 8, cD);  // 芒尖收细
+}));
+
+// ── 天域叙事基石（批次 A，**文件末尾追加**）────────────────────────────
+// lore 行 = 语言包键（InventoryScreen tooltip 经 t() 渲染灰字，缺项回落简体）。
+// 天青调色板（星髓系）：亮/基/暗
+const marrowP = ['rgb(168,244,228)', 'rgb(96,232,210)', 'rgb(52,168,152)'];
+
+// 云絮：三团叠置的白色绒球
+reg('cloud_fluff', { stack: 64 }, art(g => {
+  g.d(6, 10, 3, 2, 'rgb(214,226,238)');
+  g.d(11, 10, 3, 2, 'rgb(206,220,234)');
+  g.d(8, 7, 4, 3, 'rgb(243,247,251)');
+  g.d(7, 6, 2, 2, 'rgb(255,255,255)');
+  g.d(12, 8, 2, 1, 'rgb(236,242,248)');
+  g.s(4, 12, 'rgb(186,200,216)'); g.s(13, 12, 'rgb(186,200,216)');
+}));
+
+// 星髓：斜置晶簇碎片
+reg('star_marrow', { stack: 64 }, art(g => {
+  for (let i = 0; i < 9; i++) {
+    g.s(4 + i, 13 - i, marrowP[1]);
+    g.s(5 + i, 13 - i, marrowP[0]);
+    if (i > 1 && i < 7) g.s(6 + i, 13 - i, marrowP[2]);
+  }
+  g.s(6, 11, 'rgb(255,255,255)'); g.s(9, 8, 'rgb(255,255,255)');
+  g.s(4, 13, marrowP[2]); g.s(12, 5, marrowP[2]);
+}));
+
+// 潮汐残页×3：羊皮纸 + 撕角 + 各自纹样（涨潮=波线 / 星髓=晶点 / 裂潮=断线）
+function pageArt(accent, seed) {
+  return art(g => {
+    const r = rng(seed);
+    const base = 'rgb(232,214,170)', dark = 'rgb(178,156,112)';
+    for (let y = 3; y <= 13; y++) for (let x = 3; x <= 12; x++) {
+      if ((x >= 11 && y <= 5) && (x - 11 + y - 3) <= 2) continue; // 右上撕角
+      g.s(x, y, (x === 3 || x === 12 || y === 13) ? dark : base);
+    }
+    for (let i = 0; i < 14; i++) if (r() < 0.5) g.s(4 + Math.floor(r() * 8), 5 + Math.floor(r() * 8), dark);
+    for (const [x, y] of accent) g.s(x, y, marrowP[1]);
+  });
+}
+reg('page_rising', { stack: 16, lore: ['涨潮纪元的航海日志残页。', '「今夜风向正南，塔灯全明——宜远航。」'] },
+  pageArt([[5, 9], [6, 9], [8, 9], [9, 9], [10, 8]], 201));
+reg('page_marrow', { stack: 16, lore: ['星髓时代的矿脉勘单残页。', '「脉至最深处，凿之有音，如叩门。」'] },
+  pageArt([[6, 8], [9, 6], [9, 10]], 202));
+reg('page_sunder', { stack: 16, lore: ['裂潮之日的瞭望记录残页。', '「正午——海退。塔在。我们不再需要灯了。」'] },
+  pageArt([[5, 10], [6, 9], [7, 8], [9, 6], [10, 5]], 203));
+
+// 风暴图腾：木柱 + 星髓面纹
+reg('storm_totem', { stack: 1, lore: ['云民的星铸图腾，握在手中微微震颤。', '它认得某座祭坛。'] }, art(g => {
+  for (let y = 2; y <= 14; y++) for (let x = 6; x <= 9; x++) {
+    g.s(x, y, y === 2 || y === 14 ? 'rgb(96,70,36)' : 'rgb(140,108,62)');
+  }
+  for (const [x, y] of [[7, 4], [8, 4], [7, 7], [8, 7]]) g.s(x, y, marrowP[1]);
+  g.s(7, 5, marrowP[0]); g.s(8, 5, marrowP[0]);
+  g.s(7, 10, marrowP[2]); g.s(8, 10, marrowP[2]);
+  g.s(5, 3, 'rgb(116,85,45)'); g.s(10, 3, 'rgb(116,85,45)');
+  g.s(5, 12, 'rgb(116,85,45)'); g.s(10, 12, 'rgb(116,85,45)');
+}));
+
+// 风暴之核：青色风环 + 亮核 + 环绕风点
+reg('storm_core', { stack: 16, lore: ['守誓巨像碎裂后，仍盘旋不息的风暴之核。'] }, art(g => {
+  g.d(8, 8, 5, 5, 'rgba(96,232,210,0.35)');
+  g.d(8, 8, 4, 4, marrowP[2]);
+  g.d(8, 8, 2, 2, marrowP[0]);
+  g.s(8, 8, 'rgb(255,255,255)');
+  for (const [x, y] of [[3, 3], [13, 4], [12, 12], [4, 12], [8, 2], [2, 8], [14, 8]]) {
+    g.s(x, y, marrowP[1]);
+  }
+}));
+
+// 心核碎片：暖白心形碎片 + 搏动纹
+reg('heart_shard', { stack: 16, lore: ['天穹之心的碎片，仍在极缓慢地搏动。'] }, art(g => {
+  const c = ['rgb(255,244,214)', 'rgb(240,214,150)', 'rgb(184,150,84)'];
+  g.d(6, 7, 3, 3, c[1]); g.d(10, 7, 3, 3, c[1]);
+  g.d(6, 7, 2, 2, c[0]); g.d(10, 7, 2, 2, c[0]);
+  for (let i = 0; i < 6; i++) g.s(5 + i, 10 + Math.floor(i / 3), c[1]);
+  for (let i = 0; i < 4; i++) g.s(6 + i, 12 - 0, c[0]);
+  g.s(6, 5, c[0]); g.s(10, 5, c[0]);
+  g.s(4, 4, c[2]); g.s(12, 4, c[2]); g.s(8, 14, c[2]);
+}));
+
+// 缚风之剑：青刃 + 木柄（伤害 7 = 钻石剑 + 1；合成闭环在批次 C）
+reg('wind_brand', { stack: 1, tool: 'sword', tier: 4, durability: 400, damage: 7 }, art(g => {
+  for (let i = 0; i < 8; i++) {
+    g.s(5 + i, 10 - i, marrowP[1]);
+    g.s(6 + i, 10 - i, marrowP[0]);
+    if (i < 6) g.s(7 + i, 10 - i, marrowP[2]);
+  }
+  g.s(12, 3, 'rgb(255,255,255)'); g.s(11, 4, 'rgb(255,255,255)');
+  g.h(4, 11, 5);
+  g.s(3, 12, 'rgb(80,56,28)'); g.s(4, 12, 'rgb(80,56,28)');
+  g.s(6, 12, 'rgb(117,85,45)'); g.s(7, 13, 'rgb(117,85,45)');
+}));
+
+// 御风斗篷：披风造型 + 星髓搭扣（缓降/跳加成效果在批次 C 接入）
+reg('gale_cloak', { stack: 1, armorSlot: 'chest', armorPoints: 3 }, art(g => {
+  for (let y = 3; y <= 13; y++) for (let x = 4; x <= 11; x++) {
+    const edge = x === 4 || x === 11 || y === 13;
+    g.s(x, y, edge ? 'rgb(96,110,138)' : 'rgb(138,152,180)');
+  }
+  for (let x = 5; x <= 10; x++) g.s(x, 3, 'rgb(70,82,106)');
+  g.s(7, 5, marrowP[1]); g.s(8, 5, marrowP[1]);
+  g.s(6, 6, marrowP[2]); g.s(9, 6, marrowP[2]);
+  g.s(5, 9, 'rgb(170,184,208)'); g.s(10, 10, 'rgb(170,184,208)');
 }));
 
 export const ItemSVGDefinitions = svgMap;

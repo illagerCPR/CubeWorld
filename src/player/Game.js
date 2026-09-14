@@ -19,6 +19,7 @@ import { InfoBar } from '../ui/InfoBar.js';
 import { InventoryScreen } from '../ui/InventoryScreen.js';
 import { ChestScreen } from '../ui/ChestScreen.js';
 import { BeaconScreen, BEACON_EFFECTS } from '../ui/BeaconScreen.js';
+import { SteleScreen } from '../ui/SteleScreen.js';
 import { t } from '../i18n/index.js';
 import { tName } from '../i18n/name.js';
 import { getDisplayName } from '../ui/itemName.js';
@@ -108,6 +109,7 @@ export class Game {
     this.inventoryScreen = null;
     this.chestScreen = null;
     this.beaconScreen = null;
+    this.steleScreen = null;
     this.tradeScreen = null;
     this.pauseMenu = null;
     this.deathScreen = null;
@@ -175,6 +177,7 @@ export class Game {
       if (this.inventoryScreen && this.inventoryScreen.visible) return;
       if (this.chestScreen && this.chestScreen.visible) return;
       if (this.beaconScreen && this.beaconScreen.visible) return;
+      if (this.steleScreen && this.steleScreen.visible) return;
       if (this.furnaceScreen && this.furnaceScreen.visible) return;
       if (this.tradeScreen && this.tradeScreen.visible) return;
       if (this.commandPanel && this.commandPanel.visible) return;
@@ -220,6 +223,7 @@ export class Game {
     }
     if (this.chestScreen) { this.chestScreen.dispose(); this.chestScreen = null; }
     if (this.beaconScreen) { this.beaconScreen.dispose(); this.beaconScreen = null; }
+    if (this.steleScreen) { this.steleScreen.dispose(); this.steleScreen = null; }
     if (this.furnaceScreen) { this.furnaceScreen.dispose(); this.furnaceScreen = null; }
     if (this.recipeViewer) { this.recipeViewer.dispose(); this.recipeViewer = null; }
     if (this.tradeScreen) { this.tradeScreen.dispose(); this.tradeScreen = null; }
@@ -464,6 +468,7 @@ export class Game {
     this.inventoryScreen = new InventoryScreen(this.inventory, this.player, this);
     this.chestScreen = new ChestScreen(this);
     this.beaconScreen = new BeaconScreen(this); // Idea-2D-③：信标效果选择（新建型：_disposeWorld 移除）
+    this.steleScreen = new SteleScreen(this); // 天域批次 A：风纹石碑浮层（新建型：_disposeWorld 移除）
     this.furnaceScreen = new FurnaceScreen(this);
     this.recipeViewer = new RecipeViewer(this);
     this.tradeScreen = new TradeScreen(this);
@@ -545,6 +550,7 @@ export class Game {
         if (this.paused || this.spectating || (this.deathScreen && this.deathScreen.visible)) return;
         if (this.chestScreen && this.chestScreen.visible) { this.chestScreen.hide(); return; }
         if (this.beaconScreen && this.beaconScreen.visible) { this.beaconScreen.hide(); return; }
+        if (this.steleScreen && this.steleScreen.visible) { this.steleScreen.hide(); return; }
         if (this.furnaceScreen && this.furnaceScreen.visible) { this.furnaceScreen.hide(); return; }
         if (this.tradeScreen && this.tradeScreen.visible) { this.tradeScreen.hide(); return; }
         if (this.inventoryScreen) {
@@ -567,7 +573,8 @@ export class Game {
         if (this.inventoryScreen && this.inventoryScreen.visible) return;
         if (this.commandPanel && this.commandPanel.visible) return;
         if ((this.chestScreen && this.chestScreen.visible) || (this.furnaceScreen && this.furnaceScreen.visible) ||
-            (this.beaconScreen && this.beaconScreen.visible) || (this.tradeScreen && this.tradeScreen.visible)) return;
+            (this.beaconScreen && this.beaconScreen.visible) || (this.steleScreen && this.steleScreen.visible) ||
+            (this.tradeScreen && this.tradeScreen.visible)) return;
         e.preventDefault(); // 拦截浏览器 Ctrl+Q（Linux 关窗）等默认行为
         const stack = this.inventory.getSelected();
         if (!stack || !stack.name) return;
@@ -668,6 +675,11 @@ export class Game {
         }
         if (this.tradeScreen && this.tradeScreen.visible) {
           this.tradeScreen.hide();
+          return;
+        }
+        // 天域石碑浮层：ESC 合上（阅读型浮层，与 E 键同效）
+        if (this.steleScreen && this.steleScreen.visible) {
+          this.steleScreen.hide();
           return;
         }
         if (this.pauseMenu && this.pauseMenu.visible) {
@@ -1579,6 +1591,12 @@ export class Game {
           this.controls.mouseRight = false;
           return;
         }
+        // 天域批次 A：右键风纹石碑读碑文（旁观不可；章节走 StructureManager.steleChapterAt）
+        if (targetDef && targetDef.name === 'wind_stele' && this.steleScreen && !this.player.spectator) {
+          this.steleScreen.open(hit.block.x, hit.block.y, hit.block.z);
+          this.controls.mouseRight = false;
+          return;
+        }
         // 红石交互：拉杆/按钮
         if (targetDef && this.redstone) {
           const interacted = this.redstone.onBlockInteract(hit.block.x, hit.block.y, hit.block.z, hit.id);
@@ -2463,6 +2481,11 @@ export class Game {
     // 草丛：40% 掉种子（种子获取主来源），否则无掉落
     if (def.name === 'tall_grass') {
       return Math.random() < 0.4 ? [{ name: 'wheat_seeds', count: 1 }] : [];
+    }
+    // 天域星髓矿石：不掉矿块本体，直接给星髓×1（批次 A；_blockDropName 复用镐 tier 门控）
+    if (def.name === 'star_marrow_ore') {
+      const n = this._blockDropName(def);
+      return n ? [{ name: 'star_marrow', count: 1 }] : [];
     }
     const name = this._blockDropName(def);
     return name ? [{ name, count: 1 }] : [];

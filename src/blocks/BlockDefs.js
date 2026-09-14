@@ -744,6 +744,8 @@ const BlockCN = {
   oak_door: '橡木门', iron_door: '铁门', oak_trapdoor: '橡木活板门', note_block: '音符盒',
   white_concrete: '白色混凝土', white_wool: '白色羊毛', white_terracotta: '白色陶瓦', white_bed: '白色床',
   chest: '箱子',
+  star_marrow_ore: '星髓矿石', star_marrow_block: '星髓块', cloud_wool: '云绒块',
+  wind_stele: '风纹石碑', aether_altar: '恒昼祭坛', wind_current: '气流',
 };
 
 function reg(name, def, svgs) {
@@ -1499,6 +1501,88 @@ function beaconTex() {
   return pixelSvg(px);
 }
 reg('beacon', { displayName: '信标', light: 15, hardness: 3, tool: 'pickaxe' }, { beacon: beaconTex() });
+
+// ── 天域叙事基石（批次 A，**文件末尾追加**防方块 ID 错位）────────────────
+// 星髓 = 凝固的潮之力（docs/aether-storyline.md §2.2）：矿石 teal 晶簇 / 块体亮脉络。
+// star_marrow_ore 掉落映射在 Game._blockDrops（→ star_marrow，非矿块本体）。
+reg('star_marrow_ore', { hardness: 3, tool: 'pickaxe', minTier: 2 },
+  { star_marrow_ore: oreTex([125, 125, 125], [96, 232, 210], 151) });
+
+function marrowBlockTex(seed) {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb([204, 238, 230], 0.94 + hash2(x, y, seed) * 0.12);
+  }
+  // 对角脉络：亮青主脉 + 白芯（凝固潮光）
+  for (let i = 0; i < 16; i++) {
+    px[i * 16 + ((i * 5 + 3) % 16)] = rgb([120, 228, 210]);
+    if (i % 3 === 0) px[i * 16 + ((i * 5 + 4) % 16)] = rgb([244, 255, 252]);
+    px[i * 16 + ((i * 11 + 9) % 16)] = rgb([156, 232, 220], 0.92);
+  }
+  return pixelSvg(px);
+}
+reg('star_marrow_block', { light: 13, hardness: 1.5, tool: 'pickaxe', minTier: 1 },
+  { star_marrow_block: marrowBlockTex(152) });
+
+function cloudWoolTex(seed) {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    // 云绒：雪白底 + 大颗粒团块（2×2 块状斑驳）+ 极淡青阴影
+    const t = hash2(x >> 1, y >> 1, seed);
+    const f = 0.96 + hash2(x, y, seed + 1) * 0.06;
+    px[y * 16 + x] = t < 0.22 ? rgb([214, 226, 238], f) : rgb([243, 247, 251], f);
+  }
+  return pixelSvg(px);
+}
+reg('cloud_wool', { hardness: 0.4 }, { cloud_wool: cloudWoolTex(153) });
+
+function steleTex(seed) {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb([128, 132, 142], 0.92 + hash2(x, y, seed) * 0.14);
+  }
+  // 风纹刻痕：三道水平凹槽 + 一枚青色风纹符（微光）
+  for (const y of [3, 7, 11]) {
+    for (let x = 2; x <= 13; x++) px[y * 16 + x] = rgb([96, 100, 110]);
+  }
+  for (const [x, y] of [[6, 5], [7, 5], [8, 5], [9, 6], [7, 7], [8, 7], [8, 8]]) {
+    px[y * 16 + x] = rgb([110, 220, 205], 0.95);
+  }
+  return pixelSvg(px);
+}
+reg('wind_stele', { hardness: -1 }, { wind_stele: steleTex(154) });
+
+function altarTex(seed) {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb([222, 204, 148], 0.93 + hash2(x, y, seed) * 0.12);
+  }
+  // 恒昼日轮：中央亮盘 + 边缘短芒 + 暗色描边
+  for (let y = 4; y <= 11; y++) for (let x = 4; x <= 11; x++) {
+    const dx = x - 7.5, dy = y - 7.5;
+    if (dx * dx + dy * dy <= 12) px[y * 16 + x] = rgb([250, 238, 186]);
+  }
+  px[7 * 16 + 7] = px[7 * 16 + 8] = px[8 * 16 + 7] = px[8 * 16 + 8] = rgb([255, 252, 232]);
+  for (const [x, y] of [[2, 7], [2, 8], [13, 7], [13, 8], [7, 2], [8, 2], [7, 13], [8, 13]]) {
+    px[y * 16 + x] = rgb([206, 178, 116]);
+  }
+  return pixelSvg(px);
+}
+reg('aether_altar', { light: 13, hardness: -1 }, { aether_altar: altarTex(155) });
+
+function windCurrentTex() {
+  const px = makeTex();
+  // 气流：近乎全透 + 三道淡青竖向波纹（上升气流的视觉提示；null = 透明像素）
+  for (let y = 0; y < 16; y++) {
+    for (const bx of [3, 8, 13]) {
+      const x = (bx + Math.round(Math.sin(y * 0.8) * 1.5) + 16) % 16;
+      px[y * 16 + x] = y % 3 === 0 ? 'rgba(190,235,255,0.30)' : 'rgba(210,242,255,0.18)';
+    }
+  }
+  return pixelSvg(px);
+}
+reg('wind_current', { solid: false, transparent: true, hardness: 0.3 },
+  { wind_current: windCurrentTex() });
 
 export const BlockSVGDefinitions = svgMap;
 
