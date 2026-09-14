@@ -107,3 +107,10 @@
 - **JEI 内嵌模式（RecipeViewer）**：`_ensureEmbedded(invOpen)` 每帧幂等切换——**按 favEl.parentElement === host 判定**（页签宿主每次 render 重建，按 flag 判会漏重挂）；内嵌=static 定位固定尺寸（3 列收藏 + 8 列列表），伴随=fixed 由 _layout 动态定位；弹窗 popEl 恒驻 body（两种模式都覆盖物品栏居中，定位提取 `_layoutPopup`）；`_syncDisplay` 内嵌分支以 `_tabShown` 驱动 `visible/_shown`（R/U/A 弹窗依赖 visible）；J 键 = 开背包直落配方页签 show(2,'recipes')。**实测陷阱**：测试断言里 `div.textContent === '✗'` 会同时命中摧毁槽与其外层容器（input 无 textContent），要按 `title` 过滤；创造网格 slot 无 data-slot 属性，选择器用 children。
 - **i18n（Build 10）**：新增 10 键（8 分类 + 配方 + 摧毁物品）×10 包，键集 223→233；'背包' 复用既有键。
 - **环境坑**：`./start.sh stop` 会把 **Vite 与 LAN 服务器一起停**（本次实测踩到）——只想停服务器时用 `start.sh stop` 后记得重启 Vite，或直接 kill 3001 进程。
+
+### Build 11 批次备忘（防回退）—— JEI 内嵌回退 + 创造「生存物品栏」页签
+
+- **⚠️ JEI 内嵌已回退（Build 11，用户实测效果不佳）**：RecipeViewer.js 已整体还原到 Build 9 版本（`git show 8da99ba:src/ui/RecipeViewer.js`）——伴随模式（fixed 贴容器两侧）、J 键语义（无容器时开背包 show(2)）、_layout 内联弹窗定位全部复原。**勿再尝试把 JEI reparent 进页签**：双模式切换的状态面（样式内联覆盖 × 显隐语义 × 弹窗定位 × 宿主重建重挂）远超收益，回退干净 = 整文件还原而非选择性摘除。
+- **创造「生存物品栏」页签（Build 11 保留项）**：创造页签行 = 8 分类 + `['survival', t('生存物品栏')]`（末位，原版式）；选中时 `craftSize=2` + `_renderSurvivalContent(false)` 渲染与生存背包同布局（盔甲穿戴/合成/背包/快捷栏全功能）。生存内容抽成 `_renderSurvivalContent(withTitle)` 供生存单页与创造页签共用。
+- **回退残留检查法**：改回去的功能要 grep 全部符号（本次 `_syncRecipeTab` 在 show() 残留一处调用 → 运行时 TypeError，node --check 查不出——**方法删除后必须 grep 方法名全仓**）。
+- **eval 测试语言坑**：上一轮测试把 settings.language 存成了 en，中文标签选择器会全部落空（本次 '创造模式'/'生存模式' 找不到）——测试前先确认 UI 语言或用语言无关选择器（id/class）；裸 import setLocale 改语言**不会重绘菜单**（实例分裂，监听器在页面实例上），改持久化语言后必须 reload 页面。

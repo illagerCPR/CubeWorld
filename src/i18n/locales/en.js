@@ -246,6 +246,6 @@ export const en = {
   '食物': 'Food',
   '材料': 'Ingredients',
   '杂项': 'Misc',
-  '配方': 'Recipes',
+  '生存物品栏': 'Survival Inventory',
   '摧毁物品': 'Destroy item',
 };

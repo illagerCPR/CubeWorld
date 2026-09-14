@@ -18,11 +18,10 @@ export class InventoryScreen {
     this.creativeScroll = 0;
     this.craftSize = 2; // 2x2 背包合成，3x3 工作台合成
     this.craftGrid = []; // 合成网格物品 {name,count,data} | null
-    // Build 10 页签：生存 = inv(背包) | recipes(配方)；创造 = 分类 id
+    // Build 10 页签仅用于创造模式（分类 + 生存物品栏）；生存模式保持单页（Build 11：JEI 内嵌已回退）
     this.activeTab = 'inv';
     this.creativeTab = 'building';
     this.creativeSearch = '';
-    this.recipeHost = null; // 配方页签的 JEI 面板宿主（RecipeViewer 内嵌 reparent 目标）
     
     this.el = document.createElement('div');
     this.el.style.cssText = `
@@ -98,14 +97,13 @@ export class InventoryScreen {
     };
   }
 
-  show(craftSize = 2, tab = null) {
+  show(craftSize = 2) {
     this.visible = true;
     this.craftSize = craftSize;
     this.craftGrid = new Array(craftSize * craftSize).fill(null);
-    this.activeTab = tab || 'inv'; // J 键打开时传 'recipes' 直落配方页签
+    this.activeTab = 'inv';
     this.el.style.display = 'flex';
     this.render();
-    this._syncRecipeTab();
     if (this.game && this.game.controls) {
       this.game.controls.enabled = false;
       this.game.controls.mouseLeft = false;
@@ -120,16 +118,8 @@ export class InventoryScreen {
     this.visible = false;
     this.el.style.display = 'none';
     this._hoverName = null;
-    this._syncRecipeTab(); // 配方页签随界面关闭（JEI 内嵌面板显隐跟随）
     if (this.game && this.game.controls) {
       this.game.controls.enabled = true;
-    }
-  }
-
-  // 同步配方页签可见性给 RecipeViewer（内嵌模式显隐语义）
-  _syncRecipeTab() {
-    if (this.game && this.game.recipeViewer) {
-      this.game.recipeViewer.setTabVisible(this.visible && this.activeTab === 'recipes');
     }
   }
 
@@ -172,26 +162,17 @@ export class InventoryScreen {
   renderSurvival() {
     this.panel.innerHTML = '';
     this.panel.style.width = 'max-content';
+    this._renderSurvivalContent(true);
+  }
 
-    // 页签行（Build 10）：背包 | 配方
-    const tabBar = this.makeTabBar([
-      ['inv', t('背包')],
-      ['recipes', t('配方')],
-    ], () => { this._syncRecipeTab(); });
-    this.panel.appendChild(tabBar);
-    if (this.activeTab === 'recipes') {
-      // 配方页签：宿主容器，JEI 面板由 RecipeViewer.updateFrame reparent 进来
-      this.recipeHost = document.createElement('div');
-      this.recipeHost.style.cssText = 'display:flex; gap:10px; justify-content:center; align-items:flex-start; min-height:360px;';
-      this.panel.appendChild(this.recipeHost);
-      this._syncRecipeTab();
-      return;
+  // 生存布局内容（生存模式单页 + 创造「生存物品栏」页签共用）；withTitle 控制标题行
+  _renderSurvivalContent(withTitle) {
+    if (withTitle) {
+      const title = document.createElement('div');
+      title.textContent = this.craftSize === 3 ? t('工作台') : t('背包');
+      title.style.cssText = 'font-size: 14px; margin-bottom: 8px; color: #333;';
+      this.panel.appendChild(title);
     }
-
-    const title = document.createElement('div');
-    title.textContent = this.craftSize === 3 ? t('工作台') : t('背包');
-    title.style.cssText = 'font-size: 14px; margin-bottom: 8px; color: #333;';
-    this.panel.appendChild(title);
     
     // 合成区
     const craftArea = document.createElement('div');
@@ -242,21 +223,20 @@ export class InventoryScreen {
     this.updateCraftOutput();
   }
 
-  // 页签行构建（Build 10）：onClickExtra 在切换后回调（同步 JEI 页签显隐等）
+  // 页签行构建（Build 10/11）：onClickExtra 在切换后回调
   makeTabBar(tabs, onClickExtra) {
     const bar = document.createElement('div');
     bar.style.cssText = 'display:flex; gap:4px; margin-bottom:8px; align-items:center;';
     for (const [id, label] of tabs) {
       const b = document.createElement('button');
       b.textContent = label;
-      const active = this.activeTab === id || (this.player && this.player.creative && this.creativeTab === id);
+      const active = this.activeTab === id;
       b.style.cssText = `padding:6px 14px; font-size:12px; cursor:pointer; border:2px solid #555; font-family:inherit;` +
         (active
           ? 'background:#e8e8e8; color:#222; font-weight:bold;'
           : 'background:#9a9a9a; color:#333;');
       b.addEventListener('click', () => {
         this.activeTab = id;
-        if (id !== 'recipes' && this.game && this.game.recipeViewer) this.game.recipeViewer.setTabVisible(false);
         if (onClickExtra) onClickExtra();
         this.render();
       });
@@ -269,11 +249,18 @@ export class InventoryScreen {
     this.panel.innerHTML = '';
     this.panel.style.width = 'max-content';
 
-    // 分类页签行（Build 10）：建筑/自然/功能/红石/工具/食物/材料/杂项
-    const catTabs = CREATIVE_CATEGORIES.map(id => [id, t(CATEGORY_LABEL_KEYS[id])]);
+    // 页签行（Build 11）：8 分类 + 「生存物品栏」（原版式末位页签）
+    const tabs = [...CREATIVE_CATEGORIES.map(id => [id, t(CATEGORY_LABEL_KEYS[id])]), ['survival', t('生存物品栏')]];
     this.activeTab = this.creativeTab;
-    const tabBar = this.makeTabBar(catTabs, () => { this.creativeTab = this.activeTab; });
+    const tabBar = this.makeTabBar(tabs, () => { this.creativeTab = this.activeTab; });
     this.panel.appendChild(tabBar);
+
+    if (this.creativeTab === 'survival') {
+      // 生存物品栏页签：与生存模式背包同布局（盔甲 + 合成 2×2 + 背包 + 快捷栏），可正常穿戴/合成
+      this.craftSize = 2;
+      this._renderSurvivalContent(false);
+      return;
+    }
 
     // 搜索行：搜索框 + 摧毁槽（原版式右端）
     const searchRow = document.createElement('div');
