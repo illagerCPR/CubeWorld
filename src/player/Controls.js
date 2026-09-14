@@ -48,6 +48,11 @@ export class Controls {
   }
 
   onKeyDown(e) {
+    // Build 12：文本输入焦点或输入法合成中不记录按键状态——否则输入法打断后 keyup 丢失，
+    // keys[] 卡死（"按键失灵"：松键仍移动/松开空格意外翻转飞行）
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (e.isComposing || e.keyCode === 229) return;
     this.keys[e.code] = true;
     // 自动重复（长按触发的 OS keydown 连发）：保持按键状态，但不得进入单击/双击触发逻辑
     //——否则长按空格期间 lastJumpTap 被连发刷新（间隔恒 <300ms），飞行状态被以键率翻转，

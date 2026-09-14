@@ -534,6 +534,13 @@ export class Game {
 
   setupKeyBindings() {
     document.addEventListener('keydown', (e) => {
+      // Build 12：文本输入焦点（创造/JEI 搜索框、命令面板输入框等）或输入法合成中，
+      // 不触发任何游戏快捷键，也不再 preventDefault（避免打断输入法合成）；
+      // 放行：非合成态 ESC（关界面）与 F5（手动保存防误刷新）；聊天输入的 ESC/Enter 由 ChatBox 自理不放行。
+      const t = e.target;
+      const editable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (e.isComposing || e.keyCode === 229) return; // 输入法合成中一律不处理（ESC 先交给输入法取消合成）
+      if (editable && !((e.key === 'Escape' && !(this.chatBox && this.chatBox.input)) || e.code === 'F5')) return;
       if (e.code === 'KeyE') {
         if (this.paused || this.spectating || (this.deathScreen && this.deathScreen.visible)) return;
         if (this.chestScreen && this.chestScreen.visible) { this.chestScreen.hide(); return; }

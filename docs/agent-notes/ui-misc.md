@@ -114,3 +114,8 @@
 - **创造「生存物品栏」页签（Build 11 保留项）**：创造页签行 = 8 分类 + `['survival', t('生存物品栏')]`（末位，原版式）；选中时 `craftSize=2` + `_renderSurvivalContent(false)` 渲染与生存背包同布局（盔甲穿戴/合成/背包/快捷栏全功能）。生存内容抽成 `_renderSurvivalContent(withTitle)` 供生存单页与创造页签共用。
 - **回退残留检查法**：改回去的功能要 grep 全部符号（本次 `_syncRecipeTab` 在 show() 残留一处调用 → 运行时 TypeError，node --check 查不出——**方法删除后必须 grep 方法名全仓**）。
 - **eval 测试语言坑**：上一轮测试把 settings.language 存成了 en，中文标签选择器会全部落空（本次 '创造模式'/'生存模式' 找不到）——测试前先确认 UI 语言或用语言无关选择器（id/class）；裸 import setLocale 改语言**不会重绘菜单**（实例分裂，监听器在页面实例上），改持久化语言后必须 reload 页面。
+
+### Build 12 批次备忘（防回退）—— 文本输入焦点与游戏快捷键隔离
+
+- **全局 keydown 三层守卫（输入法安全）**：① Game.setupKeyBindings 顶部——`editable`(INPUT/TEXTAREA/isContentEditable) 或 `e.isComposing || e.keyCode === 229` 直接 return（不触发快捷键、不 preventDefault 防打断合成）；放行集 = 非聊天态 ESC（关界面）+ F5（走手动保存防浏览器刷新），聊天输入的 ESC/Enter 由 ChatBox 自理不放行；② Controls.onKeyDown——editable/composing **不记录 keys[]**（输入法打断会吞 keyup → 按键卡死"按键失灵"），onKeyUp 永远清位**不得加对称守卫**（否则另一方向卡死）；③ ChatBox._onKey——editable/composing 中 T 不抢开聊天。
+- **keyCode 229 = IME 合成 keydown 的特征值**（isComposing 不可靠跨浏览器）；KeyboardEvent 构造器可派发 `{keyCode: 229}` 模拟合成态测试。测试脚本注意：改 settings.language 后裸 import setLocale 不重绘菜单（实例分裂），必须 reload 页面。

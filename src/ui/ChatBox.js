@@ -14,6 +14,10 @@ export class ChatBox {
     document.body.appendChild(this.el);
     // T 键打开输入框：保存引用以便 dispose 时移除，防止换房/重建世界反复 start() 堆积监听器
     this._onKey = (e) => {
+      // Build 12：文本输入焦点（创造/JEI 搜索框等）或输入法合成中，T 不再抢开聊天
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.isComposing || e.keyCode === 229) return;
       if (e.code === 'KeyT' && this.game.networkMode && this.game.running && !e.repeat) {
         e.preventDefault();
         this.open();
