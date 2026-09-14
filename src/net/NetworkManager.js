@@ -217,7 +217,9 @@ export class NetworkManager {
     if (!this.game.mobManager) return;
     // 阶段10：透传归属锁（死亡掉落物：ownerLock 毫秒内仅 owner 本人可拾取）
     // Idea-2C：透传 data（潜影盒等内容跟随物品）
-    this.game.mobManager.spawnRemoteDrop(msg.id, msg.x, msg.y, msg.z, msg.name, msg.count, msg.owner, msg.ownerLock, msg.data ?? null);
+    // Build 10：透传可选真实初速（Q 丢弃抛掷；缺省 null → 各端按 id 哈希派生）
+    this.game.mobManager.spawnRemoteDrop(msg.id, msg.x, msg.y, msg.z, msg.name, msg.count, msg.owner, msg.ownerLock,
+      msg.data ?? null, (msg.vx != null && msg.vy != null && msg.vz != null) ? { x: msg.vx, y: msg.vy, z: msg.vz } : null);
   }
 
   _takeDrop(msg) {
@@ -460,9 +462,13 @@ export class NetworkManager {
 
   // 本地发起掉落物生成（联机挖矿等）；实体由服务器广播 drop_spawn 回执后创建
   // Idea-2C：data = 潜影盒等内容跟随物品（普通掉落 null）
-  sendDropSpawn(x, y, z, name, count, data = null) {
+  // Build 10：vel = THREE.Vector3 可选初速（Q 丢弃抛掷），缺省各端按 id 哈希派生
+  sendDropSpawn(x, y, z, name, count, data = null, vel = null) {
     const payload = { x, y, z, name, count };
     if (data) payload.data = data;
+    if (vel && Number.isFinite(vel.x) && Number.isFinite(vel.y) && Number.isFinite(vel.z)) {
+      payload.vx = vel.x; payload.vy = vel.y; payload.vz = vel.z;
+    }
     this._send(MSG.DROP_SPAWN, payload);
   }
   // 本地拾取掉落物，通知服务器移除并广播

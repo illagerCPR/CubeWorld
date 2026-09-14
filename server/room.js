@@ -185,6 +185,11 @@ export class Room {
         // 阶段10：归属锁恢复（ownerId 需为正整数；过期锁自动失效）
         owner: Number.isInteger(d.owner) && d.owner > 0 ? d.owner : null,
         ownerUntil: safeNum(d.ownerUntil, 0),
+        // Build 10：Q 丢弃抛掷初速恢复（非法值不带 → 客户端按 id 哈希派生）
+        ...(typeof d.vx === 'number' && Number.isFinite(d.vx) &&
+            typeof d.vy === 'number' && Number.isFinite(d.vy) &&
+            typeof d.vz === 'number' && Number.isFinite(d.vz)
+          ? { vx: d.vx, vy: d.vy, vz: d.vz } : {}),
       });
     }
     this.hostId = null;
@@ -370,6 +375,7 @@ export class Room {
       const remainLock = d.ownerUntil > Date.now() && d.owner ? Math.ceil(d.ownerUntil - Date.now()) : 0;
       const back = { id, x: d.x, y: d.y, z: d.z, name: d.name, count: d.count, d: player.dim };
       if (d.owner && remainLock > 0) { back.owner = d.owner; back.ownerLock = remainLock; }
+      if (d.vx != null) { back.vx = d.vx; back.vy = d.vy; back.vz = d.vz; } // Build 10：抛掷初速回放
       this.sendTo(player, MSG.DROP_SPAWN, back);
     }
     this.broadcast(MSG.PLAYER_JOIN, { id: player.id, name: player.name, mode: player.mode, pos: player.pos }, player.id);
@@ -494,6 +500,12 @@ export class Room {
     const entry = { x, y, z, name, count, dim, spawnedAt: Date.now() };
     const back = { id, x, y, z, name, count, d: dim };
     if (data) { entry.data = data; back.data = data; }
+    // Build 10：可选真实初速（Q 丢弃抛掷透传）；非法/缺省不带 → 各端按 id 哈希派生，向后兼容旧客户端
+    if ([msg.vx, msg.vy, msg.vz].every(v => typeof v === 'number' && Number.isFinite(v))) {
+      const clamp = (v) => Math.max(-16, Math.min(16, v));
+      entry.vx = clamp(msg.vx); entry.vy = clamp(msg.vy); entry.vz = clamp(msg.vz);
+      back.vx = entry.vx; back.vy = entry.vy; back.vz = entry.vz;
+    }
     this.drops.set(id, entry);
     this.broadcastDim(MSG.DROP_SPAWN, back, dim);
     this.save();

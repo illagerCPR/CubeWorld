@@ -187,6 +187,12 @@ class AudioEngine {
     this._noise({ dur: 0.05, filter: 'highpass', freq: 1800, gain: 0.3, rate: 1.6 });
   }
 
+  // 掉落物拾取（Build 10）：原版"啵"声——短促上滑正弦
+  pop() {
+    if (!this.ctx) return;
+    this._tone({ dur: 0.09, from: 520, to: 880, type: 'sine', gain: 0.22 });
+  }
+
   // —— 怪物语音（A-②）：按类型预设合成，距离衰减，引擎全局限频 ——
 
   // 全局限频门（key + 最小间隔秒）：群怪同屏时叫声不至于糊成一团

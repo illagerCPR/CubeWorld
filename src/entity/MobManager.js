@@ -9,6 +9,7 @@ import { ItemRegistry } from '../core/ItemRegistry.js';
 import { CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from '../core/Chunk.js';
 import { villagerTradeSeed } from '../world/loot.js';
 import { audio } from '../audio/AudioEngine.js';
+import { DROP_HALF, makeShadowMesh, makeCountSprite, updateCountSprite, attachDropModel } from '../render/DropMesh.js';
 
 const MAX_MOBS = 20;
 const MAX_PASSIVE = 12; // 被动动物上限（不含村民——村庄系统单独管理）
@@ -86,6 +87,8 @@ export class MobManager {
     this.getSelfId = null;    // 阶段10：返回本地玩家联机 id（归属锁判定），由 Game 注入；null=单机
     this.mobNet = null;       // 联机怪物事件接口（sendMobSpawn/sendMobAttack/sendMobDied），由 Game 注入
     this.onBlockDestroyed = null; // 爆炸销毁方块回调 (x,y,z,def)，由 Game 注入（碎屑粒子）
+    this.isMultiplayer = false; // Build 10：联机时不做本地合并（掉落物是服务器账本实体，本地合并会两端分裂）
+    this.mergeTimer = 0;        // 同类合并扫描节流（0.25s 一次，避免逐帧 O(n²)）
     this.spawnedVillages = new Set(); // 已生成村民的村庄锚点 key "ax,az"（本会话去重，死亡不重生）
     this.spawnedEndCities = new Set(); // 已生成潜影贝的末地城锚点 key（同上惯例）
     this.villageGolemSeen = new Map(); // Idea-2E：村庄铁傀儡最后存活时刻 key "ax,az"（死亡 60s 后补员）
@@ -851,7 +854,7 @@ export class MobManager {
     }
   }
 
-  spawnDrop(pos, name, count, data = null) {
+  spawnDrop(pos, name, count, data = null, opts = {}) {
     const drop = {
       id: null, // 联机掉落物才有服务器分配的 id
       name,
@@ -864,17 +867,21 @@ export class MobManager {
         (Math.random() - 0.5) * 2
       ),
       age: 0,
-      pickupDelay: 1.0,
+      // Build 10：拾取延迟分级（方块破坏 0.5s / 怪物掉落 1.0s 默认 / 玩家 Q 丢弃 2.0s）
+      pickupDelay: opts.pickupDelay != null ? opts.pickupDelay : 1.0,
       mesh: null,
+      spin: Math.floor(this._strHash(name) * 6.28), // 自旋初相（按名字散列，同种错开）
     };
+    if (opts.velocity) drop.velocity.copy(opts.velocity); // Q 丢弃等指定初速（视线方向）
     this._createDropMesh(drop);
     this.droppedItems.push(drop);
     return drop;
   }
 
-  // 由服务器广播 drop_spawn 创建掉落物：id 服务器唯一；速度由 id 确定性派生，各端运动一致
+  // 由服务器广播 drop_spawn 创建掉落物：id 服务器唯一；速度缺省由 id 确定性派生，各端运动一致
   // 阶段10：owner/ownerLockMs = 死亡掉落归属锁（锁定期内仅 owner 本人可拾取）
-  spawnRemoteDrop(id, x, y, z, name, count, owner = null, ownerLockMs = 0, data = null) {
+  // Build 10：vel = {x,y,z} 可选真实初速（Q 丢弃透传），缺省仍走 id 哈希派生（向后兼容）
+  spawnRemoteDrop(id, x, y, z, name, count, owner = null, ownerLockMs = 0, data = null, vel = null) {
     if (this.droppedItems.some(d => d.id === id)) return; // 去重（重连回放可能重复广播）
     const drop = {
       id,
@@ -882,14 +889,17 @@ export class MobManager {
       count,
       data, // Idea-2C：内容跟随物品
       position: new THREE.Vector3(x, y, z),
-      velocity: new THREE.Vector3(
-        (this._hashRand(id) - 0.5) * 2,
-        3,
-        (this._hashRand(id * 2 + 1) - 0.5) * 2
-      ),
+      velocity: vel && Number.isFinite(vel.x) && Number.isFinite(vel.y) && Number.isFinite(vel.z)
+        ? new THREE.Vector3(vel.x, vel.y, vel.z)
+        : new THREE.Vector3(
+          (this._hashRand(id) - 0.5) * 2,
+          3,
+          (this._hashRand(id * 2 + 1) - 0.5) * 2
+        ),
       age: 0,
       pickupDelay: 1.0,
       mesh: null,
+      spin: Math.floor(this._hashRand(id * 3 + 2) * 6.28),
       owner: owner || null,
       lockedUntil: owner && ownerLockMs > 0 ? Date.now() + ownerLockMs : 0,
     };
@@ -936,47 +946,40 @@ export class MobManager {
     return (h >>> 0) / 4294967296;
   }
 
-  _createDropMesh(drop) {
-    const geo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-    const mat = new THREE.MeshLambertMaterial({ color: this.getDropColor(drop.name) });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.copy(drop.position);
-    drop.mesh = mesh;
-    this.scene.add(mesh);
+  // 字符串散列 [0,1)（掉落物自旋初相等视觉随机，无需联机一致）
+  _strHash(s) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    return (h >>> 0) / 4294967296;
   }
 
-  getDropColor(name) {
-    const colors = {
-      // 怪物掉落
-      rotten_flesh: 0x8a4a4a,
-      bone: 0xeeeeee,
-      arrow: 0x8a6a3a,
-      gunpowder: 0x444444,
-      string: 0xeeeeee,
-      spider_eye: 0x4a2a2a,
-      iron_ingot: 0xdddddd,
-      gold_nugget: 0xeecc55,
-      blaze_rod: 0xddaa33,
-      coal: 0x3a3a3a,
-      // 方块掉落（联机挖矿）
-      stone: 0x8a8a8a,
-      cobblestone: 0x777777,
-      dirt: 0x79553a,
-      grass_block: 0x5a8c3a,
-      sand: 0xe6d9a8,
-      gravel: 0x9a9a9a,
-      oak_log: 0x6b4f2a,
-      oak_planks: 0xb8945a,
-      oak_leaves: 0x4a7a2a,
-      glass: 0xcfecf0,
-      coal_ore: 0x333333,
-      iron_ore: 0xcc8866,
-      gold_ore: 0xddcc44,
-      diamond_ore: 0x66ddcc,
-      water: 0x3366cc,
-      torch: 0xddbb33,
-    };
-    return colors[name] || 0x888888;
+  // Build 10：掉落物渲染组 = 模型（贴图小方块/像素挤出，自旋+浮动）+ 阴影贴片 + 数量角标
+  // 模板异步就绪（缓存后即时），resolve 时自检 drop 仍存活（可能已被拾取/岩浆销毁）
+  _createDropMesh(drop) {
+    const group = new THREE.Group();
+    const inner = new THREE.Group();
+    inner.scale.setScalar(DROP_HALF * 2); // 模型尺寸归一 1 → 缩放 0.25
+    group.add(inner);
+    attachDropModel(inner, drop.name).then((ok) => {
+      if (!ok && drop.mesh === group && inner.children.length === 0) {
+        // 兜底：模板构建失败（未知物品）→ 半透明灰小方块，避免隐形
+        const fb = new THREE.Mesh(
+          new THREE.BoxGeometry(1, 1, 1),
+          new THREE.MeshLambertMaterial({ color: 0x999999, transparent: true, opacity: 0.75 })
+        );
+        inner.add(fb);
+      }
+    });
+    drop.shadow = makeShadowMesh();
+    group.add(drop.shadow);
+    if (drop.count > 1) {
+      drop.countSprite = makeCountSprite(drop.count);
+      group.add(drop.countSprite);
+    }
+    group.position.copy(drop.position);
+    drop.mesh = group;
+    drop.inner = inner;
+    this.scene.add(group);
   }
 
   updateDroppedItems(dt, player) {
@@ -985,51 +988,120 @@ export class MobManager {
       drop.age += dt;
       drop.pickupDelay = Math.max(0, drop.pickupDelay - dt);
 
-      // 重力
-      drop.velocity.y += -32 * dt;
-      drop.position.x += drop.velocity.x * dt;
-      drop.position.y += drop.velocity.y * dt;
-      drop.position.z += drop.velocity.z * dt;
+      // 流体判定（身体所在格）
+      const bodyDef = BlockRegistry.getById(this.world.getBlock(
+        Math.floor(drop.position.x), Math.floor(drop.position.y + 0.05), Math.floor(drop.position.z)));
+      // 岩浆销毁（原版：掉落物入岩浆即焚；联机销毁端上报 drop_taken 清账本，防幽灵拾取）
+      if (bodyDef && bodyDef.fluid && bodyDef.name === 'lava') {
+        if (drop.mesh) this.scene.remove(drop.mesh);
+        this.droppedItems.splice(i, 1);
+        if (drop.id != null && this.onDropTaken) this.onDropTaken(drop.id);
+        continue;
+      }
+      const inWater = !!(bodyDef && bodyDef.fluid && bodyDef.name === 'water');
 
-      // 碰撞（简化：只检测下方）
-      const bx = Math.floor(drop.position.x);
-      const by = Math.floor(drop.position.y);
-      const bz = Math.floor(drop.position.z);
-      const belowId = this.world.getBlock(bx, by - 1, bz);
-      if (belowId !== 0) {
-        const def = BlockRegistry.getById(belowId);
-        if (def && def.solid) {
-          drop.position.y = by;
+      // 重力/浮力：水中强阻尼向上趋近 2.2 m/s（终端沉降 -2.5，入水快速减速漂浮）；空气 -32
+      if (inWater) {
+        drop.velocity.y += (2.2 - drop.velocity.y) * 10 * dt;
+        if (drop.velocity.y < -2.5) drop.velocity.y = -2.5;
+        const wf = Math.max(0, 1 - 4 * dt);
+        drop.velocity.x *= wf;
+        drop.velocity.z *= wf;
+      } else {
+        drop.velocity.y += -32 * dt;
+      }
+
+      // 逐轴点级碰撞（半径=模型半边）；高速细分步防穿薄地板
+      const r = DROP_HALF;
+      const solidAt = (x, y, z) => {
+        const d = BlockRegistry.getById(this.world.getBlock(Math.floor(x), Math.floor(y), Math.floor(z)));
+        return !!(d && d.solid);
+      };
+      const maxV = Math.max(Math.abs(drop.velocity.x), Math.abs(drop.velocity.y), Math.abs(drop.velocity.z));
+      const steps = Math.min(4, Math.max(1, Math.ceil((maxV * dt) / 0.2)));
+      const sdt = dt / steps;
+      for (let s = 0; s < steps; s++) {
+        // Y：下落触底（高速轻微弹跳 + 落地摩擦）/ 上升撞头
+        const ny = drop.position.y + drop.velocity.y * sdt;
+        if (drop.velocity.y < 0 && solidAt(drop.position.x, ny - r, drop.position.z)) {
+          drop.position.y = Math.floor(ny - r) + 1 + r;
+          drop.velocity.y = drop.velocity.y < -8 ? -drop.velocity.y * 0.18 : 0;
+          const f = Math.max(0, 1 - 8 * sdt);
+          drop.velocity.x *= f;
+          drop.velocity.z *= f;
+        } else if (drop.velocity.y > 0 && solidAt(drop.position.x, ny + r, drop.position.z)) {
           drop.velocity.y = 0;
-          drop.velocity.x *= 0.7;
-          drop.velocity.z *= 0.7;
+        } else {
+          drop.position.y = ny;
+        }
+        // X / Z：侧碰（前向偏移 + 两侧角采样）
+        const half = r * 0.9, yLow = drop.position.y - r * 0.5;
+        const nx = drop.position.x + drop.velocity.x * sdt;
+        const sx = Math.sign(drop.velocity.x) * half;
+        if (drop.velocity.x !== 0 &&
+            (solidAt(nx + sx, yLow, drop.position.z - half) || solidAt(nx + sx, yLow, drop.position.z + half))) {
+          drop.velocity.x = 0;
+        } else {
+          drop.position.x = nx;
+        }
+        const nz = drop.position.z + drop.velocity.z * sdt;
+        const sz = Math.sign(drop.velocity.z) * half;
+        if (drop.velocity.z !== 0 &&
+            (solidAt(drop.position.x - half, yLow, nz + sz) || solidAt(drop.position.x + half, yLow, nz + sz))) {
+          drop.velocity.z = 0;
+        } else {
+          drop.position.z = nz;
         }
       }
 
+      // 渲染：自旋 + 触地正弦浮动 + 阴影贴片跟随地面
       if (drop.mesh) {
         drop.mesh.position.copy(drop.position);
-        drop.mesh.rotation.y += dt * 2;
+        if (drop.inner) {
+          drop.spin += dt * 2.2;
+          drop.inner.rotation.y = drop.spin;
+          drop.inner.position.y = Math.abs(drop.velocity.y) < 0.01 ? Math.sin(drop.age * 2.5) * 0.04 : 0;
+        }
+        if (drop.shadow) {
+          const bx = Math.floor(drop.position.x), bz = Math.floor(drop.position.z);
+          let gy = -1;
+          for (let yy = Math.floor(drop.position.y - r - 0.01); yy >= Math.floor(drop.position.y) - 4 && yy >= 0; yy--) {
+            if (solidAt(bx, yy, bz)) { gy = yy + 1; break; }
+          }
+          drop.shadow.visible = gy >= 0;
+          if (gy >= 0) drop.shadow.position.y = gy - drop.position.y + 0.02;
+        }
       }
 
-      // 拾取
+      // 拾取/磁吸（原版：1.6 格内吸附飞向玩家，0.9 格入包）
       const dist = drop.position.distanceTo(player.position);
-      if (drop.pickupDelay <= 0 && dist < 1.5) {
+      if (drop.pickupDelay <= 0) {
         // 阶段10：死亡掉落归属锁——锁定期内仅 owner 本人可拾取（服务器侧同校验兜底）
         const selfId = this.getSelfId ? this.getSelfId() : null;
-        if (drop.lockedUntil && Date.now() < drop.lockedUntil && drop.owner !== selfId) continue;
-        if (this.onPickup) {
-          // onPickup 返回未放入的剩余数量（0 = 全部拾取）
-          const remaining = this.onPickup(drop.name, drop.count, drop.data);
-          drop.count = remaining;
-          if (remaining <= 0) {
-            // 全部拾取
-            if (drop.mesh) this.scene.remove(drop.mesh);
-            this.droppedItems.splice(i, 1);
-            if (drop.id != null && this.onDropTaken) {
-              this.recordPendingPickup(drop.id, drop.name, drop.count); // 阶段10：留档供 deny 回滚
-              this.onDropTaken(drop.id); // 联机：通知服务器移除
+        const locked = drop.lockedUntil && Date.now() < drop.lockedUntil && drop.owner !== selfId;
+        if (!locked) {
+          if (dist < 0.9 && this.onPickup) {
+            // onPickup 返回未放入的剩余数量（0 = 全部拾取）
+            const remaining = this.onPickup(drop.name, drop.count, drop.data);
+            drop.count = remaining;
+            if (remaining <= 0) {
+              // 全部拾取
+              if (drop.mesh) this.scene.remove(drop.mesh);
+              this.droppedItems.splice(i, 1);
+              if (drop.id != null && this.onDropTaken) {
+                this.recordPendingPickup(drop.id, drop.name, drop.count); // 阶段10：留档供 deny 回滚
+                this.onDropTaken(drop.id); // 联机：通知服务器移除
+              }
+              audio.pop();
+              continue;
             }
-            continue;
+            updateCountSprite(drop.countSprite, drop.count); // 部分拾取：刷新角标（剩 1 时隐藏）
+            audio.pop();
+          } else if (dist < 1.6 && this.onPickup) {
+            // 磁吸：向玩家匀速飞（覆盖物理速度，原版吸附观感）
+            const dir = new THREE.Vector3().subVectors(player.position, drop.position).normalize();
+            drop.velocity.copy(dir).multiplyScalar(6.5);
+            drop.velocity.y += 1.0; // 玩家锚点在脚部，略上抬补偿
           }
         }
       }
@@ -1038,6 +1110,33 @@ export class MobManager {
       if (drop.age > 300) {
         if (drop.mesh) this.scene.remove(drop.mesh);
         this.droppedItems.splice(i, 1);
+      }
+    }
+
+    // 同类合并（仅单机：联机掉落物是服务器账本实体，本地合并会两端分裂）——0.25s 节流防逐帧 O(n²)
+    this.mergeTimer += dt;
+    if (!this.isMultiplayer && this.mergeTimer >= 0.25) {
+      this.mergeTimer = 0;
+      const items = this.droppedItems;
+      for (let i = 0; i < items.length; i++) {
+        const a = items[i];
+        if (a.pickupDelay > 0 || a.data || a.count >= 64) continue;
+        for (let j = items.length - 1; j > i; j--) {
+          const b = items[j];
+          if (b.name !== a.name || b.data || b.pickupDelay > 0) continue;
+          if (a.position.distanceToSquared(b.position) > 1.44) continue; // 1.2 格内
+          const take = Math.min(b.count, 64 - a.count);
+          a.count += take;
+          b.count -= take;
+          if (b.count <= 0) {
+            if (b.mesh) this.scene.remove(b.mesh);
+            items.splice(j, 1);
+          } else {
+            updateCountSprite(b.countSprite, b.count);
+          }
+          updateCountSprite(a.countSprite, a.count);
+          if (a.count >= 64) break;
+        }
       }
     }
   }

@@ -479,6 +479,7 @@ export class Game {
       if (this.mobManager) {
         this.mobManager.spawnEnabled = !!this.net.isHost;
         this.mobManager.mobNet = this.net; // 生成/攻击/死亡事件上报接口
+        this.mobManager.isMultiplayer = true; // Build 10：联机时禁用本地掉落物合并（服务器账本权威）
       }
       // 方块同步钩子已在 start() 前段趁早绑定（见 new World 处），此处不重复
       // 联机拾取掉落物：通知服务器移除并广播
@@ -549,6 +550,35 @@ export class Game {
         if (this.deathScreen && this.deathScreen.visible) return;
         if (this.pauseMenu && this.pauseMenu.visible) return;
         if (this.commandPanel) this.commandPanel.toggle();
+      }
+      // Q 键丢弃（Build 10 原版化）：Q 丢 1 个 / Ctrl+Q 丢整组，沿视线初速抛出，2 秒后才可拾取
+      if (e.code === 'KeyQ') {
+        // 界面/文本焦点时早退（不 preventDefault，避免吃掉聊天与命令面板输入框的字符）
+        if (!this.running || this.spectating || (this.deathScreen && this.deathScreen.visible)) return;
+        if (this.pauseMenu && this.pauseMenu.visible) return;
+        if (this.chatBox && this.chatBox.input) return;
+        if (this.inventoryScreen && this.inventoryScreen.visible) return;
+        if (this.commandPanel && this.commandPanel.visible) return;
+        if ((this.chestScreen && this.chestScreen.visible) || (this.furnaceScreen && this.furnaceScreen.visible) ||
+            (this.beaconScreen && this.beaconScreen.visible) || (this.tradeScreen && this.tradeScreen.visible)) return;
+        e.preventDefault(); // 拦截浏览器 Ctrl+Q（Linux 关窗）等默认行为
+        const stack = this.inventory.getSelected();
+        if (!stack || !stack.name) return;
+        const count = e.ctrlKey ? Math.min(stack.count, 64) : 1;
+        const dir = new THREE.Vector3();
+        this.renderer.camera.getWorldDirection(dir);
+        const pos = new THREE.Vector3(this.player.position.x, this.player.position.y + 1.4, this.player.position.z)
+          .addScaledVector(dir, 0.4);
+        const vel = dir.clone().multiplyScalar(6).add(new THREE.Vector3(0, 1.5, 0));
+        const data = stack.data ?? null;
+        this.inventory.removeSelected(count);
+        this.hotbar.update();
+        if (this.networkMode && this.net) {
+          // 联机：本地不建实体，等服务器 drop_spawn 回执（与联机挖矿同惯例），速度透传
+          this.net.sendDropSpawn(pos.x, pos.y, pos.z, stack.name, count, data, vel);
+        } else if (this.mobManager) {
+          this.mobManager.spawnDrop(pos, stack.name, count, data, { velocity: vel, pickupDelay: 2.0 });
+        }
       }
       // J 键：JEI 伴随面板——容器界面打开时切换面板显隐（偏好持久化）；
       // 无容器界面时打开背包（JEI 面板随背包自动出现）
@@ -1164,7 +1194,7 @@ export class Game {
         this.net.sendDropSpawn(block.x + 0.5, block.y + 0.5, block.z + 0.5, s.name, s.count);
       } else if (this.mobManager) {
         this.mobManager.spawnDrop(
-          new THREE.Vector3(block.x + 0.5, block.y + 0.5, block.z + 0.5), s.name, s.count);
+          new THREE.Vector3(block.x + 0.5, block.y + 0.5, block.z + 0.5), s.name, s.count, null, { pickupDelay: 0.5 });
       }
     }
   }
@@ -1187,7 +1217,7 @@ export class Game {
       this.inventory.add('shulker_box', 1, data);
     } else if (this.mobManager) {
       this.mobManager.spawnDrop(
-        new THREE.Vector3(block.x + 0.5, block.y + 0.5, block.z + 0.5), 'shulker_box', 1, data);
+        new THREE.Vector3(block.x + 0.5, block.y + 0.5, block.z + 0.5), 'shulker_box', 1, data, { pickupDelay: 0.5 });
     }
     if (this.hotbar) this.hotbar.update();
   }
@@ -1262,7 +1292,7 @@ export class Game {
         this.net.sendDropSpawn(block.x + 0.5, block.y + 0.5, block.z + 0.5, s.name, s.count);
       } else if (this.mobManager) {
         this.mobManager.spawnDrop(
-          new THREE.Vector3(block.x + 0.5, block.y + 0.5, block.z + 0.5), s.name, s.count);
+          new THREE.Vector3(block.x + 0.5, block.y + 0.5, block.z + 0.5), s.name, s.count, null, { pickupDelay: 0.5 });
       }
     }
   }
