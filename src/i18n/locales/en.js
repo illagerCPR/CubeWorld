@@ -80,6 +80,7 @@ export const en = {
   '太阳阴影: {v}{h}': 'Sun Shadows: {v}{h}',
   '全屏: {v}': 'Fullscreen: {v}',
   '语言: {v}': 'Language: {v}',
+  '语言': 'Language',
   '开': 'ON',
   '关': 'OFF',
   '开（点击退出）': 'ON (click to exit)',

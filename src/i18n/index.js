@@ -1,5 +1,5 @@
 // i18n/index.js -- 本地化核心（Build 5）
-// t() 以简体中文原文为键：zh-CN 直接返回原文（零字典）；zh-TW / en 查语言包，缺项回落原文。
+// t() 以简体中文原文为键：zh-CN 直接返回原文（零字典）；其余语言查语言包，缺项回落原文。
 // 语言选择持久化在 Settings.language（VideoSettings 下拉切换，即选即存）。
 import { zhTW } from './locales/zh-TW.js';
 import { en } from './locales/en.js';
@@ -8,6 +8,9 @@ import { de } from './locales/de.js';
 import { ja } from './locales/ja.js';
 import { ko } from './locales/ko.js';
 import { ar } from './locales/ar.js';
+import { ru } from './locales/ru.js';
+import { es } from './locales/es.js';
+import { pt } from './locales/pt.js';
 
 // 语言清单（顺序即 VideoSettings 语言行循环顺序；label 各用本语言自称）
 export const LOCALES = [
@@ -19,9 +22,12 @@ export const LOCALES = [
   { id: 'ja', label: '日本語' },
   { id: 'ko', label: '한국어' },
   { id: 'ar', label: 'العربية' },
+  { id: 'ru', label: 'Русский' },
+  { id: 'es', label: 'Español' },
+  { id: 'pt', label: 'Português' },
 ];
 
-const PACKS = { 'zh-TW': zhTW, 'en': en, 'fr': fr, 'de': de, 'ja': ja, 'ko': ko, 'ar': ar };
+const PACKS = { 'zh-TW': zhTW, 'en': en, 'fr': fr, 'de': de, 'ja': ja, 'ko': ko, 'ar': ar, 'ru': ru, 'es': es, 'pt': pt };
 
 let locale = 'zh-CN';
 const changeListeners = new Set();

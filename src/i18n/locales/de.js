@@ -80,6 +80,7 @@ export const de = {
   '太阳阴影: {v}{h}': 'Sonnenschatten: {v}{h}',
   '全屏: {v}': 'Vollbild: {v}',
   '语言: {v}': 'Sprache: {v}',
+  '语言': 'Sprache',
   '开': 'Ein',
   '关': 'Aus',
   '开（点击退出）': 'Ein (Klicken zum Verlassen)',

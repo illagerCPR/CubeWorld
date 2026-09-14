@@ -80,6 +80,7 @@ export const fr = {
   '太阳阴影: {v}{h}': 'Ombres du soleil : {v}{h}',
   '全屏: {v}': 'Plein écran : {v}',
   '语言: {v}': 'Langue : {v}',
+  '语言': 'Langue',
   '开': 'Activé',
   '关': 'Désactivé',
   '开（点击退出）': 'Activé (cliquer pour quitter)',

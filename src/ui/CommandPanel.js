@@ -26,7 +26,7 @@ function mobEntries() {
     const ia = MOB_ORDER.indexOf(a), ib = MOB_ORDER.indexOf(b);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
   });
-  // 怪物名走 names.js 八语字典（tName）；语言包无怪物名键，走 t() 会始终回落简体（Build 7 修复）
+  // 怪物名走 names.js 十一语字典（tName）；语言包无怪物名键，走 t() 会始终回落简体（Build 7 修复）
   return names.map(n => ({ name: n, label: tName(n, MobTypes[n].displayName || n) }));
 }
 
