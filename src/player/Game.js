@@ -33,6 +33,7 @@ import { ChatBox } from '../ui/ChatBox.js';
 import { BossBar } from '../ui/BossBar.js';
 import { PortalOverlay } from '../ui/PortalOverlay.js';
 import { CHUNK_SIZE, Chunk, CHUNK_HEIGHT } from '../core/Chunk.js';
+import { FINALE_TIDE_SEGMENTS, FINALE_TIDE_DURATION, finaleEnvelope, finalePulse } from '../world/finale-tide.js';
 import {
   PORTAL_KINDS, DIM_PORTAL_KINDS, ARRIVAL_PLATFORM,
   portalBlockId, portalTargetPos, detectPortalInterior, fillPortal,
@@ -996,6 +997,9 @@ export class Game {
         applyFogRange(fog, this.settings.renderDistance, this.world.dimDef.sky ? this.world.dimDef.sky.fog : null);
       }
     }
+    // 终局演出（终局篇 F2「四界同潮」）：写在本雾段之后 = 每帧最后写入者，
+    // 停写即回落 applyFogRange 值（零还原动作，纯客户端零持久化）
+    this._updateFinaleTide(dt);
     // 水下屏幕滤镜（HUD 蓝色薄纱）
     this.hud.setUnderwater(this.player.inWater);
 
@@ -2188,6 +2192,122 @@ export class Game {
     this.steleScreen.open(block.x, block.y, block.z, 'renewal');
   }
 
+  // ── 终局篇 F2：四界同潮演出管线（原初之潮·潮归其位）──────────
+  // 60s 全局时间窗（finale-tide.js 配置），四界分段并行：窗口跨换维延续
+  //（_finaleTide 挂 Game 实例，start 重入不清），玩家换维即见彼界段落——
+  // 单机可追潮跑四界。演出纪律：纯客户端零持久化（不进存档/账本）；
+  // 天色/雾走逐帧写入（Sky.finaleOverride + 雾段之后最后写入者），停写即回落。
+  // LAN：本批各端本地触发（命令面板调试口）；startTs 权威分发随 F3 room flag。
+  _startFinaleTide() {
+    this._finaleTide = { startTs: Date.now() }; // 单机本地时钟；LAN 对齐随 F3
+  }
+
+  _stopFinaleTide() {
+    this._finaleTide = null;
+    if (this.sky) this.sky.finaleOverride = null; // 天色每帧重算，停写自动回落
+  }
+
+  _updateFinaleTide(dt) {
+    const ft = this._finaleTide;
+    if (!ft) return;
+    const t = (Date.now() - ft.startTs) / 1000;
+    if (t >= FINALE_TIDE_DURATION) { this._stopFinaleTide(); return; }
+    const dim = this.world && this.world.dimension;
+    const seg = FINALE_TIDE_SEGMENTS[dim];
+    if (!seg) return; // 未知维度跳过渲染（窗口继续计时）
+    const p = finaleEnvelope(t);
+    const pulse = finalePulse(t);
+    if (this.sky) {
+      // 天色包络混入 + 涌潮呼吸（强度脉动）
+      this.sky.finaleOverride = p > 0
+        ? { sky: seg.skyTint, strength: p * (0.55 + 0.25 * pulse), fogPull: seg.fogPull * (0.7 + 0.3 * pulse) }
+        : null;
+    }
+    // 雾拉近（本函数在 applyFogRange 之后调用 = 最后写入者；停写自动回落）
+    const fog = this.renderer && this.renderer.scene && this.renderer.scene.fog;
+    if (fog && p > 0 && this.sky && this.sky.finaleOverride && !this.player.inWater) {
+      const k = 1 - this.sky.finaleOverride.fogPull;
+      fog.near *= k;
+      fog.far *= 1 - (1 - k) * 0.5;
+    }
+    if (this.particles && p > 0) this._finaleParticleTick(seg, p, t, dt);
+  }
+
+  // 各段粒子发射（视觉演出，不与方块/实体/掉落交互）
+  _finaleParticleTick(seg, p, t, dt) {
+    const pt = seg.particle;
+    const scaled = pt.rate * p * dt * (this.particles.densityScale || 1);
+    const count = Math.floor(scaled) + (Math.random() < scaled % 1 ? 1 : 0);
+    if (count <= 0) return;
+    const pos = this.player.position;
+    const WATER = BlockRegistry.getId('water');
+    for (let i = 0; i < count; i++) {
+      const [r, g, b] = pt.color;
+      const jx = (Math.random() - 0.5) * 2, jz = (Math.random() - 0.5) * 2;
+      if (seg.id === 'aether') {
+        // 风涨：原初祭坛涌泉（候潮锚点）+ 周身风粒上行
+        if (this.world.finalePrimordial && Math.random() < 0.5) {
+          const a = this.world.finalePrimordial;
+          this.particles.spawn(
+            a.x + 0.5 + jx * 1.2, a.y + 1 + Math.random() * 0.8, a.z + 0.5 + jz * 1.2,
+            jx * 0.6, pt.rise * (0.7 + Math.random() * 0.6), jz * 0.6,
+            r, g, b, pt.life * (0.8 + Math.random() * 0.4), pt.grav, 0.995
+          );
+        } else {
+          const ang = Math.random() * Math.PI * 2, rr = 2 + Math.random() * pt.spread;
+          this.particles.spawn(
+            pos.x + Math.cos(ang) * rr, pos.y + (Math.random() - 0.3) * 4, pos.z + Math.sin(ang) * rr,
+            -Math.sin(ang) * 1.2, pt.rise * (0.6 + Math.random() * 0.8), Math.cos(ang) * 1.2,
+            r, g, b, pt.life * (0.8 + Math.random() * 0.4), pt.grav, 0.995
+          );
+        }
+      } else if (seg.id === 'nether') {
+        // 熔岩潮涌：岩浆海面（y≈31）火花上喷 + 周身余烬
+        if (Math.random() < 0.7) {
+          const sx = pos.x + jx * pt.spread, sz = pos.z + jz * pt.spread;
+          this.particles.spawn(
+            sx, 31.6 + Math.random() * 0.5, sz,
+            jx * 0.8, pt.rise * (0.6 + Math.random() * 0.8), jz * 0.8,
+            r, g, b, pt.life * (0.7 + Math.random() * 0.5), pt.grav, 0.99
+          );
+        } else {
+          this.particles.spawn(
+            pos.x + jx * 5, pos.y + (Math.random() - 0.2) * 3, pos.z + jz * 5,
+            jx * 0.5, 1 + Math.random() * 1.5, jz * 0.5,
+            r * 0.9, g * 0.8, b * 0.7, 1.4, -0.4, 0.99
+          );
+        }
+      } else if (seg.id === 'overworld') {
+        // 逆雨：海面（y=64 水下 1 格是水才发——雨只在海上倒着落回天上）
+        const sx = Math.round(pos.x + jx * pt.spread), sz = Math.round(pos.z + jz * pt.spread);
+        if (this.world.getBlock(sx, 62, sz) === WATER) {
+          this.particles.spawn(
+            sx + 0.5, 63.8 + Math.random() * 0.5, sz + 0.5,
+            jx * 0.3, pt.rise * (0.7 + Math.random() * 0.6), jz * 0.3,
+            r, g, b, pt.life * (0.8 + Math.random() * 0.4), pt.grav, 0.998
+          );
+        }
+      } else if (seg.id === 'end') {
+        // 潮声过岸：环形采样点找滩涂地表，潮雾带贴地横掠（不落地、不沾岸）
+        const ang = Math.random() * Math.PI * 2;
+        const rr = 8 + Math.random() * pt.spread;
+        const sx = Math.round(pos.x + Math.cos(ang) * rr), sz = Math.round(pos.z + Math.sin(ang) * rr);
+        let sy = 0;
+        for (let y = 72; y >= 58; y--) {
+          if (this.world.getBlock(sx, y, sz) !== 0) { sy = y; break; }
+        }
+        if (sy > 0) {
+          const tang = ang + Math.PI / 2 * (Math.random() < 0.5 ? 1 : -1); // 沿切线方向掠过
+          this.particles.spawn(
+            sx + 0.5, sy + 1.2 + Math.random() * 1.6, sz + 0.5,
+            Math.cos(tang) * 1.6, pt.rise * 0.3, Math.sin(tang) * 1.6,
+            r, g, b, pt.life * (0.9 + Math.random() * 0.4), pt.grav, 0.998
+          );
+        }
+      }
+    }
+  }
+
   // 复潮状态切换（§5.4 不变量 1/2/3）：档案覆盖 + Sky 快照重跑 + 时间锚定上午
   applyAetherDusk(on) {
     this.aetherDusk = !!on;
@@ -3316,6 +3436,8 @@ export class Game {
     this.stop();
     // 清理旧世界 Three.js 资源和 UI DOM，防止回到菜单再进新存档时残留
     this._disposeWorld();
+    // 终局演出窗口随回菜单终止（换维不经过此处——start 重入保留窗口实现追潮）
+    this._stopFinaleTide();
     // 联机：断开网络连接并复位联机状态
     if (this.net) this.net.close();
     this.networkMode = false;

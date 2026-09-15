@@ -406,4 +406,7 @@ export const fr = {
   "祭坛饮下了三枚旧心跳。原初之潮在极远处翻了身。": "L’autel a bu les trois vieux battements. Très loin, la Marée primordiale s’est retournée.",
   "无潮的岸边听不见的话，在这里听见了——海还没有忘。": "Ce que le rivage sans marée n’entend pas, ici on l’entend — la mer n’a pas oublié.",
   "现在，去潮的出生地。滩涂尽头有一块碑，碑上的字断在最后一刻——去把它听完。": "Va maintenant là où la marée est née. Au bout des vasières se dresse une stèle, sa dernière ligne interrompue — va l’écouter jusqu’au bout.",
+  // ── 终局篇 F2：四界同潮调试口 ──
+  "终局演出：原初之潮（调试）": "Final : la Marée primordiale (débogage)",
+  "60 秒窗口 · 四界分段并行 · 换维追潮": "Fenêtre de 60 s · quatre mondes en parallèle · poursuite entre dimensions",
 };

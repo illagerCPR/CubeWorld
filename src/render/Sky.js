@@ -172,6 +172,12 @@ export class Sky {
     this._showClouds = true;
     this._cloudsY = 140;
     this.cloudsEnabled = true; // settings.clouds 写入（applySettings），与维度显隐相与
+
+    // 终局演出临时覆盖（终局篇 F2「四界同潮」）：null = 正常天色；
+    // 每帧由 Game._updateFinaleTide 写入 {sky, strength}，演出结束停写 →
+    // 本 update 每帧重算天色自动回落（零还原动作，零持久化）
+    this.finaleOverride = null;
+    this._finaleColor = new THREE.Color();
   }
 
   // 套用维度档案：固定天空色 / 天体显隐 / 云层高度与显隐（不改变太阳角度计算）
@@ -278,10 +284,14 @@ export class Sky {
     this.clouds.visible = this._showClouds && this.cloudsEnabled;
     this.cloudTex.offset.set((playerPos.x + this.wind) / 1536, playerPos.z / 1536);
 
-    // 天空颜色插值（无天光维度用档案固定色，雾色同步）
-    const c = this._fixedColor
+    // 天空颜色插值（无天光维度用档案固定色，雾色同步；终局演出包络混入潮色）
+    let c = this._fixedColor
       ? this._tmpColor.setRGB(this._fixedColor[0], this._fixedColor[1], this._fixedColor[2])
       : this.interpolateSkyColor(this.time);
+    if (this.finaleOverride) {
+      const ov = this.finaleOverride;
+      c = c.lerp(this._finaleColor.setRGB(ov.sky[0], ov.sky[1], ov.sky[2]), Math.min(1, Math.max(0, ov.strength)));
+    }
     this.skyMesh.material.color.copy(c);
     if (this.scene.fog) this.scene.fog.color.copy(c);
   }

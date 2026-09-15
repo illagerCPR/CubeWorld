@@ -406,4 +406,7 @@ export const de = {
   "祭坛饮下了三枚旧心跳。原初之潮在极远处翻了身。": "Der Altar hat die drei alten Herzschläge getrunken. In weiter Ferne hat sich die Urzeitliche Flut gewendet.",
   "无潮的岸边听不见的话，在这里听见了——海还没有忘。": "Was am gezeitenlosen Ufer nicht zu hören ist, hier ist es zu hören – das Meer hat nicht vergessen.",
   "现在，去潮的出生地。滩涂尽头有一块碑，碑上的字断在最后一刻——去把它听完。": "Nun begib dich dorthin, wo die Flut geboren wurde. Am Ende der Schlicke steht eine Stele, deren letzte Zeile unvollendet blieb – geh hin und höre sie zu Ende.",
+  // ── 终局篇 F2：四界同潮调试口 ──
+  "终局演出：原初之潮（调试）": "Finale: Die Urzeitliche Flut (Debug)",
+  "60 秒窗口 · 四界分段并行 · 换维追潮": "60-Sekunden-Fenster · vier Reiche parallel · Dimensionswechsel-Jagd",
 };

@@ -406,4 +406,7 @@ export const en = {
   "祭坛饮下了三枚旧心跳。原初之潮在极远处翻了身。": "The altar drank the three old heartbeats. Far away, the Primordial Tide turned over.",
   "无潮的岸边听不见的话，在这里听见了——海还没有忘。": "What cannot be heard on the tideless shore can be heard here — the sea has not forgotten.",
   "现在，去潮的出生地。滩涂尽头有一块碑，碑上的字断在最后一刻——去把它听完。": "Now go to where the tide was born. At the far end of the flats stands a stele, its last line cut short — go and hear it out.",
+  // ── 终局篇 F2：四界同潮调试口 ──
+  "终局演出：原初之潮（调试）": "Finale: The Primordial Tide (debug)",
+  "60 秒窗口 · 四界分段并行 · 换维追潮": "60s window · four realms in parallel · chase across dimensions",
 };

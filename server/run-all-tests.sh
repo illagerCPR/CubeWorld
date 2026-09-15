@@ -160,6 +160,15 @@ else
     exit 1
 fi
 
+# 终局篇 F2 四界同潮演出管线（段配置/包络确定性/还原纯度绊线/零持久化）
+echo "=== endgame-tide ==="
+if node tests/endgame-tide.mjs; then
+    echo "endgame-tide: OK"
+else
+    echo "endgame-tide: FAILED"
+    exit 1
+fi
+
 # 末影龙 Boss 回归（纯 node：类型注册/柱顶水晶/DragonAI 状态机/击败链路/末地门控）
 echo "=== end-dragon ==="
 if node tests/end-dragon.mjs; then

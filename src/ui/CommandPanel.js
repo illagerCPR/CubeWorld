@@ -274,6 +274,18 @@ export class CommandPanel {
     });
     duskWrap.appendChild(duskBtn);
     this.duskBtn = duskBtn;
+    const finaleBtn = this._mkBtn('终局演出：原初之潮（调试）');
+    finaleBtn.addEventListener('click', () => {
+      // F2 调试口：本地触发 60s 四界同潮窗口（正式触发链 = F3 守望界碑听潮；
+      // LAN startTs 权威分发随 F3 room flag，本按钮联机下仅本地可见）
+      if (this.game._finaleTide) this.game._stopFinaleTide();
+      else this.game._startFinaleTide();
+    });
+    duskWrap.appendChild(finaleBtn);
+    const finaleLabel = document.createElement('div');
+    finaleLabel.style.cssText = 'font-size:11px; color:#9ab;';
+    finaleLabel.textContent = t('60 秒窗口 · 四界分段并行 · 换维追潮');
+    duskWrap.appendChild(finaleLabel);
     const duskLabel = document.createElement('div');
     duskLabel.style.cssText = 'font-size:11px; color:#9ab;';
     duskWrap.appendChild(duskLabel);
