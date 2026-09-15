@@ -115,6 +115,15 @@ else
     exit 1
 fi
 
+# 潮冢（世界观批次 W2：河段锚点选址/显式水填/三向注册/陆地零命中/FORCED 雨潮残页）
+echo "=== overworld-structures ==="
+if node tests/overworld-structures.mjs; then
+    echo "overworld-structures: OK"
+else
+    echo "overworld-structures: FAILED"
+    exit 1
+fi
+
 # 末地外岛锚点场回归（纯 node：群系在场/密度带宽/锚点确定性/群系方块同源）
 echo "=== end-islands ==="
 if node tests/end-islands.mjs; then

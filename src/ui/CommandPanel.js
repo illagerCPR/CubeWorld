@@ -372,6 +372,10 @@ export class CommandPanel {
       for (const pt of ringPoints(world.seed)) {
         items.push({ name: '要塞', x: pt.x, z: pt.z, d: Math.hypot(pt.x - p.x, pt.z - p.z) });
       }
+      // 潮冢（世界观批次 W2）：cell28 河段锚点，±2 cell 扫描——groundY 传送层落水面附近
+      for (const rec of sm.recordsAround('tide_barrow', p.x, p.z, 2)) {
+        items.push({ name: '潮冢', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
+      }
     }
     items.sort((a, b) => a.d - b.d);
     for (const it of items) {

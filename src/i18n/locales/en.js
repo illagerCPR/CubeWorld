@@ -378,4 +378,6 @@ export const en = {
   "还能认出的只有一句：「最早的年头，雨是咸的。」": "Only one line can still be read: 'In the earliest years, the rain was salt.'",
   "熏黑卫的头骨，眼窝里还留着炉火的余温。": "A sootbound guard's skull, its eye sockets still holding the warmth of the hearth.",
   "三枚颅骨按进骨泥，缝起来的不是人——是一句没能咽下的怨。": "Set three skulls into the bone-sand, and what is stitched together is not a person — it is a grudge that never learned to swallow.",
+
+  "潮冢": "Tide Barrow",
 };

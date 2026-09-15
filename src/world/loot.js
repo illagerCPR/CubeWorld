@@ -102,6 +102,13 @@ const TABLES = {
     ['bone', 1, 4, 10], ['blaze_rod', 1, 2, 6], ['golden_apple', 1, 1, 3],
     ['diamond', 1, 2, 4],
   ],
+  // 潮冢（世界观批次 W2）：雨土纪河床遗骸坑——旧潮遗物 + 跨维度收集线低权
+  tide_barrow: [
+    ['bone', 2, 5, 12], ['clay_ball', 2, 6, 10], ['coal', 2, 6, 10],
+    ['iron_ingot', 1, 3, 10], ['gold_nugget', 2, 6, 10], ['star_marrow', 1, 2, 8],
+    ['emerald', 1, 2, 6], ['book', 1, 1, 5], ['ender_pearl', 1, 1, 4],
+    ['golden_apple', 1, 1, 2], ['diamond', 1, 1, 3],
+  ],
 };
 
 // 必出项（表名 → [物品, min, max] 列表）：占用最低序槽位，消耗同一 rng 流。
@@ -110,6 +117,7 @@ const FORCED = {
   end_ship_captain: [['elytra', 1, 1]],
   aether_sanctum: [['star_marrow', 2, 4]], // 批次 B：内殿圣所星髓保底（新表，不影响旧表流）
   tidefire_hearth: [['mourn_tear', 1, 2]], // 世界观批次 N2：哀潮之泪保底（跨维度收集线材料）
+  tide_barrow: [['page_rain', 1, 1]], // 世界观批次 W2：雨潮残页保底（跨维度收集线材料）
 };
 
 // 生成箱子内容：27 槽数组（索引 0-26），空槽为 null

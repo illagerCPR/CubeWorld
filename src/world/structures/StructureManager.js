@@ -268,6 +268,7 @@ export class StructureManager {
         if (name === 'aether_well') return '漩风井';
         if (name === 'aether_gate') return '天海之门遗迹';
         if (name === 'tidefire_hearth') return '潮火之炉';
+        if (name === 'tide_barrow') return '潮冢';
         return name;
       }
     }

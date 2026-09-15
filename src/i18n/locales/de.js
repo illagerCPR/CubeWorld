@@ -378,4 +378,6 @@ export const de = {
   "还能认出的只有一句：「最早的年头，雨是咸的。」": "Nur eine Zeile ist noch zu entziffern: 'In den frühesten Jahren war der Regen salzig.'",
   "熏黑卫的头骨，眼窝里还留着炉火的余温。": "Der Schädel einer verrußten Wache, seine Augenhöhlen bewahren noch die Wärme des Herdfeuers.",
   "三枚颅骨按进骨泥，缝起来的不是人——是一句没能咽下的怨。": "Drei Schädel in den Knochensand gedrückt, und was zusammengenäht wird, ist kein Mensch — es ist ein Groll, der nie schlucken lernte.",
+
+  "潮冢": "Gezeitshügel",
 };

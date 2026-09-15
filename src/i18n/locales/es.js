@@ -378,4 +378,6 @@ export const es = {
   "还能认出的只有一句：「最早的年头，雨是咸的。」": "Solo se lee una línea: «En los primeros años, la lluvia era salada.»",
   "熏黑卫的头骨，眼窝里还留着炉火的余温。": "El cráneo de un guardia ahumado; sus cuencas aún guardan el calor del hogar.",
   "三枚颅骨按进骨泥，缝起来的不是人——是一句没能咽下的怨。": "Tres cráneos hundidos en la arena de huesos, y lo que se cose no es una persona: es un rencor que nunca aprendió a tragar.",
+
+  "潮冢": "Túmulo de Marea",
 };
