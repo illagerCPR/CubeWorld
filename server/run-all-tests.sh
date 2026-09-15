@@ -169,6 +169,15 @@ else
     exit 1
 fi
 
+# 终局篇 F3 听潮仪式（门控真值表/状态序列化/协议链路/龙影绊线/BUILD 18）
+echo "=== endgame-finale ==="
+if node tests/endgame-finale.mjs; then
+    echo "endgame-finale: OK"
+else
+    echo "endgame-finale: FAILED"
+    exit 1
+fi
+
 # 末影龙 Boss 回归（纯 node：类型注册/柱顶水晶/DragonAI 状态机/击败链路/末地门控）
 echo "=== end-dragon ==="
 if node tests/end-dragon.mjs; then

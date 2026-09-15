@@ -29,6 +29,9 @@ export function roomSnapshot(room) {
     biomeScale: room.biomeScale || null, // 群系规模档位（旧快照无字段 → restore 回落 null→small）
     time: room.time,
     aetherDusk: !!room.aetherDusk, // 天域复潮状态（批次 D，旧快照无字段 → restore 回落 false）
+    finaleOffered: !!room.finaleOffered, // 终局篇 F3：候潮/听潮状态（单向开关落盘）
+    finalePos: room.finalePos || null,
+    finaleDone: !!room.finaleDone,
     nextDropId: room.nextDropId,
     nextMobId: room.nextMobId,
     dimensionBlocks,

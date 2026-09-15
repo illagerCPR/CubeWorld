@@ -33,7 +33,7 @@ import { ChatBox } from '../ui/ChatBox.js';
 import { BossBar } from '../ui/BossBar.js';
 import { PortalOverlay } from '../ui/PortalOverlay.js';
 import { CHUNK_SIZE, Chunk, CHUNK_HEIGHT } from '../core/Chunk.js';
-import { FINALE_TIDE_SEGMENTS, FINALE_TIDE_DURATION, finaleEnvelope, finalePulse } from '../world/finale-tide.js';
+import { FINALE_TIDE_SEGMENTS, FINALE_TIDE_DURATION, finaleEnvelope, finalePulse, finaleListenGate } from '../world/finale-tide.js';
 import {
   PORTAL_KINDS, DIM_PORTAL_KINDS, ARRIVAL_PLATFORM,
   portalBlockId, portalTargetPos, detectPortalInterior, fillPortal,
@@ -117,6 +117,7 @@ export class Game {
     this.commandPanel = null;
     this.cheatsEnabled = false;
     this.aetherDusk = false; // 天域批次 D：复潮状态（存档/联机恢复，档案覆盖见 start）
+    this.finaleInfo = null; // 终局篇 F3：WORLD_INFO 先达暂存（offered/done/坐标，start 落地）
     this.biomeScale = DEFAULT_BIOME_SCALE; // 生物群系规模档位（新建走参数/联机消息，载入走存档）
     this.paused = false;
     // 阶段10：第一人称手持物（跨存档共享相机挂点，start 时重置手持内容）
@@ -283,6 +284,14 @@ export class Game {
     if (dimension === 'overworld') this.world.terrainWorker = new TerrainWorkerClient(2);
     this.world.dragonDefeated = !!(loadData && loadData.dragonDefeated); // 末影龙击败标记（存档恢复）
     this.world.finalePrimordial = (loadData && loadData.finalePrimordial) || null; // 候潮状态（终局篇 F1：祭坛坐标，存档恢复）
+    this.world.finaleDone = !!(loadData && loadData.finaleDone); // 听潮完成（终局篇 F3：存档恢复）
+    // LAN：WORLD_INFO 先于 start 到达的候潮/听潮状态（NetworkManager 暂存 finaleInfo）在此落地
+    if (this.finaleInfo) {
+      if (this.finaleInfo.offered && !this.world.finalePrimordial) {
+        this.world.finalePrimordial = { x: this.finaleInfo.x, y: this.finaleInfo.y, z: this.finaleInfo.z };
+      }
+      if (this.finaleInfo.done) this.world.finaleDone = true; // 历史事实恢复，不重播演出
+    }
     // 天域复潮状态（批次 D）：存档恢复；MP 下 WORLD_INFO 可能先于 start 到达
     //（已写入 this.aetherDusk）——loadData 无字段时保留现值，有字段（单机存档/换维合成）以其为准
     this.aetherDusk = !!(loadData && loadData.aetherDusk !== undefined
@@ -1677,8 +1686,11 @@ export class Game {
         }
         // 天域批次 A：右键石碑读碑文（世界观批次 W3 起按 stele 家族标记判定——
         // 修复 wind_stele 硬编码导致 ember/moss 石碑无法右键阅读的遗漏；章节走 steleChapterAt）
+        // 终局篇 F3：守望界碑听潮门控（候潮 ∧ 未听过 → 触发仪式；否则照旧读章）
         if (targetDef && targetDef.stele && this.steleScreen && !this.player.spectator) {
-          this.steleScreen.open(hit.block.x, hit.block.y, hit.block.z);
+          if (!this._tryListenTide(hit.block)) {
+            this.steleScreen.open(hit.block.x, hit.block.y, hit.block.z);
+          }
           this.controls.mouseRight = false;
           return;
         }
@@ -2180,6 +2192,10 @@ export class Game {
         this.hotbar.update();
         this.world.setBlock(block.x, block.y, block.z, BlockRegistry.getId('primordial_altar'));
         this.world.finalePrimordial = { x: block.x, y: block.y, z: block.z };
+        if (this.networkMode && this.net) {
+          // F3：候潮状态上服务器（只进不退，广播全房间——其他人由广播置坐标位）
+          this.net.sendFinaleState({ offered: true, x: block.x, y: block.y, z: block.z });
+        }
         if (this.particles) {
           const altarDef = BlockRegistry.getByName('primordial_altar');
           if (altarDef) this.particles.burstBlockBreak(block.x + 0.5, block.y + 1.5, block.z + 0.5, altarDef, this.world);
@@ -2192,19 +2208,71 @@ export class Game {
     this.steleScreen.open(block.x, block.y, block.z, 'renewal');
   }
 
+  // ── 终局篇 F3：听潮仪式（原初之潮·潮归其位）──────────────────
+  // 守望界碑右键门控（finaleListenGate 真值表）：候潮 ∧ 未听过 → 触发 60s
+  // 四界同潮仪式窗口（end 段附加龙影低头粒子），窗口结束发放原初纹章。
+  // LAN：sendFinaleState({done}) 上服务器——广播含发起者，各端（含自己）收到
+  // done 后置 finaleDone 并以服务器重排的 startTs 启动窗口（host 权威时钟）。
+  // 返回 true 表示右键已被仪式路径消费（不打开碑文浮层）。
+  _tryListenTide(block) {
+    const sm = this.world.generator && this.world.generator.structureManager;
+    const chapterId = sm && sm.steleChapterAt ? sm.steleChapterAt(block.x, block.y, block.z) : null;
+    const gate = finaleListenGate({
+      chapterId,
+      done: !!this.world.finaleDone,
+      offered: !!this.world.finalePrimordial,
+      windowActive: !!this._finaleTide,
+    });
+    if (gate === 'read') return false;
+    if (gate === 'swallow') return true;
+    if (this.networkMode && this.net) {
+      this.net.sendFinaleState({ done: true }); // 各端由广播统一驱动（含发起者）
+    } else {
+      this.world.finaleDone = true; // 单机：本地置位（SaveSystem 持久化）
+      this._startFinaleTide({ ritual: true });
+    }
+    return true;
+  }
+
+  // 仪式收束：原初纹章发放（唯一信物，不可合成——lore 承载终章）
+  _grantPrimordialEmblem() {
+    if (!this.inventory) return;
+    const left = this.inventory.add('primordial_emblem', 1);
+    if (left > 0 && this.mobManager && !this.player.spectator) {
+      // 背包满：落在脚下走掉落链（联机 sendDropSpawn 进账本）
+      const p = this.player.position;
+      if (this.networkMode && this.net) {
+        this.net.sendDropSpawn(p.x, p.y + 1, p.z, 'primordial_emblem', 1);
+      } else {
+        this.mobManager.spawnDrop(new THREE.Vector3(p.x, p.y + 1, p.z), 'primordial_emblem', 1, null, { pickupDelay: 0.5 });
+      }
+    }
+    this.hotbar.update();
+    if (this.chatBox) this.chatBox.add(t('潮声落定。碑座上留着一枚纹章。'), '#bfeee8');
+  }
+
   // ── 终局篇 F2：四界同潮演出管线（原初之潮·潮归其位）──────────
   // 60s 全局时间窗（finale-tide.js 配置），四界分段并行：窗口跨换维延续
   //（_finaleTide 挂 Game 实例，start 重入不清），玩家换维即见彼界段落——
   // 单机可追潮跑四界。演出纪律：纯客户端零持久化（不进存档/账本）；
   // 天色/雾走逐帧写入（Sky.finaleOverride + 雾段之后最后写入者），停写即回落。
-  // LAN：本批各端本地触发（命令面板调试口）；startTs 权威分发随 F3 room flag。
-  _startFinaleTide() {
-    this._finaleTide = { startTs: Date.now() }; // 单机本地时钟；LAN 对齐随 F3
+  // LAN：F3 起 done 广播以服务器时钟重排 startTs（命令面板调试口仍走本地时钟）。
+  _startFinaleTide(opts = {}) {
+    // ritual=true = F3 听潮仪式窗口（end 段附加龙影低头粒子；结束时发放原初纹章）
+    // startTs 可由 LAN 广播传入（服务器时钟重排），单机/调试口取本地时钟
+    this._finaleTide = {
+      startTs: typeof opts.startTs === 'number' ? opts.startTs : Date.now(),
+      ritual: !!opts.ritual,
+      granted: false,
+    };
   }
 
   _stopFinaleTide() {
+    const ft = this._finaleTide;
     this._finaleTide = null;
     if (this.sky) this.sky.finaleOverride = null; // 天色每帧重算，停写自动回落
+    // 听潮仪式收束：潮声落定，碑座上的纹章交到玩家手里（§6 文案——断句处收束）
+    if (ft && ft.ritual && !ft.granted) this._grantPrimordialEmblem();
   }
 
   _updateFinaleTide(dt) {
@@ -2302,6 +2370,20 @@ export class Game {
             sx + 0.5, sy + 1.2 + Math.random() * 1.6, sz + 0.5,
             Math.cos(tang) * 1.6, pt.rise * 0.3, Math.sin(tang) * 1.6,
             r, g, b, pt.life * (0.9 + Math.random() * 0.4), pt.grav, 0.998
+          );
+        }
+        // 听潮仪式附加：龙影低头——紫黑粒子环自龙头位置缓缓垂落旋转（§4 方案二：
+        // 只给低头的动作，不解释等待的内容；dragon AI 零改动，纯视觉）
+        if (this._finaleTide && this._finaleTide.ritual && p > 0.25 && this.mobManager) {
+          const dragon = this.mobManager.mobs.find((m) => m.typeName === 'dragon');
+          const hx = dragon ? dragon.position.x : 0;
+          const hy = dragon ? dragon.position.y : 76;
+          const hz = dragon ? dragon.position.z : 0;
+          const la = t * 1.1 + i * 1.7; // 慢旋相位（i 错开多粒成环）
+          this.particles.spawn(
+            hx + Math.cos(la) * 2.6, hy - 1.2 - Math.sin(la * 2) * 0.9, hz + Math.sin(la) * 2.6,
+            Math.cos(la + Math.PI / 2) * 0.5, -1.4, Math.sin(la + Math.PI / 2) * 0.5,
+            0.42, 0.30, 0.58, 1.8, -0.2, 0.995
           );
         }
       }
@@ -3285,6 +3367,7 @@ export class Game {
       dimensionSpawn: !hasPos, // 传送门落点带坐标；否则忽略坐标落到目标维度出生点
       dragonDefeated: !!this.world.dragonDefeated, // 击败标记跨维透传（换维重建不丢）
       finalePrimordial: this.world.finalePrimordial || null, // 候潮状态跨维透传（终局篇 F1：换维重建不丢）
+      finaleDone: !!this.world.finaleDone, // 听潮完成跨维透传（终局篇 F3：换维重建不丢）
       aetherDusk: !!this.aetherDusk, // 天域复潮状态跨维透传（批次 D：换维重建不丢）
       player: playerData,
       inventory: this.inventory.serialize(),

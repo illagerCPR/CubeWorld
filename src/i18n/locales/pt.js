@@ -409,4 +409,6 @@ export const pt = {
   // ── 终局篇 F2：四界同潮调试口 ──
   "终局演出：原初之潮（调试）": "Final: a Maré Primordial (depuração)",
   "60 秒窗口 · 四界分段并行 · 换维追潮": "Janela de 60 s · quatro reinos em paralelo · perseguição entre dimensões",
+  // ── 终局篇 F3：听潮仪式 ──
+  "\u6f6e\u58f0\u843d\u5b9a\u3002\u7891\u5ea7\u4e0a\u7559\u7740\u4e00\u679a\u7eb9\u7ae0\u3002": "O som da mar\u00e9 assenta. Sobre a base da estela repousa um emblema.",
 };

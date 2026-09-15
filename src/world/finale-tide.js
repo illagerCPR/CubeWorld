@@ -60,3 +60,14 @@ export function finaleEnvelope(t, dur = FINALE_TIDE_DURATION) {
 export function finalePulse(t, period = 6) {
   return 0.5 + 0.5 * Math.sin((t * Math.PI * 2) / period);
 }
+
+// 听潮门控（终局篇 F3）：守望界碑右键的三态判定（纯函数，node 可测真值表）。
+// 'read'    → 照旧读碑文（非守望碑 / 已听完 / 未候潮——不变量 6：既有行为不回退）
+// 'trigger' → 触发听潮仪式（守望碑 ∧ 已候潮 ∧ 未听过 ∧ 演出未在进行）
+// 'swallow' → 演出窗口进行中：吞掉右键（不重复触发，也不打断读章节奏）
+export function finaleListenGate(state) {
+  if (!state || state.chapterId !== 'end_watch') return 'read';
+  if (state.done) return 'read';
+  if (!state.offered) return 'read';
+  return state.windowActive ? 'swallow' : 'trigger';
+}

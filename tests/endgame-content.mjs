@@ -101,7 +101,7 @@ ok(waiting.lines.length === 3, '候潮章 3 行（状态章克制）');
 const waitText = JSON.stringify(waiting);
 ok(!waitText.includes('龙') && !waitText.includes('一整片海'), '候潮章不写龙、不写终章内容（终章走纹章 lore，不变量 7）');
 ok(waitText.includes('潮的出生地'), '候潮章承载去向引导（去潮的出生地听完断句）');
-ok(BUILD === 17, 'BUILD 不 bump（终局篇 F1 无发版，17）');
+ok(BUILD === 18, 'BUILD 18（终局篇 F3 统一发版——F1/F2 批次约束为不 bump，随 F3 一次到位）');
 ok(emblem.lore.every((l) => l.length > 0) && egg.lore.every((l) => l.length > 0), 'lore 行文非空（行文纪律兜底）');
 
 console.log(`endgame-content: ${passed} assertions passed`);

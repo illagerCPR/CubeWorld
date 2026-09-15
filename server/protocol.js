@@ -52,6 +52,10 @@ export const MSG = {
   // 天域复潮状态（天域批次 D，服务器权威：随 welcome/WORLD_INFO 下发 + store 落盘）
   AETHER_STATE: 'aether_state',
 
+  // 终局篇 F3 候潮/听潮状态（服务器权威只进不退：随 WORLD_INFO 下发 + store 落盘）
+  // offered=true 献证候潮（带祭坛坐标）；done=true 听潮完成（带 startTs 启动四界同潮窗口）
+  FINALE_STATE: 'finale_state',
+
   // 玩家
   PLAYER_STATE: 'player_state',
   PLAYER_FULL: 'player_full',

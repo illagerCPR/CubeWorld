@@ -77,11 +77,11 @@ ok(!gameSrc.includes('this._stopFinaleTide(); // 终局演出窗口不跨'), 'st
 const fogIdx = gameSrc.indexOf('applyFogRange(fog, this.settings.renderDistance');
 const updIdx = gameSrc.indexOf('this._updateFinaleTide(dt);');
 ok(fogIdx > 0 && updIdx > fogIdx && updIdx - fogIdx < 600, '_updateFinaleTide 在雾段之后调用（每帧最后写入者）');
-ok(gameSrc.includes('_startFinaleTide() {'), '演出启动方法在场');
+ok(gameSrc.includes('_startFinaleTide(opts = {}) {'), '演出启动方法在场（F3 起 ritual/startTs 参数化）');
 ok(gameSrc.includes('_finaleParticleTick(seg, p, t, dt)'), '四段粒子发射钩子在场');
 ok(gameSrc.includes("BlockRegistry.getId('water')"), '逆雨段水下采样在场（雨只在海上）');
 const cpSrc = readFileSync('./src/ui/CommandPanel.js', 'utf8');
 ok(cpSrc.includes('_startFinaleTide()') && cpSrc.includes('_stopFinaleTide()'), '命令面板调试口在场（F3 正式触发链前置）');
-ok(BUILD === 17, 'BUILD 不 bump（终局篇 F2 无发版，17）');
+ok(BUILD === 18, 'BUILD 18（终局篇 F3 统一发版——F2 批次约束为不 bump，随 F3 一次到位）');
 
 console.log(`endgame-tide: ${passed} assertions passed`);

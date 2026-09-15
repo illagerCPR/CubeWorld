@@ -248,6 +248,15 @@ export class NetworkManager {
         if (this.game && typeof this.game.applyAetherDusk === 'function') {
           this.game.applyAetherDusk(!!msg.aetherDusk);
         }
+        // 终局篇 F3：候潮/听潮状态随 world_info 下发（WORLD_INFO 可能先于 start 到达——
+        // 暂存 game.finaleInfo，Game.start 建 world 后落地，aetherDusk 同款时序）
+        if (this.game && msg.finale) {
+          this.game.finaleInfo = {
+            offered: !!msg.finale.offered,
+            x: msg.finale.x | 0, y: msg.finale.y | 0, z: msg.finale.z | 0,
+            done: !!msg.finale.done,
+          };
+        }
         if (this._ready && this.game && this.game.world && this.game.running) {
           if (msg.restart) {
             // 阶段5：世界内换房 / 重建世界 —— 重启本地世界（保持连接），期间缓存远端数据
@@ -347,6 +356,19 @@ export class NetworkManager {
         // 天域批次 D：复潮状态广播（服务器权威单向开关）——全端应用档案覆盖
         if (this.game && typeof this.game.applyAetherDusk === 'function') {
           this.game.applyAetherDusk(!!msg.dusk);
+        }
+        break;
+      case MSG.FINALE_STATE:
+        // 终局篇 F3：候潮/听潮状态广播（服务器权威只进不退）
+        // offered → 各端置候潮祭坛坐标；done → 各端置完成标记并启动听潮窗口
+        //（startTs 由服务器时钟重排——房间权威时钟，各端窗口相位同源）
+        if (this.game && this.game.world) {
+          if (msg.done) {
+            this.game.world.finaleDone = true;
+            this.game._startFinaleTide({ ritual: true, startTs: typeof msg.startTs === 'number' ? msg.startTs : Date.now() });
+          } else if (msg.offered) {
+            this.game.world.finalePrimordial = { x: msg.x | 0, y: msg.y | 0, z: msg.z | 0 };
+          }
         }
         break;
       case MSG.CONTAINER_SET: {
@@ -524,6 +546,16 @@ export class NetworkManager {
   // 天域批次 D：复潮状态上报（服务器权威单向开关——广播全房间 + 落盘）
   sendAetherState(dusk) {
     this._send(MSG.AETHER_STATE, { dusk: !!dusk });
+  }
+
+  // 终局篇 F3：候潮/听潮状态上报（服务器权威只进不退——广播全房间 + 落盘）
+  // offered=true 献证候潮（带祭坛坐标）；done=true 听潮完成（startTs 由服务器重排）
+  sendFinaleState(payload) {
+    this._send(MSG.FINALE_STATE, {
+      offered: payload.offered === true,
+      done: payload.done === true,
+      x: payload.x | 0, y: payload.y | 0, z: payload.z | 0,
+    });
   }
 
   // 红石源状态（lever/button），低频广播让各端 poweredBlocks 对齐

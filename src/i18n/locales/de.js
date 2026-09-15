@@ -409,4 +409,6 @@ export const de = {
   // ── 终局篇 F2：四界同潮调试口 ──
   "终局演出：原初之潮（调试）": "Finale: Die Urzeitliche Flut (Debug)",
   "60 秒窗口 · 四界分段并行 · 换维追潮": "60-Sekunden-Fenster · vier Reiche parallel · Dimensionswechsel-Jagd",
+  // ── 终局篇 F3：听潮仪式 ──
+  "\u6f6e\u58f0\u843d\u5b9a\u3002\u7891\u5ea7\u4e0a\u7559\u7740\u4e00\u679a\u7eb9\u7ae0\u3002": "Der Klang der Flut verklingt. Auf dem Stelefu\u00df ruht ein Emblem.",
 };
