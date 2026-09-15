@@ -358,4 +358,6 @@ export const en = {
   "哭嚎者坠落时凝下的泪。": "A tear shed by a mourn howler as it falls.",
   "它是咸的——这片地底本没有盐，除了海来过的那部分。": "It is salt. This deep had no salt — none save what the sea brought down.",
   "维度检查": "Dimension Tools",
+
+  "潮火之炉": "Hearth of the Tidefire",
 };

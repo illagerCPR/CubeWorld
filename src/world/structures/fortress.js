@@ -59,7 +59,7 @@ export function solveFortress(rng, ax, groundY, az) {
   const B = blockId('nether_bricks');
   const CH = blockId('chest');
   const blocks = [];
-  const meta = { kind: 'fortress', chests: [] };
+  const meta = { kind: 'fortress', chests: [], steles: [] };
   const y0 = groundY;
 
   // ① 清腔：平台 + 建筑带（外墙余量 2 格），高度 8 格
@@ -125,6 +125,12 @@ export function solveFortress(rng, ax, groundY, az) {
 
   // 箱子方块（chests 声明坐标同步放 chest，T5 打开时按表惰性生成内容）
   for (const c of meta.chests) blocks.push([c[0], c[1], c[2], CH]);
+
+  // ⑨ 烬火纪碑位（世界观批次 N2）：主堡顶盖上方 ember_sinking（坠潮——火民篇开篇）。
+  // 写死坐标零 rng 消耗：旧 seed 的 fortress blocks 序列只追加不改写（联机确定性不变）。
+  const ES = blockId('ember_stele');
+  meta.steles.push([ax - 12, y0 + 7, az, 'ember_sinking']);
+  blocks.push([ax - 12, y0 + 7, az, ES]);
 
   return { blocks, meta };
 }

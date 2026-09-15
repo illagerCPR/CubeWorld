@@ -8,6 +8,7 @@ import { STRONGHOLD_DEF } from './stronghold.js';
 import { FORTRESS_DEF } from './fortress.js';
 import { END_CITY_DEF } from './endCity.js';
 import { AETHER_TEMPLE_DEF, AETHER_TOWER_DEF, AETHER_SHIP_DEF, AETHER_WELL_DEF, AETHER_GATE_DEF } from './aetherStructures.js';
+import { TIDEFIRE_HEARTH_DEF } from './tidefire_hearth.js';
 
 VILLAGE_DEF.dims = ['overworld'];
 STRONGHOLD_DEF.dims = ['overworld'];
@@ -21,3 +22,5 @@ registerStructureType('aether_tower', AETHER_TOWER_DEF);
 registerStructureType('aether_ship', AETHER_SHIP_DEF);
 registerStructureType('aether_well', AETHER_WELL_DEF);
 registerStructureType('aether_gate', AETHER_GATE_DEF);
+// 下界·烬火纪（世界观批次 N2）：潮火之炉（defs 自带 dims: ['nether']）
+registerStructureType('tidefire_hearth', TIDEFIRE_HEARTH_DEF);

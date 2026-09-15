@@ -97,6 +97,15 @@ else
     exit 1
 fi
 
+# 潮火之炉（世界观批次 N2：选址确定性/落地/三向注册/要塞碑位/FORCED 哀潮之泪）
+echo "=== nether-structures ==="
+if node tests/nether-structures.mjs; then
+    echo "nether-structures: OK"
+else
+    echo "nether-structures: FAILED"
+    exit 1
+fi
+
 # 末地外岛锚点场回归（纯 node：群系在场/密度带宽/锚点确定性/群系方块同源）
 echo "=== end-islands ==="
 if node tests/end-islands.mjs; then

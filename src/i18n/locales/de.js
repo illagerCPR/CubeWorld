@@ -358,4 +358,6 @@ export const de = {
   "哭嚎者坠落时凝下的泪。": "Eine Träne, vergossen von einem Klagenden im Sturz.",
   "它是咸的——这片地底本没有盐，除了海来过的那部分。": "Sie ist salzig — diese Tiefe hatte kein Salz, außer dem, was das Meer herabbrachte.",
   "维度检查": "Dimensions-Werkzeuge",
+
+  "潮火之炉": "Gezeitenfeuer-Herd",
 };

@@ -95,6 +95,13 @@ const TABLES = {
     ['gold_ingot', 2, 6, 12], ['glowstone', 2, 5, 10], ['quartz_block', 2, 6, 10],
     ['experience_bottle', 2, 5, 10], ['cloud_fluff', 2, 5, 12], ['page_sunder', 1, 1, 10],
   ],
+  // 下界·烬火纪（世界观批次 N2）：潮火之炉炉侧房——坠潮遗物 + 下界常规
+  tidefire_hearth: [
+    ['gold_nugget', 2, 6, 12], ['gold_ingot', 1, 4, 10], ['coal', 3, 8, 12],
+    ['soul_sand', 2, 5, 10], ['glowstone', 1, 4, 10], ['obsidian', 1, 3, 8],
+    ['bone', 1, 4, 10], ['blaze_rod', 1, 2, 6], ['golden_apple', 1, 1, 3],
+    ['diamond', 1, 2, 4],
+  ],
 };
 
 // 必出项（表名 → [物品, min, max] 列表）：占用最低序槽位，消耗同一 rng 流。
@@ -102,6 +109,7 @@ const TABLES = {
 const FORCED = {
   end_ship_captain: [['elytra', 1, 1]],
   aether_sanctum: [['star_marrow', 2, 4]], // 批次 B：内殿圣所星髓保底（新表，不影响旧表流）
+  tidefire_hearth: [['mourn_tear', 1, 2]], // 世界观批次 N2：哀潮之泪保底（跨维度收集线材料）
 };
 
 // 生成箱子内容：27 槽数组（索引 0-26），空槽为 null
