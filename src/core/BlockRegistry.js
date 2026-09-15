@@ -34,6 +34,7 @@ function register(def) {
     renderType: def.renderType || 'cube',
     updraft: def.updraft ?? false, // 天域批次 B：上升气流柱（Game._updateUpdraftState 消费）
     lore: def.lore || null, // 世界观批次 N1：方块悬浮 lore（InventoryScreen._bindHover 消费）
+    stele: def.stele ?? false, // 世界观批次 W3：石碑家族标记（Game 右键读碑按此判定，修 wind_stele 硬编码遗漏 ember/moss）
     ambientParticles: def.ambientParticles ?? false,
     color: def.color || null
   };

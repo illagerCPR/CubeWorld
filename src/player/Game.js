@@ -1670,8 +1670,9 @@ export class Game {
           this.controls.mouseRight = false;
           return;
         }
-        // 天域批次 A：右键风纹石碑读碑文（旁观不可；章节走 StructureManager.steleChapterAt）
-        if (targetDef && targetDef.name === 'wind_stele' && this.steleScreen && !this.player.spectator) {
+        // 天域批次 A：右键石碑读碑文（世界观批次 W3 起按 stele 家族标记判定——
+        // 修复 wind_stele 硬编码导致 ember/moss 石碑无法右键阅读的遗漏；章节走 steleChapterAt）
+        if (targetDef && targetDef.stele && this.steleScreen && !this.player.spectator) {
           this.steleScreen.open(hit.block.x, hit.block.y, hit.block.z);
           this.controls.mouseRight = false;
           return;

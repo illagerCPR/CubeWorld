@@ -57,7 +57,7 @@ export function solveStronghold(rng, ax, surfaceY, az, gen) {
     chest: blockId('chest'),
   };
   const blocks = [];
-  const meta = { kind: 'stronghold', chests: [] };
+  const meta = { kind: 'stronghold', chests: [], steles: [] }; // W3：门厅苔纹石碑（雨土纪·门厅）
 
   // 结构范围内的最低地表（±40 步长 5 采样）：枢纽深度须低于最低地形，否则坡地/崖边
   // 房间会戳出地表（曾实测东侧骤降 38 格导致房间穿出山体——步长 10 的粗网格抓不到局部洼地）
@@ -247,6 +247,12 @@ export function solveStronghold(rng, ax, surfaceY, az, gen) {
       set(bx + pdx * 2, hubY, bz + pdz * 2, ID.torch);
     }
   }
+
+  // ── 门厅碑位（世界观批次 W3）：苔纹石碑（雨土纪·门厅）──────────────────
+  // 十字枢纽东墙内侧 (ax+4, az+2)——避开门厅走廊轴线/四角柱/中央柱/火把/箱；
+  // 硬编码坐标零 rng 消耗，blocks 只追加不改写（旧 seed 要塞布局逐字节稳定）。
+  meta.steles.push([ax + 4, hubY, az + 2, 'rain_hall']);
+  set(ax + 4, hubY, az + 2, blockId('moss_stele'));
 
   return { blocks, meta };
 }

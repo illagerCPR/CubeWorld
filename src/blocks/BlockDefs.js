@@ -1553,7 +1553,7 @@ function steleTex(seed) {
   }
   return pixelSvg(px);
 }
-reg('wind_stele', { hardness: -1 }, { wind_stele: steleTex(154) });
+reg('wind_stele', { hardness: -1, stele: true }, { wind_stele: steleTex(154) });
 
 function altarTex(seed) {
   const px = makeTex();
@@ -1645,7 +1645,7 @@ function emberSteleTex() {
   }
   return pixelSvg(px);
 }
-reg('ember_stele', { hardness: -1 }, { ember_stele: emberSteleTex() });
+reg('ember_stele', { hardness: -1, stele: true }, { ember_stele: emberSteleTex() });
 
 // 苔纹石碑（世界观批次 W1：主世界石碑家族第三员）：风纹石碑同构，色系换成雨土
 // （湿苔岩底/青蓝雨纹符），章节本批注册（雨土纪 3 章），碑位随批次 W2/W3 落入潮冢/村庄/要塞
@@ -1671,7 +1671,7 @@ function mossSteleTex() {
   }
   return pixelSvg(px);
 }
-reg('moss_stele', { hardness: -1 }, { moss_stele: mossSteleTex() });
+reg('moss_stele', { hardness: -1, stele: true }, { moss_stele: mossSteleTex() });
 
 export const BlockSVGDefinitions = svgMap;
 

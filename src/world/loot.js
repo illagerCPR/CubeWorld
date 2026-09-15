@@ -26,13 +26,13 @@ const TABLES = {
     ['bread', 1, 4, 14], ['coal', 3, 8, 14], ['iron_ingot', 1, 3, 10],
     ['torch', 6, 12, 12], ['arrow', 4, 10, 8], ['emerald', 1, 2, 6],
     ['stick', 4, 10, 8], ['ender_pearl', 1, 1, 3], ['blaze_rod', 1, 1, 3],
-    ['feather', 2, 5, 6],
+    ['feather', 2, 5, 6], ['page_rain', 1, 1, 3], // W3：雨潮残页低权（跨维度收集线，§6.2 要塞箱低权）
   ],
   // 要塞图书馆：书类与经验
   stronghold_library: [
     ['book', 1, 3, 20], ['enchanted_book', 1, 1, 4], ['compass', 1, 1, 6], ['book', 1, 2, 12], ['experience_bottle', 1, 3, 8],
     ['emerald', 1, 3, 8], ['apple', 1, 3, 8], ['map', 1, 1, 3],
-    ['ender_pearl', 1, 2, 5], ['blaze_rod', 1, 1, 4],
+    ['ender_pearl', 1, 2, 5], ['blaze_rod', 1, 1, 4], ['page_rain', 1, 1, 3], // W3：雨潮残页低权
   ],
   // 要塞储藏室：矿物/弹药
   stronghold_storage: [

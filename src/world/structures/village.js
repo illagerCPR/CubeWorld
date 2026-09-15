@@ -52,6 +52,7 @@ export function solveVillage(rng, ax, groundY, az, gen) {
     houses: [],
     villagerSpawns: [],
     chests: [], // T5：[[x,y,z,loot表名],...]，StructureManager 注册后由打开时惰性生成内容
+    steles: [], // W3：[[x,y,z,章节id],...]，井旁苔纹石碑（雨土纪·纹样）
   };
 
   // 单列处理：清空上方 → 地基回填 → 铺路
@@ -218,6 +219,14 @@ export function solveVillage(rng, ax, groundY, az, gen) {
   buildFarm(ax + 7, az + 20, 7, 9);
   buildHouse(ax - 7, az + 20, 7, 6, 'x+', 'big');
   buildHayCamp(ax + 7, az - 20);
+
+  // ── 井旁碑位（世界观批次 W3）：苔纹石碑（雨土纪·纹样）──────────────────
+  // 硬编码坐标零 rng 消耗，blocks 只追加不改写（旧 seed 村庄布局逐字节稳定）；
+  // 井区外缘 (ax+3, az-2)——不触碰道路/房屋/农田/出生景位，bbox 判定不受影响。
+  clearBox(blocks, ax + 3, groundY + 1, az - 2, ax + 3, groundY + 4, az - 2);
+  for (let y = baseAt(ax + 3, az - 2); y < groundY; y++) blocks.push([ax + 3, y, az - 2, M.base]);
+  blocks.push([ax + 3, groundY + 1, az - 2, blockId('moss_stele')]);
+  meta.steles.push([ax + 3, groundY + 1, az - 2, 'rain_pattern']);
 
   return { blocks, meta };
 }

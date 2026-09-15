@@ -121,4 +121,46 @@ for (const seed of SEEDS) {
   ok(tested === 3, `陆地零命中样本数 3 (${tested})`);
 }
 
+// ── W3 碑位布点：村庄井旁（纹样）+ 要塞门厅（门厅）──
+{
+  const gen = new TerrainGenerator(42);
+  const sm = gen.structureManager;
+
+  // 村庄（cell20）：门控严（平原/沙漠+海拔窗），±10 cell 扫描
+  let vil = null;
+  for (let cx = -10; cx <= 10 && !vil; cx++) {
+    for (let cz = -10; cz <= 10 && !vil; cz++) vil = sm.ensureRecord('village', cx, cz);
+  }
+  ok(!!vil, '扫描区找到村庄（W3 村庄碑位前置）');
+  if (vil) {
+    ok(Array.isArray(vil.meta.steles) && vil.meta.steles.length === 1, `村庄碑位 1 处 (${(vil.meta.steles || []).length})`);
+    const [sx, sy, sz, ch] = vil.meta.steles[0];
+    ok(ch === 'rain_pattern', `村庄碑章 rain_pattern (${ch})`);
+    ok(vil.blocks.some(b => b[0] === sx && b[1] === sy && b[2] === sz && b[3] === BlockRegistry.getId('moss_stele')), '村庄苔碑方块在声明坐标');
+    ok(sm.steles.get(sx + ',' + sy + ',' + sz) === 'rain_pattern', '村庄碑 sm.steles 注册一致');
+    ok(sx === vil.ax + 3 && sz === vil.az - 2 && sy === vil.groundY + 1, '碑位在井旁 (ax+3, groundY+1, az-2)');
+    ok(sm.structureNameAt(vil.ax, vil.az) === '村庄', `村庄 bbox 判定不受碑位影响 (${sm.structureNameAt(vil.ax, vil.az)})`);
+    ok(sx >= vil.minX && sx <= vil.maxX && sz >= vil.minZ && sz <= vil.maxZ, '碑位不外扩村庄 bbox');
+    // 村民出生景位未被碑位侵占（井旁两景位仍在）
+    ok(vil.meta.villagerSpawns.length >= 2, '村民出生景位不受碑位影响');
+  }
+
+  // 要塞（cell48 环带）：ccx/ccz -2..2 扫描（环带半径 700-956 → cell 索引 ±2 内）
+  let sho = null;
+  for (let cx = -2; cx <= 2 && !sho; cx++) {
+    for (let cz = -2; cz <= 2 && !sho; cz++) sho = sm.ensureRecord('stronghold', cx, cz);
+  }
+  ok(!!sho, '扫描区找到要塞（W3 门厅碑位前置）');
+  if (sho) {
+    ok(Array.isArray(sho.meta.steles) && sho.meta.steles.length === 1, `要塞碑位 1 处 (${(sho.meta.steles || []).length})`);
+    const [sx, sy, sz, ch] = sho.meta.steles[0];
+    ok(ch === 'rain_hall', `要塞碑章 rain_hall (${ch})`);
+    ok(sho.blocks.some(b => b[0] === sx && b[1] === sy && b[2] === sz && b[3] === BlockRegistry.getId('moss_stele')), '要塞苔碑方块在声明坐标');
+    ok(sm.steles.get(sx + ',' + sy + ',' + sz) === 'rain_hall', '要塞碑 sm.steles 注册一致');
+    ok(sx === sho.ax + 4 && sz === sho.az + 2, '碑位在枢纽东墙内侧 (ax+4, az+2)');
+    ok(sy >= 14 && sy <= 38 && sy < sho.groundY, `碑位在地下枢纽（hubY） (${sy})`);
+    ok(sm.structureNameAt(sho.ax, sho.az) === '要塞', `要塞 bbox 判定正常 (${sm.structureNameAt(sho.ax, sho.az)})`);
+  }
+}
+
 console.log(`overworld-structures: ${passed} assertions passed`);
