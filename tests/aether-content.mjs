@@ -92,8 +92,8 @@ const allIds = Object.keys(STELE_CHAPTERS);
 ok(JSON.stringify(allIds.slice(0, EXPECT_CHAPTERS.length)) === JSON.stringify(EXPECT_CHAPTERS),
   `天域章节前缀顺序不变 (${allIds.slice(0, EXPECT_CHAPTERS.length).join(',')})`);
 for (const id of allIds) {
-  ok(STELE_CHAPTERS[id].dim === 'aether' || STELE_CHAPTERS[id].dim === 'nether',
-    `章节 dim 值域（天域测试只认天域/下界）: ${id}`);
+  ok(['aether', 'nether', 'overworld', 'end'].includes(STELE_CHAPTERS[id].dim),
+    `章节 dim 值域（四维度合法值）: ${id}`);
 }
 for (const [id, ch] of Object.entries(STELE_CHAPTERS)) {
   ok(typeof ch.title === 'string' && ch.title.length > 1, `章节标题: ${id}`);

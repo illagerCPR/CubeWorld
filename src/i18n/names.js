@@ -304,4 +304,7 @@ export const NAME_I18N = {
   "ember_stele": ["烬纹石碑","燼紋石碑","Ember Stele","Stèle de braise","Aschestele","燃石の碑","잿불 비석","مسلة الجمر","Стела углей","Estela de rescoldo","Estela de brasas"],
   "mourn_tear": ["哀潮之泪","哀潮之淚","Mourntear","Larme de deuil","Klageträne","哀潮の涙","애도의 눈물","دمعة الموات","Слеза оплакивания","Lágrima de duelo","Lágrima de luto"],
   "mourn_howler": ["哭嚎者","哭嚎者","Mourn Howler","Pleureur","Klagender","喚哭者","울부짖는 자","النائح","Скорбящий","Llorón","Pranteador"],
+  // ---------- 主世界·雨土纪（世界观批次 W1） ----------
+  "moss_stele": ["苔纹石碑","苔紋石碑","Moss Stele","Stèle de mousse","Moosstele","苔石の碑","이끼 비석","مسلة الطحلب","Стела мха","Estela de musgo","Estela de musgo"],
+  "page_rain": ["雨潮残页","雨潮殘頁","Rainpage","Page de pluie","Regenseite","雨潮の紙片","빗물의 낱장","صفحة المطر","Страница дождя","Página de lluvia","Página de chuva"],
 };

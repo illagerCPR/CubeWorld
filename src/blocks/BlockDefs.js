@@ -748,6 +748,7 @@ const BlockCN = {
   wind_stele: '风纹石碑', aether_altar: '恒昼祭坛', wind_current: '气流', gale_block: '风阵块',
   tide_altar: '潮心祭坛',
   ember_stele: '烬纹石碑', // 世界观批次 N1：下界石碑（石碑家族第二员）
+  moss_stele: '苔纹石碑', // 世界观批次 W1：主世界石碑（石碑家族第三员）
 };
 
 function reg(name, def, svgs) {
@@ -1645,6 +1646,32 @@ function emberSteleTex() {
   return pixelSvg(px);
 }
 reg('ember_stele', { hardness: -1 }, { ember_stele: emberSteleTex() });
+
+// 苔纹石碑（世界观批次 W1：主世界石碑家族第三员）：风纹石碑同构，色系换成雨土
+// （湿苔岩底/青蓝雨纹符），章节本批注册（雨土纪 3 章），碑位随批次 W2/W3 落入潮冢/村庄/要塞
+function mossSteleTex() {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb([116, 120, 106], 0.9 + hash2(x, y, 159) * 0.16);
+  }
+  // 湿苔斑：四角与边缘零星苔点
+  for (const [x, y] of [[2, 2], [3, 2], [2, 3], [13, 2], [2, 13], [12, 12], [13, 12], [12, 13], [13, 13], [3, 12], [12, 3], [14, 8], [1, 8]]) {
+    px[y * 16 + x] = rgb([88, 118, 72], 0.95);
+  }
+  for (const y of [3, 7, 11]) {
+    for (let x = 2; x <= 13; x++) px[y * 16 + x] = rgb([84, 90, 76]);
+  }
+  // 雨纹符：一竖三滴（咸雨意象，青蓝湿光 + 微亮水点）
+  for (let y = 4; y <= 8; y++) px[y * 16 + 8] = rgb([86, 148, 160], 0.95);
+  for (const [x, y] of [[6, 9], [10, 9], [7, 6], [9, 5], [6, 12], [10, 12]]) {
+    px[y * 16 + x] = rgb([86, 148, 160], 0.9);
+  }
+  for (const [x, y] of [[7, 10], [9, 10]]) {
+    px[y * 16 + x] = rgb([150, 202, 204], 0.9);
+  }
+  return pixelSvg(px);
+}
+reg('moss_stele', { hardness: -1 }, { moss_stele: mossSteleTex() });
 
 export const BlockSVGDefinitions = svgMap;
 

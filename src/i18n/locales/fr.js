@@ -360,4 +360,22 @@ export const fr = {
   "维度检查": "Outils de dimension",
 
   "潮火之炉": "Foyer du Feu de Marée",
+
+  // ── 主世界·雨土纪基石（世界观批次 W1）──
+  "咸雨": "Pluie salée",
+  "最早的年头，雨是咸的。祖训只有这一句，没人问过为什么。": "Les premières années, la pluie était salée. C'est tout ce que dit la parole des anciens — personne n'a jamais demandé pourquoi.",
+  "采盐人从海底拖上来过骨头：排成一环，环着半页沉船的旧木。": "Les cueilleurs de sel ont remonté des os du fond marin : disposés en anneau, autour de la moitié d'une planche de naufrage.",
+  "海是有来历的。它把来路上的东西埋在这里，把咸味留在了每一场雨里。": "La mer a une histoire. Elle a enseveli ce qu'elle portait dans sa chute, et laissé le sel dans chaque pluie depuis.",
+  "纹样": "Le Motif",
+  "村里每扇门上都刻着同一套纹样：一道浪，一双翼，一座灯。": "Chaque porte du village porte le même motif : une vague, une paire d’ailes, une lampe.",
+  "没人教过第一代刻它的人。问起来，老人只说：照着上一扇门刻。": "Personne n'a appris à la première main qui l'a gravé. Demandez, et les anciens répondent seulement : copie la porte d'avant.",
+  "若你在别处见过这套纹样——别声张。回家来，把门关好。": "Si vous avez vu ce motif ailleurs — n’en dites rien. Rentrez chez vous, et gardez votre porte close.",
+  "门厅": "Le Vestibule",
+  "这座门厅不属任何一界，造它的人也一样。": "Cette salle n’appartient à aucun monde, et ceux qui l’ont bâtie non plus.",
+  "我们四处收殓散落的旧物。你掷出的那只眼，是唯一自己走回来的——它在认回家的路。": "Nous recueillons les reliques éparses de partout. L’œil que vous lancez est la seule chose jamais revenue de soi — il cherche le chemin du retour.",
+  "门后没有潮，也没有海。别带着盼头来。": "Derrière la porte, il n’y a ni marée ni mer. Ne venez pas porteur d’espoir.",
+  "从海底的骨环里捞起的残页，字迹被咸水洇开了。": "Une page arrachée, remontée de l’anneau d’os au fond de la mer, son écriture diluée par l’eau salée.",
+  "还能认出的只有一句：「最早的年头，雨是咸的。」": "On ne peut plus lire qu’une seule ligne : « Les premières années, la pluie était salée. »",
+  "熏黑卫的头骨，眼窝里还留着炉火的余温。": "Le crâne d’une garde enfumée, ses orbites gardant encore la chaleur du foyer.",
+  "三枚颅骨按进骨泥，缝起来的不是人——是一句没能咽下的怨。": "Trois crânes enfoncés dans le sable d’os, et ce qui est cousu n’est pas une personne — c’est une rancune qui n’a jamais su avaler.",
 };

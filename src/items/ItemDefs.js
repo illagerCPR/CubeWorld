@@ -292,6 +292,7 @@ const ItemCN = {
   storm_totem: '风暴图腾', storm_core: '风暴之核', heart_shard: '心核碎片',
   wind_brand: '缚风之剑', gale_cloak: '御风斗篷',
   mourn_tear: '哀潮之泪', // 世界观批次 N1
+  page_rain: '雨潮残页', // 世界观批次 W1
 };
 
 function reg(name, def, svg) {
@@ -396,7 +397,8 @@ reg('bone', { stack: 64 }, art(g => {
 }));
 reg('bone_meal', { stack: 64 }, dustPileArt(P.bone[0], P.bone[2], 31));
 // 凋零骷髅头颅（Idea-2D-①）：凋零骷髅稀有掉落，未来凋灵召唤材料（3 头 + 灵魂沙 T 型）
-reg('wither_skeleton_skull', { stack: 64 }, art(g => {
+// 世界观批次 W1：补凋灵禁忌拼合 lore（与灵魂沙 lore 呼应；物品 lore 优先于方块 lore）
+reg('wither_skeleton_skull', { stack: 64, lore: ['熏黑卫的头骨，眼窝里还留着炉火的余温。', '三枚颅骨按进骨泥，缝起来的不是人——是一句没能咽下的怨。'] }, art(g => {
   g.d(8, 7, 5, 5, P.witherSkull[1]);   // 焦黑颅骨
   g.d(8, 6, 4, 4, P.witherSkull[0]);
   g.r(4, 8, 8, 4, P.witherSkull[0]);   // 面部
@@ -1015,6 +1017,28 @@ reg('mourn_tear', { stack: 16, lore: ['哭嚎者坠落时凝下的泪。', '它�
   g.s(8, 2, c[0]); g.s(7, 3, c[1]); g.s(9, 3, c[1]);
   g.s(7, 8, 'rgb(220,242,252)'); g.s(8, 7, 'rgb(220,242,252)');
   for (const [x, y] of [[5, 12], [11, 12], [6, 13], [10, 13]]) g.s(x, y, c[2]);
+}));
+
+// 雨潮残页（世界观批次 W1：主世界·跨维度收集线材料，W2 起入潮冢/要塞箱）：湿皱残页 + 咸雨字痕
+reg('page_rain', { stack: 16, lore: ['从海底的骨环里捞起的残页，字迹被咸水洇开了。', '还能认出的只有一句：「最早的年头，雨是咸的。」'] }, art(g => {
+  g.r(3, 3, 10, 10, 'rgb(206,192,156)');   // 页身
+  g.r(4, 4, 8, 8, 'rgb(218,206,172)');     // 页心
+  for (const [x, y] of [[3, 3], [12, 3], [3, 12], [12, 12], [12, 4], [3, 11]]) {
+    g.s(x, y, 'rgb(176,160,124)');         // 磨损卷角
+  }
+  // 咸水洇痕：右下湿渍团
+  for (const [x, y] of [[9, 9], [10, 9], [10, 10], [11, 10], [9, 10], [10, 11]]) {
+    g.s(x, y, 'rgb(150,168,176)');
+  }
+  // 字痕：三行墨线，最下一行被洇开
+  g.hl(5, 5, 9, 'rgb(70,96,124)');
+  g.hl(7, 5, 8, 'rgb(70,96,124)');
+  g.hl(9, 5, 10, 'rgb(96,116,138)');
+  // 雨纹小符：页角一竖两滴（与苔纹石碑符文同源）
+  g.vl(6, 8, 10, 'rgb(70,96,124)');
+  g.s(5, 11, 'rgb(70,96,124)'); g.s(7, 11, 'rgb(70,96,124)');
+  // 盐霜亮点
+  for (const [x, y] of [[5, 12], [11, 4], [4, 6]]) g.s(x, y, 'rgb(240,238,226)');
 }));
 
 export const ItemSVGDefinitions = svgMap;

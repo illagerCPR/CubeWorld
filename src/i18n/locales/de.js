@@ -360,4 +360,22 @@ export const de = {
   "维度检查": "Dimensions-Werkzeuge",
 
   "潮火之炉": "Gezeitenfeuer-Herd",
+
+  // ── 主世界·雨土纪基石（世界观批次 W1）──
+  "咸雨": "Salzregen",
+  "最早的年头，雨是咸的。祖训只有这一句，没人问过为什么。": "In den frühesten Jahren war der Regen salzig. Das ist der ganze Ahnenspruch — niemand hat je gefragt, warum.",
+  "采盐人从海底拖上来过骨头：排成一环，环着半页沉船的旧木。": "Salzsammler haben Knochen vom Meeresgrund gezogen: zu einem Ring gelegt, umringend die Hälfte einer Wrackplanke.",
+  "海是有来历的。它把来路上的东西埋在这里，把咸味留在了每一场雨里。": "Das Meer hat eine Geschichte. Es begrub, was es auf seinem Sturz trug, und ließ das Salz in jedem Regen seitdem zurück.",
+  "纹样": "Das Muster",
+  "村里每扇门上都刻着同一套纹样：一道浪，一双翼，一座灯。": "Jede Tür im Dorf trägt dasselbe Muster: eine Welle, ein Paar Flügel, eine Lampe.",
+  "没人教过第一代刻它的人。问起来，老人只说：照着上一扇门刻。": "Niemand hat der ersten Hand, die es schnitzte, etwas gezeigt. Fragt man, sagen die Alten nur: kopiere die Tür davor.",
+  "若你在别处见过这套纹样——别声张。回家来，把门关好。": "Wenn du dieses Muster anderswo gesehen hast — sag nichts. Komm nach Hause und halte deine Tür geschlossen.",
+  "门厅": "Die Vorhalle",
+  "这座门厅不属任何一界，造它的人也一样。": "Diese Halle gehört keiner Welt an, und die, die sie erbaut haben, ebenfalls nicht.",
+  "我们四处收殓散落的旧物。你掷出的那只眼，是唯一自己走回来的——它在认回家的路。": "Wir sammeln die verstreuten Relikte von überall. Das Auge, das du wirfst, ist das einzige, das je von selbst zurückkehrte — es sucht den Weg nach Hause.",
+  "门后没有潮，也没有海。别带着盼头来。": "Hinter der Tür gibt es keine Gezeit und kein Meer. Komm nicht in der Hoffnung hierher.",
+  "从海底的骨环里捞起的残页，字迹被咸水洇开了。": "Eine abgerissene Seite, aus dem Knochenring auf dem Meeresgrund gezogen, ihre Schrift vom Salzwasser verwischt.",
+  "还能认出的只有一句：「最早的年头，雨是咸的。」": "Nur eine Zeile ist noch zu entziffern: 'In den frühesten Jahren war der Regen salzig.'",
+  "熏黑卫的头骨，眼窝里还留着炉火的余温。": "Der Schädel einer verrußten Wache, seine Augenhöhlen bewahren noch die Wärme des Herdfeuers.",
+  "三枚颅骨按进骨泥，缝起来的不是人——是一句没能咽下的怨。": "Drei Schädel in den Knochensand gedrückt, und was zusammengenäht wird, ist kein Mensch — es ist ein Groll, der nie schlucken lernte.",
 };

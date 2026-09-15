@@ -90,6 +90,7 @@ const MAP = {
   wind_brand: 'tools', gale_cloak: 'tools',
   // ---------- 下界·烬火纪（世界观批次 N1） ----------
   ember_stele: 'functional', mourn_tear: 'materials',
+  moss_stele: 'functional', page_rain: 'materials', // 世界观批次 W1
 };
 
 // 取物品分类（未登记 → 杂项）

@@ -360,4 +360,22 @@ export const es = {
   "维度检查": "Herramientas de dimensión",
 
   "潮火之炉": "Hogar del Fuego de Marea",
+
+  // ── 主世界·雨土纪基石（世界观批次 W1）──
+  "咸雨": "Lluvia salada",
+  "最早的年头，雨是咸的。祖训只有这一句，没人问过为什么。": "En los primeros años, la lluvia era salada. Ese es todo el dicho de los antepasados; nadie preguntó nunca por qué.",
+  "采盐人从海底拖上来过骨头：排成一环，环着半页沉船的旧木。": "Los recolectores de sal han subido huesos del fondo marino: dispuestos en un anillo, rodeando media tabla de un naufragio.",
+  "海是有来历的。它把来路上的东西埋在这里，把咸味留在了每一场雨里。": "El mar tiene historia. Enterró lo que llevaba en su caída y dejó la sal en cada lluvia desde entonces.",
+  "纹样": "El motivo",
+  "村里每扇门上都刻着同一套纹样：一道浪，一双翼，一座灯。": "Cada puerta de la aldea lleva el mismo motivo: una ola, un par de alas, una lámpara.",
+  "没人教过第一代刻它的人。问起来，老人只说：照着上一扇门刻。": "Nadie enseñó a la primera mano que lo talló. Si preguntas, los ancianos solo dicen: copia la puerta anterior.",
+  "若你在别处见过这套纹样——别声张。回家来，把门关好。": "Si has visto este motivo en otro lugar — no digas nada. Vuelve a casa y mantén tu puerta cerrada.",
+  "门厅": "El vestíbulo",
+  "这座门厅不属任何一界，造它的人也一样。": "Este vestíbulo no pertenece a ningún mundo, y quienes lo construyeron tampoco.",
+  "我们四处收殓散落的旧物。你掷出的那只眼，是唯一自己走回来的——它在认回家的路。": "Recogemos reliquias dispersas de todas partes. El ojo que arrojas es lo único que jamás volvió por sí mismo: está buscando el camino a casa.",
+  "门后没有潮，也没有海。别带着盼头来。": "Tras la puerta no hay marea ni mar. No vengas cargando esperanza.",
+  "从海底的骨环里捞起的残页，字迹被咸水洇开了。": "Una página arrancada, rescatada del anillo de huesos del lecho marino; su escritura se deshizo en agua salada.",
+  "还能认出的只有一句：「最早的年头，雨是咸的。」": "Solo se lee una línea: «En los primeros años, la lluvia era salada.»",
+  "熏黑卫的头骨，眼窝里还留着炉火的余温。": "El cráneo de un guardia ahumado; sus cuencas aún guardan el calor del hogar.",
+  "三枚颅骨按进骨泥，缝起来的不是人——是一句没能咽下的怨。": "Tres cráneos hundidos en la arena de huesos, y lo que se cose no es una persona: es un rencor que nunca aprendió a tragar.",
 };

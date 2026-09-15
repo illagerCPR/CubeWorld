@@ -106,6 +106,15 @@ else
     exit 1
 fi
 
+# 主世界雨土纪基石（世界观批次 W1：moss_stele/page_rain/凋灵骷髅头 lore/雨土纪 3 章）
+echo "=== overworld-steles ==="
+if node tests/overworld-steles.mjs; then
+    echo "overworld-steles: OK"
+else
+    echo "overworld-steles: FAILED"
+    exit 1
+fi
+
 # 末地外岛锚点场回归（纯 node：群系在场/密度带宽/锚点确定性/群系方块同源）
 echo "=== end-islands ==="
 if node tests/end-islands.mjs; then

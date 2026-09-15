@@ -360,4 +360,22 @@ export const en = {
   "维度检查": "Dimension Tools",
 
   "潮火之炉": "Hearth of the Tidefire",
+
+  // ── 主世界·雨土纪基石（世界观批次 W1）──
+  "咸雨": "Salt Rain",
+  "最早的年头，雨是咸的。祖训只有这一句，没人问过为什么。": "In the earliest years, the rain was salt. That is the whole of the ancestral saying — no one ever asked why.",
+  "采盐人从海底拖上来过骨头：排成一环，环着半页沉船的旧木。": "Salt divers have hauled bones up from the seabed: laid out in a ring, ringed around half a page of shipwreck wood.",
+  "海是有来历的。它把来路上的东西埋在这里，把咸味留在了每一场雨里。": "The sea has a history. It buried what it carried on its way down, and left the salt in every rain since.",
+  "纹样": "The Pattern",
+  "村里每扇门上都刻着同一套纹样：一道浪，一双翼，一座灯。": "Every door in the village bears the same pattern: a wave, a pair of wings, a lamp.",
+  "没人教过第一代刻它的人。问起来，老人只说：照着上一扇门刻。": "No one taught the first hand that carved it. Ask, and the elders only say: copy the door before yours.",
+  "若你在别处见过这套纹样——别声张。回家来，把门关好。": "If you have seen this pattern elsewhere — say nothing. Come home, and keep your door shut.",
+  "门厅": "The Vestibule",
+  "这座门厅不属任何一界，造它的人也一样。": "This hall belongs to no world, and neither do the ones who built it.",
+  "我们四处收殓散落的旧物。你掷出的那只眼，是唯一自己走回来的——它在认回家的路。": "We gather the scattered relics of everywhere. The eye you throw is the only thing that ever walked back on its own — it is finding the way home.",
+  "门后没有潮，也没有海。别带着盼头来。": "Beyond the door there is no tide, and no sea. Do not come here carrying hope.",
+  "从海底的骨环里捞起的残页，字迹被咸水洇开了。": "A torn page dredged up from the ring of bones on the seabed, its writing bled through by salt water.",
+  "还能认出的只有一句：「最早的年头，雨是咸的。」": "Only one line can still be read: 'In the earliest years, the rain was salt.'",
+  "熏黑卫的头骨，眼窝里还留着炉火的余温。": "A sootbound guard's skull, its eye sockets still holding the warmth of the hearth.",
+  "三枚颅骨按进骨泥，缝起来的不是人——是一句没能咽下的怨。": "Set three skulls into the bone-sand, and what is stitched together is not a person — it is a grudge that never learned to swallow.",
 };
