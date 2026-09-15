@@ -395,4 +395,15 @@ export const en = {
   "扣上就再没有缝的壳，摔不碎，也撬不开。": "A shell that seals without a seam — it will not shatter, and it cannot be pried open.",
   "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "The gleaner’s pack — their rule: what you pick up goes into your own shell first, and only then into the vault.",
   "拾遗者石环": "Gleaner’s Ring",
+  // ── 终局篇 F1：候潮基石 ──
+  "「风潮、坠潮、雨潮——三枚旧心跳在掌心合成了一声。」": "\"The wind tide, the falling tide, the rain tide — three old heartbeats beat as one in your palm.\"",
+  "「无潮的岸边，你听见了它：海还没有名字的时候，原初之潮就是这样响的。」": "\"On the tideless shore you heard it: this is how the Primordial Tide sounded, before the sea had a name.\"",
+  "「潮不会回来。但世界记起了自己曾经是一整片海。」": "\"The tide will not return. But the world remembered that it was once one whole sea.\"",
+  "王从滩涂尽头衔来的、涨潮之前的东西。": "The thing the king carried back in its jaws from the far end of the flats — from before the tide.",
+  "它一直被守在潮的出生地——守着它的人，从不去解释为什么。": "It has always been kept where the tide was born — and its keeper has never once explained why.",
+  // ── 终局篇 F1：候潮章 ──
+  "候潮": "Tide-Waiting",
+  "祭坛饮下了三枚旧心跳。原初之潮在极远处翻了身。": "The altar drank the three old heartbeats. Far away, the Primordial Tide turned over.",
+  "无潮的岸边听不见的话，在这里听见了——海还没有忘。": "What cannot be heard on the tideless shore can be heard here — the sea has not forgotten.",
+  "现在，去潮的出生地。滩涂尽头有一块碑，碑上的字断在最后一刻——去把它听完。": "Now go to where the tide was born. At the far end of the flats stands a stele, its last line cut short — go and hear it out.",
 };

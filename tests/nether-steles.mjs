@@ -3,7 +3,7 @@
 //   ① 烬纹石碑方块注册完备：displayName / 不可破坏 / SVG 键 / 追加纪律（id > tide_altar）
 //   ② 哀潮之泪物品注册完备：displayName / stack / lore / 创造分类 materials
 //   ③ 方块 lore 落位：灵魂沙 / 荧石（BlockRegistry.lore，InventoryScreen._bindHover 消费）
-//   ④ 石碑章节表跨维度完备：dim 字段必填且合法；天域 9 章 / 下界 4 章；标题行文非空且行数克制（≤6）
+//   ④ 石碑章节表跨维度完备：dim 字段必填且合法；天域 10 章 / 下界 4 章；标题行文非空且行数克制（≤6）
 //   ⑤ 无字碑回落：STELE_BLANK 在场
 //   ⑥ 命令面板按维度过滤的数据面：全章 dim 值与 world.dimension 值域一致（'overworld' 等不缺漏）
 import { BlockRegistry } from '../src/core/BlockRegistry.js';
@@ -56,7 +56,7 @@ for (const [id, ch] of Object.entries(STELE_CHAPTERS)) {
   ok(VALID_DIMS.includes(ch.dim), `dim 字段合法: ${id} (${ch.dim})`);
   byDim[ch.dim] = (byDim[ch.dim] || 0) + 1;
 }
-ok(byDim.aether === 9, `天域 9 章 (${byDim.aether})`);
+ok(byDim.aether === 10, `天域 10 章 (${byDim.aether})`);
 ok(byDim.nether === 4, `下界 4 章 (${byDim.nether})`);
 ok(byDim.overworld === 3 && byDim.end === 2, '主世界 3 章 / 末地 2 章（E1 已交付）');
 const EMBER_IDS = ['ember_sinking', 'ember_hearth', 'ember_sooted', 'ember_mourning'];

@@ -86,7 +86,7 @@ for (const [name, cat] of Object.entries(WANT_CAT)) {
   ok(getItemCategory(name) === cat, `分类: ${name} → ${cat} (got ${getItemCategory(name)})`);
 }
 
-// ── ④ 碑文章节表（世界观批次 N1 起表为跨维度共享：本测试只锁天域 9 章的相对顺序）──
+// ── ④ 碑文章节表（世界观批次 N1 起表为跨维度共享：本测试只锁天域碑文章的相对顺序）──
 const EXPECT_CHAPTERS = ['prologue', 'tide', 'voyage', 'marrow', 'gate', 'delving', 'sundering', 'command', 'renewal'];
 const allIds = Object.keys(STELE_CHAPTERS);
 ok(JSON.stringify(allIds.slice(0, EXPECT_CHAPTERS.length)) === JSON.stringify(EXPECT_CHAPTERS),

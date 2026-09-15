@@ -750,6 +750,7 @@ const BlockCN = {
   ember_stele: '烬纹石碑', // 世界观批次 N1：下界石碑（石碑家族第二员）
   moss_stele: '苔纹石碑', // 世界观批次 W1：主世界石碑（石碑家族第三员）
   end_stele: '界纹石碑', // 世界观批次 E1：末地石碑（石碑家族第四员）
+  primordial_altar: '原初祭坛', // 终局篇 F1：候潮仪式受体
 };
 
 function reg(name, def, svgs) {
@@ -1182,8 +1183,9 @@ reg('end_crystal', { displayName: '末影水晶', light: 15, hardness: 0.5 }, { 
   }
   return pixelSvg(px); })()
 });
-// 龙蛋：末影龙击败掉落（装饰收藏方块）
-reg('dragon_egg', { displayName: '龙蛋', hardness: 3, tool: 'pickaxe' }, { dragon_egg: (function () {
+// 龙蛋：末影龙击败掉落（装饰收藏方块）——终局篇 F1 补 lore 重释（§4 方案二「王所守之物」，
+// 仅 tooltip，机制零改动）：王从滩涂尽头衔来的东西；不解释王在等什么（留白纪律）。
+reg('dragon_egg', { displayName: '龙蛋', hardness: 3, tool: 'pickaxe', lore: ['王从滩涂尽头衔来的、涨潮之前的东西。', '它一直被守在潮的出生地——守着它的人，从不去解释为什么。'] }, { dragon_egg: (function () {
   const px = makeTex();
   for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
     const wave = Math.sin((x + y * 0.6) * 0.9) * 0.5 + 0.5;
@@ -1696,6 +1698,35 @@ function endSteleTex() {
   return pixelSvg(px);
 }
 reg('end_stele', { hardness: -1, stele: true }, { end_stele: endSteleTex() });
+
+// 原初祭坛（终局篇 F1「候潮基石」）：候潮仪式的受体——潮心祭坛右键献齐三潮之证后
+// 置换而来（setBlock 进账本，存档/联机天然一致）。潮石底 + 原初波纹环 + 三点滴纹：
+// 环是海还没有名字时的颜色，三点滴是三枚旧心跳（风、坠、雨）落座的位置。
+// 右键行为见 Game.js _tryPrimordialOffering：候潮后 F3 听潮仪式在此挂终局钩子。
+function primordialAltarTex(seed) {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb([148, 168, 186], 0.93 + hash2(x, y, seed) * 0.12); // 蓝灰潮石底（潮心祭坛同源）
+  }
+  // 原初波纹环：外环暗潮线 + 内环月白回声（比潮心的青更古旧）
+  for (let a = 0; a < 30; a++) {
+    const ang = a / 30 * Math.PI * 2;
+    const rx = 8 + Math.round(Math.cos(ang) * 5.4), ry = 8 + Math.round(Math.sin(ang) * 5.4);
+    if (rx >= 0 && rx < 16 && ry >= 0 && ry < 16) px[ry * 16 + rx] = rgb([86, 118, 140]);
+  }
+  for (let a = 0; a < 20; a++) {
+    const ang = a / 20 * Math.PI * 2;
+    const rx = 8 + Math.round(Math.cos(ang) * 3), ry = 8 + Math.round(Math.sin(ang) * 3);
+    if (rx >= 0 && rx < 16 && ry >= 0 && ry < 16) px[ry * 16 + rx] = rgb([222, 240, 240], 0.92);
+  }
+  // 三点滴纹：三证落座点（上=风、左下=坠、右下=雨）
+  for (const [x, y] of [[8, 1], [2, 11], [13, 11]]) {
+    px[y * 16 + x] = rgb([120, 214, 206], 0.95);
+    px[(y + 1) * 16 + x] = rgb([96, 190, 190], 0.95);
+  }
+  return pixelSvg(px);
+}
+reg('primordial_altar', { light: 13, hardness: -1 }, { primordial_altar: primordialAltarTex(224) });
 
 export const BlockSVGDefinitions = svgMap;
 

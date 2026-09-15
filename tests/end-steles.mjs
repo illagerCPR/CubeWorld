@@ -41,7 +41,7 @@ const byDim = {};
 for (const [id, ch] of Object.entries(STELE_CHAPTERS)) {
   byDim[ch.dim] = (byDim[ch.dim] || 0) + 1;
 }
-ok(byDim.aether === 9, `天域 9 章 (${byDim.aether})`);
+ok(byDim.aether === 10, `天域 10 章 (${byDim.aether})`);
 ok(byDim.nether === 4, `下界 4 章 (${byDim.nether})`);
 ok(byDim.overworld === 3, `主世界 3 章 (${byDim.overworld})`);
 ok(byDim.end === 2, `末地 2 章 (${byDim.end})`);

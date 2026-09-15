@@ -70,7 +70,6 @@ export class Hotbar {
       if (this._sig[i] !== sig) {
         this._sig[i] = sig;
         const ctx = slot.canvas.getContext('2d');
-        ctx.clearRect(0, 0, 32, 32);
         if (s) {
           // 渲染物品图标
           let svgText = this.iconCache.get(s.name);
@@ -80,11 +79,19 @@ export class Hotbar {
           }
           if (svgText) {
             const img = await SVGTextures.svgToImage(svgText);
+            // await 期间槽位状态又变化——过期绘制直接放弃，由最新一次 update 负责
+            //（并发 update 下旧图标曾回写覆盖已清空的槽：献证消耗后快捷栏图标残留的来源）
+            if (this._sig[i] !== sig) continue;
+            ctx.clearRect(0, 0, 32, 32);
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(img, 0, 0, 32, 32);
+            slot.count.textContent = s.count > 1 ? s.count : '';
+          } else {
+            ctx.clearRect(0, 0, 32, 32);
+            slot.count.textContent = s.count > 1 ? s.count : '';
           }
-          slot.count.textContent = s.count > 1 ? s.count : '';
         } else {
+          ctx.clearRect(0, 0, 32, 32);
           slot.count.textContent = '';
         }
       }

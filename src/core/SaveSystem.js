@@ -47,6 +47,7 @@ export class SaveSystem {
         dimensionContainers: serializeDimBuckets(game.world.dimensionContainers),
         dimensionFurnaces: serializeDimBuckets(game.world.dimensionFurnaces),
         dragonDefeated: !!game.world.dragonDefeated, // 末影龙击败标记（进末地是否再生成龙）
+        finalePrimordial: game.world.finalePrimordial || null, // 候潮状态（终局篇 F1：祭坛坐标）
         bedSpawn: game.bedSpawn || null, // 床重生点（单机；含维度校验字段）
         redstone: game.redstone ? game.redstone.serialize() : null,
         sky: { time: game.sky.time || 0 }

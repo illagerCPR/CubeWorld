@@ -395,4 +395,15 @@ export const de = {
   "扣上就再没有缝的壳，摔不碎，也撬不开。": "Eine Schale, die sich ohne Naht schließt — sie zerspringt nicht und lässt sich nicht aufbrechen.",
   "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "Der Ranzen des Sammlers — ihre Regel: Was man aufliest, kommt erst in die eigene Schale, dann ins Lager.",
   "拾遗者石环": "Ring der Sammler",
+  // ── 终局篇 F1：候潮基石 ──
+  "「风潮、坠潮、雨潮——三枚旧心跳在掌心合成了一声。」": "„Gezeit des Windes, Fallzeit, Regengezeit – drei alte Herzschläge schlagen in deiner Handfläche als einen.\"",
+  "「无潮的岸边，你听见了它：海还没有名字的时候，原初之潮就是这样响的。」": "„Am gezeitenlosen Ufer hast du es gehört: So klang die Urzeitliche Flut, als das Meer noch keinen Namen hatte.\"",
+  "「潮不会回来。但世界记起了自己曾经是一整片海。」": "„Die Flut wird nicht zurückkehren. Doch die Welt erinnerte sich, dass sie einst ein einziges Meer war.\"",
+  "王从滩涂尽头衔来的、涨潮之前的东西。": "Das Ding, das der König im Maul vom Ende der Schlicke herbeigetragen hat – aus der Zeit vor der Flut.",
+  "它一直被守在潮的出生地——守着它的人，从不去解释为什么。": "Es wurde immer dort gehütet, wo die Flut geboren wurde – und sein Hüter hat nie erklärt, warum.",
+  // ── 终局篇 F1：候潮章 ──
+  "候潮": "Warten auf die Flut",
+  "祭坛饮下了三枚旧心跳。原初之潮在极远处翻了身。": "Der Altar hat die drei alten Herzschläge getrunken. In weiter Ferne hat sich die Urzeitliche Flut gewendet.",
+  "无潮的岸边听不见的话，在这里听见了——海还没有忘。": "Was am gezeitenlosen Ufer nicht zu hören ist, hier ist es zu hören – das Meer hat nicht vergessen.",
+  "现在，去潮的出生地。滩涂尽头有一块碑，碑上的字断在最后一刻——去把它听完。": "Nun begib dich dorthin, wo die Flut geboren wurde. Am Ende der Schlicke steht eine Stele, deren letzte Zeile unvollendet blieb – geh hin und höre sie zu Ende.",
 };

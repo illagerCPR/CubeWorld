@@ -281,6 +281,7 @@ export class Game {
     // B-①：主世界注入地形 Worker（其余维度生成器类不同，走同步路径）
     if (dimension === 'overworld') this.world.terrainWorker = new TerrainWorkerClient(2);
     this.world.dragonDefeated = !!(loadData && loadData.dragonDefeated); // 末影龙击败标记（存档恢复）
+    this.world.finalePrimordial = (loadData && loadData.finalePrimordial) || null; // 候潮状态（终局篇 F1：祭坛坐标，存档恢复）
     // 天域复潮状态（批次 D）：存档恢复；MP 下 WORLD_INFO 可能先于 start 到达
     //（已写入 this.aetherDusk）——loadData 无字段时保留现值，有字段（单机存档/换维合成）以其为准
     this.aetherDusk = !!(loadData && loadData.aetherDusk !== undefined
@@ -1701,9 +1702,9 @@ export class Game {
           this.controls.mouseRight = false;
           return;
         }
-        // 天域批次 D：潮心祭坛——浮现第九章碑文（复潮）
+        // 天域批次 D：潮心祭坛——献证候潮（终局篇 F1）/ 浮现第九章碑文（复潮）
         if (targetDef && targetDef.name === 'tide_altar' && this.steleScreen && !this.player.spectator) {
-          this.steleScreen.open(hit.block.x, hit.block.y, hit.block.z, 'renewal');
+          this._tryPrimordialOffering(hit.block); // 三证齐 → 置换原初祭坛候潮；否则照旧浮现复潮章
           this.controls.mouseRight = false;
           return;
         }
@@ -2152,6 +2153,37 @@ export class Game {
     if (this.particles) {
       const tideDef = BlockRegistry.getByName('tide_altar');
       if (tideDef) this.particles.burstBlockBreak(block.x + 0.5, block.y + 1.5, block.z + 0.5, tideDef, this.world);
+    }
+    this.steleScreen.open(block.x, block.y, block.z, 'renewal');
+  }
+
+  // ── 终局篇 F1：候潮献证（原初之潮·潮归其位）──────────────────
+  // 潮心祭坛右键：三潮之证齐（风暴之核/哀潮之泪/雨潮残页 各×1）→ 消耗并置换
+  // 原初祭坛（setBlock 进账本），进入候潮态——finalePrimordial 记祭坛坐标
+  //（F2 四界同潮演出的时间窗锚点；方块 id 本身即持久态，坐标位随存档/换维透传）。
+  // 未集齐或已候潮 → 照旧浮现复潮章（不变量 6：复潮行为不回退）。
+  // LAN：方块置换走账本天然一致；候潮 room flag 广播随 F3 听潮仪式接入。
+  _tryPrimordialOffering(block) {
+    if (!this.world.finalePrimordial) {
+      const need = [['storm_core', 1], ['mourn_tear', 1], ['page_rain', 1]];
+      const hasAll = need.every(([n, c]) => {
+        let have = 0;
+        for (const s of this.inventory.slots) if (s && s.name === n) have += s.count;
+        return have >= c;
+      });
+      if (hasAll) {
+        need.forEach(([n, c]) => this.inventory.removeItems(n, c));
+        this.hotbar.update();
+        this.world.setBlock(block.x, block.y, block.z, BlockRegistry.getId('primordial_altar'));
+        this.world.finalePrimordial = { x: block.x, y: block.y, z: block.z };
+        if (this.particles) {
+          const altarDef = BlockRegistry.getByName('primordial_altar');
+          if (altarDef) this.particles.burstBlockBreak(block.x + 0.5, block.y + 1.5, block.z + 0.5, altarDef, this.world);
+        }
+        // 候潮章浮现（复潮碑文浮现同款交互；联机提示通道 chatBox 由碑文统一替代）
+        this.steleScreen.open(block.x, block.y, block.z, 'tide_waiting');
+        return;
+      }
     }
     this.steleScreen.open(block.x, block.y, block.z, 'renewal');
   }
@@ -3132,6 +3164,7 @@ export class Game {
       dimension: dim,
       dimensionSpawn: !hasPos, // 传送门落点带坐标；否则忽略坐标落到目标维度出生点
       dragonDefeated: !!this.world.dragonDefeated, // 击败标记跨维透传（换维重建不丢）
+      finalePrimordial: this.world.finalePrimordial || null, // 候潮状态跨维透传（终局篇 F1：换维重建不丢）
       aetherDusk: !!this.aetherDusk, // 天域复潮状态跨维透传（批次 D：换维重建不丢）
       player: playerData,
       inventory: this.inventory.serialize(),

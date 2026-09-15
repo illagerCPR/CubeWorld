@@ -151,6 +151,15 @@ else
     exit 1
 fi
 
+# 终局篇 F1 候潮基石（原初祭坛/原初纹章注册、龙蛋 lore、i18n 盲区键、接线绊线）
+echo "=== endgame-content ==="
+if node tests/endgame-content.mjs; then
+    echo "endgame-content: OK"
+else
+    echo "endgame-content: FAILED"
+    exit 1
+fi
+
 # 末影龙 Boss 回归（纯 node：类型注册/柱顶水晶/DragonAI 状态机/击败链路/末地门控）
 echo "=== end-dragon ==="
 if node tests/end-dragon.mjs; then

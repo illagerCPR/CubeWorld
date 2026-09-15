@@ -395,4 +395,15 @@ export const es = {
   "扣上就再没有缝的壳，摔不碎，也撬不开。": "Un caparazón que se cierra sin costura: no se rompe ni se puede forzar.",
   "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "El morral del rebuscador — su regla: lo recogido va primero al caparazón propio, y solo después al almacén.",
   "拾遗者石环": "El Anillo de los rebuscadores",
+  // ── 终局篇 F1：候潮基石 ──
+  "「风潮、坠潮、雨潮——三枚旧心跳在掌心合成了一声。」": "«La marea del viento, la marea de la caída, la marea de la lluvia: tres viejos latidos laten como uno en tu palma.»",
+  "「无潮的岸边，你听见了它：海还没有名字的时候，原初之潮就是这样响的。」": "«En la orilla sin mareas lo oíste: así sonaba la Marea Primordial, cuando el mar aún no tenía nombre.»",
+  "「潮不会回来。但世界记起了自己曾经是一整片海。」": "«La marea no volverá. Pero el mundo recordó que alguna vez fue un solo mar entero.»",
+  "王从滩涂尽头衔来的、涨潮之前的东西。": "La cosa que el rey trajo en el hocico desde el confín de las marismas: de antes de la marea.",
+  "它一直被守在潮的出生地——守着它的人，从不去解释为什么。": "Siempre se ha guardado donde nació la marea, y su guardián jamás ha explicado por qué.",
+  // ── 终局篇 F1：候潮章 ──
+  "候潮": "Espera de la marea",
+  "祭坛饮下了三枚旧心跳。原初之潮在极远处翻了身。": "El altar bebió los tres viejos latidos. Muy lejos, la Marea Primordial se removió.",
+  "无潮的岸边听不见的话，在这里听见了——海还没有忘。": "Lo que no se oye en la orilla sin mareas, aquí se oye: el mar no ha olvidado.",
+  "现在，去潮的出生地。滩涂尽头有一块碑，碑上的字断在最后一刻——去把它听完。": "Ahora ve a donde nació la marea. Al confín de las marismas hay una estela cuyo texto quedó cortado en la última palabra: ve y escúchala completa.",
 };

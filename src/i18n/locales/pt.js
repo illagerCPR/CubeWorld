@@ -395,4 +395,15 @@ export const pt = {
   "扣上就再没有缝的壳，摔不碎，也撬不开。": "Uma concha que fecha sem costura: não se parte nem se pode forçar.",
   "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "O alforje do colhedor — a regra deles: o que se apanha vai primeiro para a própria concha, e só depois para o depósito.",
   "拾遗者石环": "O Anel dos colhedores",
+  // ── 终局篇 F1：候潮基石 ──
+  "「风潮、坠潮、雨潮——三枚旧心跳在掌心合成了一声。」": "«A maré do vento, a maré da queda, a maré da chuva — três batidos antigos batem como um na tua palma.»",
+  "「无潮的岸边，你听见了它：海还没有名字的时候，原初之潮就是这样响的。」": "«Na margem sem marés, ouviste-o: assim soava a Maré Primordial, quando o mar ainda não tinha nome.»",
+  "「潮不会回来。但世界记起了自己曾经是一整片海。」": "«A maré não voltará. Mas o mundo lembrou-se de que já foi um só mar inteiro.»",
+  "王从滩涂尽头衔来的、涨潮之前的东西。": "A coisa que o rei trouxe na boca do confim das lodoas — de antes da maré.",
+  "它一直被守在潮的出生地——守着它的人，从不去解释为什么。": "Sempre foi guardado onde a maré nasceu — e o seu guardião nunca explicou porquê.",
+  // ── 终局篇 F1：候潮章 ──
+  "候潮": "Espera da maré",
+  "祭坛饮下了三枚旧心跳。原初之潮在极远处翻了身。": "O altar bebeu os três batidos antigos. Bem longe, a Maré Primordial revirou-se.",
+  "无潮的岸边听不见的话，在这里听见了——海还没有忘。": "O que não se ouve na margem sem marés, aqui se ouve — o mar não esqueceu.",
+  "现在，去潮的出生地。滩涂尽头有一块碑，碑上的字断在最后一刻——去把它听完。": "Agora vai aonde a maré nasceu. No confim das lodoas ergue-se uma estela cujas palavras se interromperam na última linha — vai ouvi-la até ao fim.",
 };

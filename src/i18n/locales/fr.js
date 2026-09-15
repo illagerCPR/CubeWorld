@@ -395,4 +395,15 @@ export const fr = {
   "扣上就再没有缝的壳，摔不碎，也撬不开。": "Une coque qui se referme sans laisser de couture — elle ne se brise pas et ne s’ouvre pas de force.",
   "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "Le sac du glaneur — leur règle : ce qui est ramassé va d’abord dans sa propre coque, et seulement ensuite au magasin.",
   "拾遗者石环": "L’Anneau des glaneurs",
+  // ── 终局篇 F1：候潮基石 ──
+  "「风潮、坠潮、雨潮——三枚旧心跳在掌心合成了一声。」": "« Marée du vent, marée des abysses, marée de pluie — trois vieux battements de cœur n’en font plus qu’un dans votre paume. »",
+  "「无潮的岸边，你听见了它：海还没有名字的时候，原初之潮就是这样响的。」": "« Sur le rivage sans marée, tu l’as entendue : voilà comment sonnait la Marée primordiale, quand la mer n’avait pas encore de nom. »",
+  "「潮不会回来。但世界记起了自己曾经是一整片海。」": "« La marée ne reviendra pas. Mais le monde s’est souvenu qu’il fut jadis une seule et même mer. »",
+  "王从滩涂尽头衔来的、涨潮之前的东西。": "La chose que le roi rapporta dans sa gueule, du bout des vasières — d’avant la marée.",
+  "它一直被守在潮的出生地——守着它的人，从不去解释为什么。": "Elle a toujours été gardée là où la marée est née — et son gardien n’a jamais expliqué pourquoi.",
+  // ── 终局篇 F1：候潮章 ──
+  "候潮": "Attente de la marée",
+  "祭坛饮下了三枚旧心跳。原初之潮在极远处翻了身。": "L’autel a bu les trois vieux battements. Très loin, la Marée primordiale s’est retournée.",
+  "无潮的岸边听不见的话，在这里听见了——海还没有忘。": "Ce que le rivage sans marée n’entend pas, ici on l’entend — la mer n’a pas oublié.",
+  "现在，去潮的出生地。滩涂尽头有一块碑，碑上的字断在最后一刻——去把它听完。": "Va maintenant là où la marée est née. Au bout des vasières se dresse une stèle, sa dernière ligne interrompue — va l’écouter jusqu’au bout.",
 };

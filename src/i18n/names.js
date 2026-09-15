@@ -307,5 +307,7 @@ export const NAME_I18N = {
   // ---------- 主世界·雨土纪（世界观批次 W1） ----------
   "moss_stele": ["苔纹石碑","苔紋石碑","Moss Stele","Stèle de mousse","Moosstele","苔石の碑","이끼 비석","مسلة الطحلب","Стела мха","Estela de musgo","Estela de musgo"],
   "end_stele": ["界纹石碑","界紋石碑","Boundary Stele","Stèle du seuil","Grenzstele","境の石碑","경계 비석","مسلة الحدود","Стела рубежа","Estela del umbral","Estela do umbral"],
+  "primordial_altar": ["原初祭坛","原初祭壇","Primordial Altar","Autel primordial","Urzeitaltar","原初の祭壇","원초의 제단","مذبح البدء","Первозданный алтарь","Altar primordial","Altar primordial"],
+  "primordial_emblem": ["原初纹章","原初紋章","Primordial Emblem","Emblème primordial","Urzeitemblem","原初の紋章","원초의 문장","رمز البدء","Первозданная эмблема","Emblema primordial","Emblema primordial"],
   "page_rain": ["雨潮残页","雨潮殘頁","Rainpage","Page de pluie","Regenseite","雨潮の紙片","빗물의 낱장","صفحة المطر","Страница дождя","Página de lluvia","Página de chuva"],
 };
