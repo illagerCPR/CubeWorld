@@ -33,11 +33,14 @@ export class SteleScreen {
     });
   }
 
-  open(x, y, z) {
+  open(x, y, z, chapterIdOverride = null) {
     if (!this.game.world) return;
     this.pos = { x, y, z };
-    const sm = this.game.world.generator && this.game.world.generator.structureManager;
-    const id = sm && sm.steleChapterAt ? sm.steleChapterAt(x, y, z) : null;
+    let id = chapterIdOverride;
+    if (!id) {
+      const sm = this.game.world.generator && this.game.world.generator.structureManager;
+      id = sm && sm.steleChapterAt ? sm.steleChapterAt(x, y, z) : null;
+    }
     this.chapter = (id && STELE_CHAPTERS[id]) || STELE_BLANK;
     this.visible = true;
     this.el.style.display = 'flex';

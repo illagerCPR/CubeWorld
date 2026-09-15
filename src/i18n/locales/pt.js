@@ -321,4 +321,5 @@ export const pt = {
   "天穹之心的碎片，仍在极缓慢地搏动。": "Um fragmento do Coração do Firmamento; ainda late, muito lentamente.",
 
   "该房间已关闭怪物生成，祭坛无视图腾。": "Esta sala tem a aparição de monstros desativada; o altar rejeita o totém.",
+  "祭坛沉默着——集齐三页潮汐残页与三枚心核碎片再来。": "O altar silencia — volta com as três páginas de maré e três fragmentos de coração.",
 };

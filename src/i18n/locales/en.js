@@ -321,4 +321,5 @@ export const en = {
   "天穹之心的碎片，仍在极缓慢地搏动。": "A shard of the Heart of the Firmament; it still beats, ever so slowly.",
 
   "该房间已关闭怪物生成，祭坛无视图腾。": "This room has mob spawning disabled; the altar rejects the totem.",
+  "祭坛沉默着——集齐三页潮汐残页与三枚心核碎片再来。": "The altar is silent — return with the three tide pages and three heart shards.",
 };

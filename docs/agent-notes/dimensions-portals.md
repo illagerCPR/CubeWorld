@@ -99,3 +99,12 @@
 - **死亡掉落零新增**：type.drops（storm_core 1-2 + heart_shard 1）走标准死亡链，**不需要龙败式持久化**（可重复召唤）；远端死亡链 applyRemoteMobAttack/Death 天然覆盖。
 - **测试**：tests/aether-boss.mjs（27 断言：注册/状态机只进不退/双段齐射计数/震地触发/图腾配方）——AI 测试用真实 Mob + stub mobManager，**player stub 必须带 hurt()（AI 近战咬合会调）**；冒烟时 attackMob 的 rayOrigin/rayDir 必须真 Vector3（§16 陷阱）。
 - **冒烟全绿**：祭坛召唤（BossBar 即现）/三阶段推进/风弹在飞/风拽拖近 1.7 格/击杀掉落 storm_core+heart_shard/缓降钳制/测试存档已删。
+
+### 天域复潮批次（批次 D，2026-09-15 交付）—— 终局与永昼解除
+
+- **复潮仪式**：恒昼祭坛右键（无图腾分支）→ 校验材料（page_rising/page_marrow/page_sunder 各 1 + heart_shard 3，背包线性计数）→ 全扣 → 祭坛 setBlock 置换 **tide_altar 潮心祭坛**（走账本=存档/联机天然一致）→ `applyAetherDusk(true)` → 第九章「复潮」碑文自动浮现（SteleScreen.open 第 4 参 chapterIdOverride）。
+- **档案运行时覆盖（§5.4 不变量 1/2/3）**：`dimensions.js setAetherDuskProfile(on)`——on=true：fixedColor→null（昼夜锚点生效）/ polarDay→false / skyLightLevel→null（Sky.getLightLevel 对 null 走真实昼夜，uDayLight 跟随）；on=false：一键还原永昼（回滚路径）。**Sky.applyDimensionProfile 是一次性快照**——改 dimDef 后必须重跑它，且 start() 中须在 applyDimensionProfile 之前调用。
+- **状态持久化三路**：①单机存档 `data.aetherDusk`（SaveSystem save/load）；②换维透传 `_composeSwitchLoadData` 加字段；③MP `AETHER_STATE` 消息（protocol/room/NetworkManager）——服务器权威单向开关（只进不退）、broadcast 全房间、room.aetherDusk 进 roomSnapshot 落盘 + WORLD_INFO 三处下发（首次/换房 restart/重连）。**start() 恢复顺序陷阱**：MP 下 WORLD_INFO 先于 start() 到达（已写 game.aetherDusk），start 里 loadData 无字段时保留现值、有字段才覆盖。
+- **夜表**：pickAetherSpawnV2 加 isNight 第 3 参（永昼期恒 false）——夜表守卫/岚隼加成（草地岚隼 18%/水晶守卫 50%/银霜岚隼 45% 上限段）；云绒兽被动组白天限定=天然夜间缩群。复潮后 sky.time 锚定 0.32（玩家亲眼看到第一次日落）。
+- **Boss 清除豁免（顺手修历史缺陷）**：despawn 条件加 `!mob.type.boss`——80 格静态清除半径曾会把走远的守誓巨像/龙/凋灵直接抹掉（Boss 只经死亡链移除）。
+- **冒烟全绿**：仪式全链路（材料扣/置换/档案三项/时间锚定/第九章）/真实昼夜（0.78 夜 light 0.0、0.5 昼 1.0）/存档往返（duskRestored+polarDay false+潮心祭坛在）/MP 三路状态字段就位；测试存档已删。

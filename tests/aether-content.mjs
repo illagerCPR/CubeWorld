@@ -13,6 +13,7 @@ import { ItemSVGDefinitions } from '../src/items/ItemDefs.js';
 import { getItemCategory } from '../src/core/ItemCategories.js';
 import { STELE_CHAPTERS, STELE_BLANK } from '../src/world/steles.js';
 import { StructureManager } from '../src/world/structures/StructureManager.js';
+import { setAetherDuskProfile, DIMENSIONS } from '../src/core/dimensions.js';
 
 let passed = 0;
 function ok(cond, msg) {
@@ -29,6 +30,7 @@ const BLOCKS = {
   aether_altar: { displayName: '恒昼祭坛', light: 13, hardness: -1 },
   wind_current: { displayName: '气流', solid: false, transparent: true },
   gale_block: { displayName: '风阵块', light: 0 },
+  tide_altar: { displayName: '潮心祭坛', light: 13, hardness: -1 },
 };
 for (const [name, want] of Object.entries(BLOCKS)) {
   const b = BlockRegistry.getByName(name);
@@ -107,6 +109,18 @@ ok(sm.steleChapterAt(1, 2, 3) === 'prologue', '键格式 "x,y,z" 一致');
 const beaconId = BlockRegistry.getId('beacon');
 for (const name of [...Object.keys(BLOCKS)]) {
   ok(BlockRegistry.getId(name) > beaconId, `id 追加纪律: ${name} (${BlockRegistry.getId(name)}) > beacon (${beaconId})`);
+}
+
+// ── ⑦ 复潮档案切换（批次 D，§5.4 不变量 1/2/3）──
+{
+  setAetherDuskProfile(true);
+  const d = DIMENSIONS.aether;
+  ok(d.sky.fixedColor === null, '复潮：fixedColor 置 null（昼夜锚点生效）');
+  ok(d.sky.polarDay === false, '复潮：polarDay 关闭（太阳正常升落）');
+  ok(d.light.skyLightLevel === null, '复潮：skyLightLevel 置 null（体素光跟随昼夜）');
+  setAetherDuskProfile(false);
+  ok(Array.isArray(d.sky.fixedColor) && d.sky.polarDay === true && d.light.skyLightLevel === 1.0,
+    '回滚：档案一键还原永昼');
 }
 
 console.log(`aether-content: OK (${passed} assertions)`);

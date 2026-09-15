@@ -230,7 +230,8 @@
 - 测试：`tests/aether-boss.mjs`（状态机场景/召唤门控/击败幂等/掉落确定性）。
 - 平衡：HP/伤害先按 §3.4 定值，playtest 后一批内可调（不跨批）。
 
-### 批次 D：复潮（终局与打磨，含不变量清单）
+### 批次 D：复潮（终局与打磨，含不变量清单）✅ 已交付（2026-09-15）
+> 四批全部交付完毕 → 随后按 §4 发布节奏执行 **Build 14 统一发布**（批次 D 发布提交内 bump BUILD）。
 - 复潮仪式：3 残页 + 心核碎片×3 献祭 → 祭坛置换潮心祭坛（setBlock 进账本 = 存档/联机天然一致）→ 天域状态切换。
 - **永昼解除的实现路径与不变量清单**（详见 §5.4）：dimDef 运行时覆盖档案（`aetherDusk`），涉及 skyLightLevel / fixedColor / polarDay / InfoBar 时间行 / `pickAetherSpawnV2` 夜间分支 / 守卫与风灵 `burningInDay:false`（已安全）/ 生成表昼夜判定六处，逐项断言。
 - 联机：维度状态新增 S2C 同步（`dimension_state`，服务器权威 + store 落盘），两端 Sky 档案一致。

@@ -244,6 +244,10 @@ export class NetworkManager {
         if (msg.settings && typeof msg.settings === 'object') {
           this.roomSettings = { pvp: msg.settings.pvp !== false, mobs: msg.settings.mobs !== false };
         }
+        // 天域批次 D：复潮状态随 world_info 下发（首次进入/换房/重连统一应用）
+        if (this.game && typeof this.game.applyAetherDusk === 'function') {
+          this.game.applyAetherDusk(!!msg.aetherDusk);
+        }
         if (this._ready && this.game && this.game.world && this.game.running) {
           if (msg.restart) {
             // 阶段5：世界内换房 / 重建世界 —— 重启本地世界（保持连接），期间缓存远端数据
@@ -337,6 +341,12 @@ export class NetworkManager {
         // 天域批次 C：守誓巨像震地回执——本地结算（伤害/击退各端自算）
         if (msg.id !== this.selfId && this.game.world) {
           this.game.spawnRemoteColossusSlam(msg.x, msg.y, msg.z);
+        }
+        break;
+      case MSG.AETHER_STATE:
+        // 天域批次 D：复潮状态广播（服务器权威单向开关）——全端应用档案覆盖
+        if (this.game && typeof this.game.applyAetherDusk === 'function') {
+          this.game.applyAetherDusk(!!msg.dusk);
         }
         break;
       case MSG.CONTAINER_SET: {
@@ -509,6 +519,11 @@ export class NetworkManager {
   // 天域批次 C：守誓巨像震地上报（事件式——各端本地结算自己）
   sendColossusSlam(pos) {
     this._send(MSG.COLOSSUS_SLAM, { x: pos.x, y: pos.y, z: pos.z });
+  }
+
+  // 天域批次 D：复潮状态上报（服务器权威单向开关——广播全房间 + 落盘）
+  sendAetherState(dusk) {
+    this._send(MSG.AETHER_STATE, { dusk: !!dusk });
   }
 
   // 红石源状态（lever/button），低频广播让各端 poweredBlocks 对齐

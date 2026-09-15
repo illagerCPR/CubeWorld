@@ -68,7 +68,7 @@ ok(MobTypes.villager.passive === true, '村民 passive 标记仍在（威胁过�
   const tally = (biome, nearTemple, n = 3000) => {
     const c = {};
     for (let i = 0; i < n; i++) {
-      const t = pickAetherSpawnV2(biome, nearTemple, rand);
+      const t = pickAetherSpawnV2(biome, nearTemple, false, rand);
       c[t] = (c[t] || 0) + 1;
     }
     return c;
@@ -98,9 +98,27 @@ ok(MobTypes.villager.passive === true, '村民 passive 标记仍在（威胁过�
   const rand = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
   for (const biome of ['verdant', 'crystal', 'frost', 'autumn', null]) {
     for (let i = 0; i < 50; i++) {
-      const t = pickAetherSpawnV2(biome, false, rand);
+      const t = pickAetherSpawnV2(biome, false, false, rand);
       ok(!!MobTypes[t], `群系 ${biome} 生成类型 ${t} 已注册`);
+      const tN = pickAetherSpawnV2(biome, false, true, rand); // 批次 D：夜表也全部合法
+      ok(!!MobTypes[tN], `群系 ${biome} 夜间类型 ${tN} 已注册`);
     }
+  }
+  // 夜表威胁加成（批次 D）：夜晚岚隼/守卫显著高于白天
+  {
+    let s1 = 13579;
+    const r1 = () => { s1 = (Math.imul(s1, 1664525) + 1013904223) >>> 0; return s1 / 4294967296; };
+    const tallyN = (biome, n = 2000) => {
+      const c = {};
+      for (let i = 0; i < n; i++) { const t = pickAetherSpawnV2(biome, false, true, r1); c[t] = (c[t] || 0) + 1; }
+      return c;
+    };
+    const night = tallyN('verdant');
+    ok((night.gale_hawk || 0) / 2000 > 0.14 && (night.gale_hawk || 0) / 2000 < 0.22,
+      `夜表岚隼加成 ~18%（实测 ${((night.gale_hawk || 0) / 2000 * 100).toFixed(1)}%）`);
+    const nightCrystal = tallyN('crystal');
+    ok((nightCrystal.aether_guard || 0) / 2000 > 0.42 && (nightCrystal.aether_guard || 0) / 2000 < 0.58,
+      `夜表水晶守卫加成 ~50%（实测 ${((nightCrystal.aether_guard || 0) / 2000 * 100).toFixed(1)}%）`);
   }
 }
 

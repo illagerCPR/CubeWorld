@@ -49,6 +49,9 @@ export const MSG = {
   // 守誓巨像震地（天域批次 C，事件式：只广播震心坐标；伤害/击退由各端本地结算）
   COLOSSUS_SLAM: 'colossus_slam',
 
+  // 天域复潮状态（天域批次 D，服务器权威：随 welcome/WORLD_INFO 下发 + store 落盘）
+  AETHER_STATE: 'aether_state',
+
   // 玩家
   PLAYER_STATE: 'player_state',
   PLAYER_FULL: 'player_full',

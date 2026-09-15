@@ -36,26 +36,37 @@ export function pickNetherSpawn(biome, inFortress, rand) {
   return rand() < 0.15 ? 'wither_skeleton' : 'zombified_piglin';
 }
 
-// 天域自然生成表 V2（批次 B，纯函数便于单测）：永昼白天表——风灵全群系氛围底色；
+// 天域自然生成表 V2（批次 B/D，纯函数便于单测）：永昼白天表——风灵全群系氛围底色；
 // 水晶秘境 = 守卫 + 潮鸣（星髓看守）；银霜/翡翠/秋色 = 低频岚隼；神殿周边守卫主导（守箱巡逻）。
-// 云绒兽走被动群生成分支（trySpawn aether 草地组），不进敌对表。
-export function pickAetherSpawnV2(biome, nearTemple, rand) {
-  if (nearTemple) return rand() < 0.55 ? 'aether_guard' : 'wisp';
+// 批次 D：复潮（dusk）后夜晚表——守卫/岚隼加成（长夜归还，威胁随黑暗回归）。
+// 云绒兽走被动群生成分支（trySpawn aether 草地组，白天限定=天然夜间缩群），不进敌对表。
+export function pickAetherSpawnV2(biome, nearTemple, isNight, rand) {
+  if (nearTemple) return rand() < (isNight ? 0.70 : 0.55) ? 'aether_guard' : 'wisp';
   if (biome === 'crystal') {
     const r = rand();
+    if (isNight) {
+      if (r < 0.50) return 'aether_guard';
+      if (r < 0.72) return 'tide_echo';
+      return 'wisp';
+    }
     if (r < 0.40) return 'aether_guard';
     if (r < 0.70) return 'tide_echo';
     return 'wisp';
   }
   if (biome === 'frost') {
     const r = rand();
+    if (isNight) {
+      if (r < 0.20) return 'aether_guard';
+      if (r < 0.45) return 'gale_hawk';
+      return 'wisp';
+    }
     if (r < 0.10) return 'aether_guard';
     if (r < 0.22) return 'gale_hawk';
     return 'wisp';
   }
   const r = rand();
-  if (r < 0.08) return 'gale_hawk';
-  return 'wisp';
+  if (isNight) return r < 0.18 ? 'gale_hawk' : 'wisp';
+  return r < 0.08 ? 'gale_hawk' : 'wisp';
 }
 
 // 皮肤 atlas 各 face 的 col 索引映射（96×64 atlas：col 4=top，col 5=bottom 独立 cell，
@@ -268,7 +279,8 @@ export class MobManager {
     } else if (this.world.dimension === 'aether') {
       const gen = this.world.generator;
       const biome = typeof gen.getBiome === 'function' ? gen.getBiome(x, z) : null;
-      typeName = pickAetherSpawnV2(biome, !!this._aetherTempleAt(x, z), Math.random);
+      // 批次 D：复潮后夜晚表（isNight 由调用方传入——永昼期恒 false）
+      typeName = pickAetherSpawnV2(biome, !!this._aetherTempleAt(x, z), !!isNight, Math.random);
     } else {
       const choices = isNight
         ? (Math.random() < 0.1 ? ['enderman'] : ['zombie', 'zombie', 'skeleton', 'creeper', 'spider'])
@@ -794,9 +806,10 @@ export class MobManager {
         }
         mob.dyingAnim = { progress: 0, total: DEATH_ANIM_DURATION };
         if (mob.healthBarSprite) mob.healthBarSprite.visible = false;
-      } else if (dist > DESPAWN_DISTANCE && mob.typeName !== 'villager') {
+      } else if (dist > DESPAWN_DISTANCE && mob.typeName !== 'villager' && !mob.type.boss) {
         // 被卸载而非死亡：直接清理（村民不在此清理——村庄绑定生物由 updateVillageSpawns
-        // 的随村清扫管理，否则逃敌被拖远会掏空村庄）
+        // 的随村清扫管理，否则逃敌被拖远会掏空村庄；批次 C：Boss 免清除——80 格静态清除
+        // 半径会把走远找玩家的守誓巨像/龙/凋灵直接抹掉，Boss 只经死亡链移除）
         this._removeMobResources(mob);
         this.mobs.splice(i, 1);
       }

@@ -83,6 +83,7 @@ const MAP = {
   // ---------- 天域叙事基石（批次 A） ----------
   star_marrow_ore: 'nature', star_marrow_block: 'building', cloud_wool: 'building',
   wind_stele: 'functional', aether_altar: 'functional', wind_current: 'functional', gale_block: 'functional',
+  tide_altar: 'functional',
   cloud_fluff: 'materials', star_marrow: 'materials', storm_core: 'materials',
   page_rising: 'misc', page_marrow: 'misc', page_sunder: 'misc',
   storm_totem: 'misc', heart_shard: 'misc',

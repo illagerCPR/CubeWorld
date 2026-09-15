@@ -49,7 +49,7 @@ import { Mob } from '../entity/Mob.js';
 import { VoxelLightUniforms, GfxState, ShadowUniforms } from '../render/VoxelLight.js';
 import { RedstoneSystem } from '../core/RedstoneSystem.js';
 import { SaveSystem } from '../core/SaveSystem.js';
-import { getDimension } from '../core/dimensions.js';
+import { getDimension, setAetherDuskProfile } from '../core/dimensions.js';
 import { DEFAULT_BIOME_SCALE, safeBiomeScale } from '../world/biomes.js';
 import { FirstPersonHand } from '../render/FirstPersonHand.js';
 import { ParticleSystem } from '../render/ParticleSystem.js';
@@ -115,6 +115,7 @@ export class Game {
     this.deathScreen = null;
     this.commandPanel = null;
     this.cheatsEnabled = false;
+    this.aetherDusk = false; // 天域批次 D：复潮状态（存档/联机恢复，档案覆盖见 start）
     this.biomeScale = DEFAULT_BIOME_SCALE; // 生物群系规模档位（新建走参数/联机消息，载入走存档）
     this.paused = false;
     // 阶段10：第一人称手持物（跨存档共享相机挂点，start 时重置手持内容）
@@ -280,6 +281,15 @@ export class Game {
     // B-①：主世界注入地形 Worker（其余维度生成器类不同，走同步路径）
     if (dimension === 'overworld') this.world.terrainWorker = new TerrainWorkerClient(2);
     this.world.dragonDefeated = !!(loadData && loadData.dragonDefeated); // 末影龙击败标记（存档恢复）
+    // 天域复潮状态（批次 D）：存档恢复；MP 下 WORLD_INFO 可能先于 start 到达
+    //（已写入 this.aetherDusk）——loadData 无字段时保留现值，有字段（单机存档/换维合成）以其为准
+    this.aetherDusk = !!(loadData && loadData.aetherDusk !== undefined
+      ? loadData.aetherDusk
+      : this.aetherDusk);
+    if (dimension === 'aether') {
+      setAetherDuskProfile(this.aetherDusk);
+      this.sky.time = this.aetherDusk ? 0.32 : 0.35; // 复潮后从上午起（能亲眼看到第一次日落）
+    }
     if (this.sky) this.sky.applyDimensionProfile(this.world.dimDef);
     // L4-B 太阳阴影：shadow 相机挂在 sunLight 上（Sky 跨存档共享，幂等），target 需入场景
     if (this.renderer.sunShadow) this.renderer.sunShadow.init(this.sky.sunLight, this.renderer.scene);
@@ -1667,6 +1677,7 @@ export class Game {
           return;
         }
         // 天域批次 C：恒昼祭坛——持风暴图腾右键召唤守誓巨像（可重复；房间 mobs:false 拒绝）
+        // 天域批次 D：无图腾右键 → 尝试复潮仪式
         if (targetDef && targetDef.name === 'aether_altar' && !this.player.spectator) {
           if (sel && sel.name === 'storm_totem') {
             if (this.networkMode && this.net && this.net.roomSettings && this.net.roomSettings.mobs === false) {
@@ -1683,7 +1694,15 @@ export class Game {
                 if (marrowDef) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y + 2, hit.block.z + 0.5, marrowDef, this.world);
               }
             }
+          } else {
+            this._tryTideRitual(hit.block); // 批次 D：无图腾 → 尝试复潮仪式
           }
+          this.controls.mouseRight = false;
+          return;
+        }
+        // 天域批次 D：潮心祭坛——浮现第九章碑文（复潮）
+        if (targetDef && targetDef.name === 'tide_altar' && this.steleScreen && !this.player.spectator) {
+          this.steleScreen.open(hit.block.x, hit.block.y, hit.block.z, 'renewal');
           this.controls.mouseRight = false;
           return;
         }
@@ -2104,6 +2123,47 @@ export class Game {
       p.velocity.x += dir.x * k * dt * 6;
       p.velocity.z += dir.z * k * dt * 6;
       p.velocity.y += 2.5 * dt; // 微抬升——拖向岛缘的真实威胁
+    }
+  }
+
+  // ── 天域复潮仪式（批次 D）────────────────────────────────────
+  // 献祭三页潮汐残页 + 三枚心核碎片 → 恒昼祭坛置换潮心祭坛（setBlock 进账本）→ 永昼解除
+  _tryTideRitual(block) {
+    if (this.aetherDusk) return; // 已复潮
+    const inv = this.inventory;
+    const need = [['page_rising', 1], ['page_marrow', 1], ['page_sunder', 1], ['heart_shard', 3]];
+    const hasAll = need.every(([n, c]) => {
+      let have = 0;
+      for (const s of inv.slots) if (s && s.name === n) have += s.count;
+      return have >= c;
+    });
+    if (!hasAll) {
+      if (this.chatBox) this.chatBox.add(t('祭坛沉默着——集齐三页潮汐残页与三枚心核碎片再来。'), '#cde');
+      return;
+    }
+    need.forEach(([n, c]) => inv.removeItems(n, c));
+    this.hotbar.update();
+    // 祭坛置换：潮心祭坛（走 setBlock → 账本 + 光照 + 联机同步全自动）
+    this.world.setBlock(block.x, block.y, block.z, BlockRegistry.getId('tide_altar'));
+    this.applyAetherDusk(true);
+    if (this.networkMode && this.net) this.net.sendAetherState(true);
+    // 仪式演出：粒子潮涌 + 第九章碑文自动浮现
+    if (this.particles) {
+      const tideDef = BlockRegistry.getByName('tide_altar');
+      if (tideDef) this.particles.burstBlockBreak(block.x + 0.5, block.y + 1.5, block.z + 0.5, tideDef, this.world);
+    }
+    this.steleScreen.open(block.x, block.y, block.z, 'renewal');
+  }
+
+  // 复潮状态切换（§5.4 不变量 1/2/3）：档案覆盖 + Sky 快照重跑 + 时间锚定上午
+  applyAetherDusk(on) {
+    this.aetherDusk = !!on;
+    if (this.world && this.world.dimension === 'aether') {
+      setAetherDuskProfile(this.aetherDusk);
+      if (this.sky) {
+        this.sky.applyDimensionProfile(this.world.dimDef);
+        if (this.aetherDusk) this.sky.time = 0.32; // 从上午起——玩家将亲眼看到天域第一次日落
+      }
     }
   }
 
@@ -3071,6 +3131,7 @@ export class Game {
       dimension: dim,
       dimensionSpawn: !hasPos, // 传送门落点带坐标；否则忽略坐标落到目标维度出生点
       dragonDefeated: !!this.world.dragonDefeated, // 击败标记跨维透传（换维重建不丢）
+      aetherDusk: !!this.aetherDusk, // 天域复潮状态跨维透传（批次 D：换维重建不丢）
       player: playerData,
       inventory: this.inventory.serialize(),
       dimensionBlocks: dimBuckets,

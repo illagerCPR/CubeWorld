@@ -104,6 +104,7 @@ export class Room {
     this.seed = null;
     this.biomeScale = null; // 群系规模档位：首次开房固定（与 seed 同语义），null=未定（回提 small）
     this.time = 0.35;
+    this.aetherDusk = false; // 天域复潮状态（批次 D：单向开关，快照落盘 + welcome 下发）
     this.hostId = null;
     this.nextId = 1;
     // Idea-3C：玩家档案（房间→昵称 键；index.mjs 从磁盘装入 + 注入 onSaveProfiles 落盘回调）
@@ -140,6 +141,7 @@ export class Room {
     this.seed = safeInt(snap.seed, this.seed);
     this.biomeScale = snap.biomeScale != null ? safeBiomeScale(snap.biomeScale) : this.biomeScale;
     this.time = safeNum(snap.time, this.time);
+    this.aetherDusk = !!snap.aetherDusk; // 天域复潮状态（批次 D，旧快照无字段回落 false）
     this.nextDropId = Math.max(1, safeInt(snap.nextDropId, 1));
     this.nextMobId = Math.max(1, safeInt(snap.nextMobId, 1));
     this.dimensionBlocks = new Map();
@@ -338,7 +340,7 @@ export class Room {
     this.hostId = player.id;
     this.sendTo(player, MSG.ROOM_CREATED, { roomId: this.name });
     // restart=true 表示世界内换房到新房间：客户端需重启本地世界（新 seed）
-    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: player.mode, time: this.time, hostId: this.hostId, room: this.name, restart: !!msg.restart, biomeScale: this.biomeScale, settings: this.settings() });
+    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: player.mode, time: this.time, hostId: this.hostId, room: this.name, restart: !!msg.restart, biomeScale: this.biomeScale, aetherDusk: !!this.aetherDusk, settings: this.settings() });
     this.broadcast(MSG.PLAYER_JOIN, this.joinInfo(player), player.id);
     this.save();
     console.log(`[+] ${player.name} 创建房间「${this.name}」seed=${this.seed} (host)`);
@@ -353,7 +355,7 @@ export class Room {
     }
     // 无 host 时（如房间从磁盘恢复且暂无玩家在线）首个加入者接管 host
     if (this.hostId === null || !this.players.has(this.hostId)) this.hostId = player.id;
-    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId, room: this.name, restart: !!opts.restart, biomeScale: this.biomeScale, settings: this.settings() });
+    this.sendTo(player, MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId, room: this.name, restart: !!opts.restart, biomeScale: this.biomeScale, aetherDusk: !!this.aetherDusk, settings: this.settings() });
     // 回放现存玩家：加入者立即可见房间内已有玩家（阶段10：附带选中槽位/手持物/完整快捷栏）
     for (const p of this.players.values()) {
       if (p.id === player.id) continue;
@@ -422,7 +424,7 @@ export class Room {
     this.time = 0.35;
     this.nextMobId = 1;
     this.nextDropId = 1;
-    this.broadcast(MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId, room: this.name, restart: true, biomeScale: this.biomeScale, settings: this.settings() });
+    this.broadcast(MSG.WORLD_INFO, { seed: this.seed, mode: this.modeOfHost(), time: this.time, hostId: this.hostId, room: this.name, restart: true, biomeScale: this.biomeScale, aetherDusk: !!this.aetherDusk, settings: this.settings() });
     for (const p of this.players.values()) {
       this.broadcast(MSG.PLAYER_JOIN, this.joinInfo(p), p.id);
     }
@@ -444,6 +446,7 @@ export class Room {
       case MSG.ARROW_SHOT: this.onArrowShot(player, msg); break;
       case MSG.WITHER_SKULL: this.onWitherSkull(player, msg); break;
       case MSG.COLOSSUS_SLAM: this.onColossusSlam(player, msg); break;
+      case MSG.AETHER_STATE: this.onAetherState(player, msg); break;
       case MSG.PLAYER_STATE: this.onPlayerState(player, msg); break;
       case MSG.PLAYER_FULL: this.onPlayerFull(player, msg); break;
       case MSG.ATTACK_PLAYER: this.onAttack(player, msg); break;
@@ -623,6 +626,14 @@ export class Room {
     if (!raw.every((v) => typeof v === 'number' && Number.isFinite(v))) return;
     const [x, y, z] = raw;
     this.broadcastDim(MSG.COLOSSUS_SLAM, { id: player.id, x, y, z }, player.dim, player.id);
+  }
+
+  // 天域复潮状态（批次 D）：服务器权威单向开关（只进不退）；广播全房间 + 落盘
+  onAetherState(player, msg) {
+    if (msg.dusk !== true || this.aetherDusk) return;
+    this.aetherDusk = true;
+    this.broadcast(MSG.AETHER_STATE, { dusk: true });
+    this.save(); // 状态进快照（onSave → store.saveRoom），重启恢复
   }
 
   onPlayerState(player, msg) {

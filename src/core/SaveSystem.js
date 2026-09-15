@@ -26,6 +26,7 @@ export class SaveSystem {
         gamemode: game.player.gamemode,
         cheatsEnabled: game.cheatsEnabled || false,
         biomeScale: game.biomeScale || 'small', // 群系规模档位（旧存档无字段 → 读侧回落 small）
+        aetherDusk: !!game.aetherDusk, // 天域批次 D：复潮状态（旧存档无字段 → 读侧回落 false）
         player: {
           x: game.player.position.x,
           y: game.player.position.y,

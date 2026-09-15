@@ -66,3 +66,18 @@ export const DIMENSIONS = {
 export function getDimension(id) {
   return Object.prototype.hasOwnProperty.call(DIMENSIONS, id) ? DIMENSIONS[id] : null;
 }
+
+// 天域复潮档案（批次 D）：复潮仪式后运行时覆盖/恢复 aether 档案（§5.4 不变量清单）。
+// on=true  → 永昼解除：fixedColor 置 null（昼夜锚点生效）、polarDay 关（太阳正常升落）、
+//            skyLightLevel 置 null（体素光跟随真实昼夜）。
+// on=false → 恢复永昼（回滚路径：档案一键还原 = 回到未复潮行为）。
+// 调用方须随后重跑 sky.applyDimensionProfile(world.dimDef)（Sky 侧为一次性快照）。
+const AETHER_SKY_ORIGINAL = { fixedColor: [0.45, 0.70, 1.0], polarDay: true, skyLightLevel: 1.0 };
+
+export function setAetherDuskProfile(on) {
+  const def = DIMENSIONS.aether;
+  if (!def) return;
+  def.sky.fixedColor = on ? null : AETHER_SKY_ORIGINAL.fixedColor;
+  def.sky.polarDay = on ? false : AETHER_SKY_ORIGINAL.polarDay;
+  def.light.skyLightLevel = on ? null : AETHER_SKY_ORIGINAL.skyLightLevel;
+}

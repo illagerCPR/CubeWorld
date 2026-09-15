@@ -746,6 +746,7 @@ const BlockCN = {
   chest: '箱子',
   star_marrow_ore: '星髓矿石', star_marrow_block: '星髓块', cloud_wool: '云绒块',
   wind_stele: '风纹石碑', aether_altar: '恒昼祭坛', wind_current: '气流', gale_block: '风阵块',
+  tide_altar: '潮心祭坛',
 };
 
 function reg(name, def, svgs) {
@@ -1601,6 +1602,27 @@ function galeBlockTex(seed) {
   return pixelSvg(px);
 }
 reg('gale_block', { hardness: 1.2, tool: 'pickaxe' }, { gale_block: galeBlockTex(156) });
+
+// 潮心祭坛（批次 D）：复潮仪式后由恒昼祭坛置换而来（setBlock 进账本，存档/联机天然一致）。
+// 右键浮现第九章碑文（复潮）；light 13 兼任照明。
+function tideAltarTex(seed) {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb([148, 168, 186], 0.93 + hash2(x, y, seed) * 0.12); // 蓝灰潮石底
+  }
+  // 中央潮心：青色心形 + 暗描边 + 一弯新月纹（长夜归还）
+  for (let y = 4; y <= 11; y++) for (let x = 4; x <= 11; x++) {
+    const dx = x - 7.5, dy = y - 7.5;
+    if (dx * dx + dy * dy <= 12) px[y * 16 + x] = rgb([96, 214, 196]);
+  }
+  px[6 * 16 + 6] = px[6 * 16 + 9] = px[8 * 16 + 7] = px[8 * 16 + 8] = rgb([222, 255, 248]);
+  px[5 * 16 + 7] = px[5 * 16 + 8] = rgb([222, 255, 248]);
+  for (const [x, y] of [[2, 7], [2, 8], [13, 7], [13, 8], [7, 2], [8, 2], [7, 13], [8, 13]]) {
+    px[y * 16 + x] = rgb([86, 118, 140]);
+  }
+  return pixelSvg(px);
+}
+reg('tide_altar', { light: 13, hardness: -1 }, { tide_altar: tideAltarTex(157) });
 
 export const BlockSVGDefinitions = svgMap;
 
