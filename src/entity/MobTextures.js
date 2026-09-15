@@ -170,6 +170,9 @@ const C = {
   teCrystal: [110, 228, 210], teCrystalD: [64, 158, 142], teTent: [52, 128, 116], teCore: [222, 255, 248], teEye: [255, 255, 255],
   // 守誓巨像（批次 C）：白铠 + 星髓脉络 + 青蓝辉眼
   coArmor: [226, 230, 236], coArmorD: [172, 180, 194], coVein: [96, 232, 210], coEye: [140, 244, 228],
+  // 哭嚎者（世界观批次 N3）：坠潮青蓝独眼 + 暗蓝雾尾 + 烬橙翼缘（火地哀鸣的融合）
+  mhEye: [110, 190, 222], mhEyeD: [70, 132, 168], mhIris: [24, 52, 88], mhTear: [214, 240, 250],
+  mhTail: [58, 92, 118], mhTailD: [40, 64, 88], mhWing: [168, 92, 62], mhWingD: [120, 60, 44],
 };
 
 // === 各怪皮肤 SVG 生成（原版风） ===
@@ -818,6 +821,15 @@ const TIDE_ECHO_PARTS = [
   { name: 'tentBR', row: 3, box: [-0.20, 0.00, -0.20, -0.08, 0.34, -0.08] },
 ];
 
+// 哭嚎者（世界观批次 N3）：独眼浮游者——大眼球 + 两侧烬翼 + 渐细雾尾（坠潮亡魂凝形）
+const MOURN_HOWLER_PARTS = [
+  { name: 'eye',   row: 0, box: [-0.45, 0.60, -0.45, 0.45, 1.40, 0.45] },
+  { name: 'wingL', row: 1, box: [-0.88, 0.85, -0.10, -0.45, 1.25, 0.10] },
+  { name: 'wingR', row: 1, box: [ 0.45, 0.85, -0.10,  0.88, 1.25, 0.10] },
+  { name: 'tail1', row: 2, box: [-0.30, 0.30, -0.30, 0.30, 0.66, 0.30] },
+  { name: 'tail2', row: 3, box: [-0.18, 0.00, -0.18, 0.18, 0.32, 0.18] },
+];
+
 // 守誓巨像（批次 C）：星髓与风暴铸成的巨型卫兵——白铠躯干 + 脉络纹 + 辉眼
 const COLOSSUS_PARTS = [
   { name: 'head',  row: 0, box: [-0.35, 2.55, -0.35,  0.35, 3.15, 0.35] },
@@ -949,6 +961,37 @@ function wispSkinSVG() {
     ...partCells(1, tailBase, { front: tailFront, top: tailBase, bot: tailBase }),
     ...partCells(2, orbBase, { front: orbFront, top: orbTop, bot: orbBase }),
     ...partCells(3, orbBase, { front: orbFront, top: orbTop, bot: orbBase }),
+  ];
+  return buildSkinSVG(cells);
+}
+
+// 哭嚎者（世界观批次 N3）：坠潮青蓝独眼 + 竖瞳泪光 + 暗蓝雾尾 + 烬橙翼膜
+function mournHowlerSkinSVG() {
+  const eyeBase = noisy(C.mhEye, 8, 351);
+  const eyeD = noisy(C.mhEyeD, 6, 352);
+  const tailBase = noisy(C.mhTail, 6, 353);
+  const tailD = noisy(C.mhTailD, 5, 354);
+  const wingBase = noisy(C.mhWing, 7, 355);
+  const irisFront = (x, y) => {
+    // 正面竖瞳：中央竖条深青 + 泪光点（哀鸣的意象）
+    if (x >= 6 && x <= 9 && y >= 3 && y <= 12) return C.mhIris;
+    if (x === 7 && y === 5) return C.mhTear;
+    if (x === 6 && y === 9) return C.mhTear;
+    return null;
+  };
+  const irisSide = (x, y) => {
+    if (y >= 4 && y <= 11 && x >= 6 && x <= 9) return C.mhIris;
+    return null;
+  };
+  const eyeTop = () => C.mhEyeD;
+  const tailFront = (x) => (x % 4 < 2 ? C.mhTailD : null);
+  const wingFront = (x) => (x % 5 < 2 ? C.mhWingD : null);
+
+  const cells = [
+    ...partCells(0, eyeBase, { front: irisFront, back: irisSide, left: irisSide, right: irisSide, top: eyeTop, bot: eyeD }),
+    ...partCells(1, wingBase, { front: wingFront, back: wingFront }),
+    ...partCells(2, tailBase, { front: tailFront, bot: tailD }),
+    ...partCells(3, tailD, { front: tailFront }),
   ];
   return buildSkinSVG(cells);
 }
@@ -1166,6 +1209,7 @@ export function generateMobSkinSVGs() {
     cloud_lamb:        cloudLambSkinSVG(),
     gale_hawk:         galeHawkSkinSVG(),
     tide_echo:         tideEchoSkinSVG(),
+    mourn_howler:      mournHowlerSkinSVG(),
     storm_colossus:    colossusSkinSVG(),
     cow:               cowSkinSVG(),
     sheep:             sheepSkinSVG(),
@@ -1480,6 +1524,27 @@ export const MobTypes = {
     drops: [
       { name: 'star_marrow', min: 0, max: 1, chance: 0.35 },  // 潮之骨头碎屑
       { name: 'glowstone', min: 0, max: 1, chance: 0.3 },
+    ],
+  },
+  // 哭嚎者（世界观批次 N3）：熔岩海低空的哀鸣者——坠潮亡魂凝形。flying 中立：
+  // 不主动索敌，受击激怒 25s + 16 格同族传播（attackMob 通用 neutral 链）。
+  mourn_howler: {
+    name: 'mourn_howler',
+    displayName: '哭嚎者',
+    width: 1.1,
+    height: 1.4,
+    health: 16,
+    damage: 4,
+    speed: 1.5,
+    attackRange: 2.2,
+    detectionRange: 20,
+    burningInDay: false,  // 下界无昼夜
+    flying: true,         // 低空悬浮（aether_guard 同款 flying 分支）
+    neutral: true,        // 受击才激怒（攻击者与 16 格同族 25s 群怒）
+    xp: 8,
+    model: { parts: MOURN_HOWLER_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'mourn_tear', min: 1, max: 2, chance: 1.0 },  // 坠落时凝下的泪（跨维度收集线材料）
     ],
   },
   storm_colossus: {

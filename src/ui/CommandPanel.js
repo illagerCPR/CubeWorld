@@ -20,7 +20,7 @@ const MODES = [
 ];
 
 // 生成实体列表 = 全部注册怪物（MobTypes 枚举，新增生物自动纳入面板）
-const MOB_ORDER = ['zombie', 'skeleton', 'zombified_piglin', 'wither_skeleton', 'wither', 'creeper', 'spider', 'blaze', 'wisp', 'aether_guard', 'cloud_lamb', 'gale_hawk', 'tide_echo', 'storm_colossus', 'villager'];
+const MOB_ORDER = ['zombie', 'skeleton', 'zombified_piglin', 'wither_skeleton', 'wither', 'creeper', 'spider', 'blaze', 'mourn_howler', 'wisp', 'aether_guard', 'cloud_lamb', 'gale_hawk', 'tide_echo', 'storm_colossus', 'villager'];
 function mobEntries() {
   const names = Object.keys(MobTypes);
   names.sort((a, b) => {

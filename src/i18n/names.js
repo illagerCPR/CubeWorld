@@ -303,4 +303,5 @@ export const NAME_I18N = {
   // ---------- 下界·烬火纪（世界观批次 N1） ----------
   "ember_stele": ["烬纹石碑","燼紋石碑","Ember Stele","Stèle de braise","Aschestele","燃石の碑","잿불 비석","مسلة الجمر","Стела углей","Estela de rescoldo","Estela de brasas"],
   "mourn_tear": ["哀潮之泪","哀潮之淚","Mourntear","Larme de deuil","Klageträne","哀潮の涙","애도의 눈물","دمعة الموات","Слеза оплакивания","Lágrima de duelo","Lágrima de luto"],
+  "mourn_howler": ["哭嚎者","哭嚎者","Mourn Howler","Pleureur","Klagender","喚哭者","울부짖는 자","النائح","Скорбящий","Llorón","Pranteador"],
 };

@@ -22,7 +22,8 @@ const DEATH_ANIM_DURATION = 0.4;   // 死亡缩放动画时长（秒）
 const HEALTH_BAR_WIDTH = 1.0;      // 血条世界坐标宽
 
 // 下界自然生成表（纯函数便于单测）：要塞平台层烈焰人主导（仅此处生成）；
-// 灵魂沙峡谷凋零骷髅加成；其余下界以僵尸猪灵为主。主世界表见 trySpawn。
+// 灵魂沙峡谷凋零骷髅加成 + 哭嚎者低空哀鸣（世界观批次 N3）；
+// 其余下界荒地低频哭嚎者，以僵尸猪灵为主。主世界表见 trySpawn。
 export function pickNetherSpawn(biome, inFortress, rand) {
   if (inFortress) {
     const r = rand();
@@ -31,8 +32,12 @@ export function pickNetherSpawn(biome, inFortress, rand) {
     return 'wither_skeleton';
   }
   if (biome === 'soul_sand_valley') {
-    return rand() < 0.45 ? 'wither_skeleton' : 'zombified_piglin';
+    const r = rand();
+    if (r < 0.25) return 'mourn_howler'; // 峡谷 = 坠潮旧河道，哀鸣者聚居
+    return rand() < 0.55 ? 'wither_skeleton' : 'zombified_piglin';
   }
+  const r = rand();
+  if (r < 0.12) return 'mourn_howler';  // 荒地低空低频
   return rand() < 0.15 ? 'wither_skeleton' : 'zombified_piglin';
 }
 
