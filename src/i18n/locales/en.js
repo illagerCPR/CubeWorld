@@ -394,4 +394,5 @@ export const en = {
   "拾遗者只在新浮起的碎岛上种它——滩涂上，长不出别的东西了。": "The gleaners plant it only on newly risen islets — on the flats, nothing else will grow.",
   "扣上就再没有缝的壳，摔不碎，也撬不开。": "A shell that seals without a seam — it will not shatter, and it cannot be pried open.",
   "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "The gleaner’s pack — their rule: what you pick up goes into your own shell first, and only then into the vault.",
+  "拾遗者石环": "Gleaner’s Ring",
 };

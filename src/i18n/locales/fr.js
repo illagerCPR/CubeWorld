@@ -394,4 +394,5 @@ export const fr = {
   "拾遗者只在新浮起的碎岛上种它——滩涂上，长不出别的东西了。": "Les glaneurs ne la plantent que sur les îlots à peine surgis — sur la grève, rien d’autre ne pousse.",
   "扣上就再没有缝的壳，摔不碎，也撬不开。": "Une coque qui se referme sans laisser de couture — elle ne se brise pas et ne s’ouvre pas de force.",
   "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "Le sac du glaneur — leur règle : ce qui est ramassé va d’abord dans sa propre coque, et seulement ensuite au magasin.",
+  "拾遗者石环": "L’Anneau des glaneurs",
 };

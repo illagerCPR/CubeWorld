@@ -211,6 +211,18 @@ export class EndGenerator {
       }
     }
 
+    // ②.5 主岛守望界碑（世界观批次 E2）：硬编码位 (26,26)（r≈37——柱环最大延伸 33 之外、
+    // 岛缘最窄 ~41 之内，折跃门内缘 r=50 之外）——守碑人在王身侧刻下留白的碑文。
+    // 零 rng 纯追加：柱环/折跃门/出口传送门语义与群系边界不动；decorate=false 的
+    // 选址/出生探针不写不注册（防递归污染——与天域出生岛引路碑同款）。
+    if (decorate && ox <= 26 && 26 < ox + CHUNK_SIZE && oz <= 26 && 26 < oz + CHUNK_SIZE) {
+      const wSpan = this._islandSpan(26, 26);
+      if (wSpan && wSpan.top + 1 < CHUNK_HEIGHT - 1) {
+        blocks[idx(wSpan.top + 1, 26 - oz, 26 - ox)] = BlockRegistry.getId('end_stele');
+        this.structureManager.steles.set(`26,${wSpan.top + 1},26`, 'end_watch');
+      }
+    }
+
     // ③ 结构装饰（末地城等，dims 过滤在 StructureManager 内）
     if (decorate) this.structureManager.decorateChunk(chunk);
   }

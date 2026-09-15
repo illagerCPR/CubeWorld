@@ -394,4 +394,5 @@ export const de = {
   "拾遗者只在新浮起的碎岛上种它——滩涂上，长不出别的东西了。": "Die Sammler pflanzen sie nur auf neu aufgetauchten Inselchen — auf dem Strand wächst nichts anderes.",
   "扣上就再没有缝的壳，摔不碎，也撬不开。": "Eine Schale, die sich ohne Naht schließt — sie zerspringt nicht und lässt sich nicht aufbrechen.",
   "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "Der Ranzen des Sammlers — ihre Regel: Was man aufliest, kommt erst in die eigene Schale, dann ins Lager.",
+  "拾遗者石环": "Ring der Sammler",
 };

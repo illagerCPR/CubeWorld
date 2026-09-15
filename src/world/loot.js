@@ -67,6 +67,13 @@ const TABLES = {
     ['diamond', 1, 3, 10], ['emerald', 2, 6, 10], ['golden_apple', 1, 2, 8],
     ['experience_bottle', 2, 5, 8], ['ender_pearl', 1, 3, 8], ['iron_ingot', 3, 8, 10],
   ],
+  // 拾遗者石环：拾遗者的收藏（世界观批次 E2，箱在中央圆台旁×1）——界壁拾得物
+  gleaner_ring: [
+    ['chorus_fruit', 2, 6, 14], ['ender_pearl', 1, 3, 10], ['iron_ingot', 1, 4, 10],
+    ['gold_ingot', 1, 3, 8], ['emerald', 1, 3, 8], ['experience_bottle', 1, 3, 8],
+    ['obsidian', 2, 5, 6], ['purpur_block', 2, 5, 6], ['end_stone_bricks', 2, 6, 6],
+    ['diamond', 1, 1, 3], ['ender_eye', 1, 1, 2],
+  ],
   // 天空神殿：金饰/钻石/发光系（箱子在殿内对角×2）——批次 B 增补裂潮残页/星髓
   aether_temple: [
     ['golden_apple', 1, 2, 6], ['diamond', 1, 3, 8], ['gold_ingot', 2, 5, 12],

@@ -142,6 +142,15 @@ else
     exit 1
 fi
 
+# 拾遗者石环 + 主岛守望界碑（世界观批次 E2：密度预案/高原门控/三向注册/对拍/守望碑位/不变量绊线）
+echo "=== end-structures ==="
+if node tests/end-structures.mjs; then
+    echo "end-structures: OK"
+else
+    echo "end-structures: FAILED"
+    exit 1
+fi
+
 # 末影龙 Boss 回归（纯 node：类型注册/柱顶水晶/DragonAI 状态机/击败链路/末地门控）
 echo "=== end-dragon ==="
 if node tests/end-dragon.mjs; then

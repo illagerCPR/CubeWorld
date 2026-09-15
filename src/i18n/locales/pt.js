@@ -394,4 +394,5 @@ export const pt = {
   "拾遗者只在新浮起的碎岛上种它——滩涂上，长不出别的东西了。": "Os colhedores só a plantam nos ilhéus recém-surgidos — na praia, nada mais cresce.",
   "扣上就再没有缝的壳，摔不碎，也撬不开。": "Uma concha que fecha sem costura: não se parte nem se pode forçar.",
   "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "O alforje do colhedor — a regra deles: o que se apanha vai primeiro para a própria concha, e só depois para o depósito.",
+  "拾遗者石环": "O Anel dos colhedores",
 };

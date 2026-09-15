@@ -343,6 +343,10 @@ export class CommandPanel {
       for (const rec of sm.recordsAround('end_city', p.x, p.z, 2)) {
         items.push({ name: '末地城', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
       }
+      // 拾遗者石环（世界观批次 E2）：cell14，±2 cell 扫描——同 groundY 传送层模式
+      for (const rec of sm.recordsAround('gleaner_ring', p.x, p.z, 2)) {
+        items.push({ name: '拾遗者石环', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
+      }
     } else if (world.dimension === 'aether') {
       // 天域：三结构（recordsAround ±2 cell，带 groundY 传送层——同下界/末地模式）
       for (const rec of sm.recordsAround('aether_temple', p.x, p.z, 2)) {

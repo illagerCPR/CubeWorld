@@ -394,4 +394,5 @@ export const es = {
   "拾遗者只在新浮起的碎岛上种它——滩涂上，长不出别的东西了。": "Los rebuscadores solo la siembran en islotes recién surgidos — en la playa no crece nada más.",
   "扣上就再没有缝的壳，摔不碎，也撬不开。": "Un caparazón que se cierra sin costura: no se rompe ni se puede forzar.",
   "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "El morral del rebuscador — su regla: lo recogido va primero al caparazón propio, y solo después al almacén.",
+  "拾遗者石环": "El Anillo de los rebuscadores",
 };
