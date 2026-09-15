@@ -131,6 +131,7 @@ export class MenuScreen {
             <div style="flex:1; display:flex; flex-direction:column; gap:2px;">
               <div style="font-size:14px; font-weight:bold; color:#fff;">${t('槽 {n} · {m}', { n: s.slot, m: t(MODE_LABEL[s.gamemode] || s.gamemode) })}${dim}${bs}${s.cheatsEnabled ? ` · <span style="color:#fc5;">${t('作弊')}</span>` : ''}</div>
               <div style="font-size:11px; color:#bbb;">${time} · ${t('种子 {seed}', { seed: s.seed })}${s.cheatsEnabled ? ` · ${t('命令已启用')}` : ''}</div>
+              ${s.finaleDone ? `<div style="font-size:12px; color:#ffd98a; letter-spacing:1px; text-shadow: 0 0 8px rgba(255,200,90,0.4);">✦ ${t('已通关 · 潮归其位')} ✦</div>` : ''}
             </div>
             <button class="del-btn cw-stone-btn danger" data-del="${s.slot}" style="
               color:#fff; cursor:pointer; padding:4px 10px; font-size:12px;">${t('删除')}</button>

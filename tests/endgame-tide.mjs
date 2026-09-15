@@ -82,6 +82,6 @@ ok(gameSrc.includes('_finaleParticleTick(seg, p, t, dt)'), '四段粒子发射�
 ok(gameSrc.includes("BlockRegistry.getId('water')"), '逆雨段水下采样在场（雨只在海上）');
 const cpSrc = readFileSync('./src/ui/CommandPanel.js', 'utf8');
 ok(cpSrc.includes('_startFinaleTide()') && cpSrc.includes('_stopFinaleTide()'), '命令面板调试口在场（F3 正式触发链前置）');
-ok(BUILD === 18, 'BUILD 18（终局篇 F3 统一发版——F2 批次约束为不 bump，随 F3 一次到位）');
+ok(BUILD === 19, 'BUILD 19（鲸骨冢篇 K3 统一发版——终局 F1/F2 约束不 bump，随 K3 一次到位）');
 
 console.log(`endgame-tide: ${passed} assertions passed`);

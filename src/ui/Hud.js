@@ -1,5 +1,6 @@
 // Hud.js -- 生存模式 HUD：血量/饥饿/经验
 import { VERSION_LABEL } from '../version.js';
+import { t } from '../i18n/index.js';
 
 export class Hud {
   constructor() {
@@ -53,6 +54,15 @@ export class Hud {
       filter: drop-shadow(0 0 5px rgba(150, 220, 255, 0.55));
     `;
     document.body.appendChild(this.wingIcon);
+
+    // 终局横幅（Build 19 K3）：顶部金色大字 10s（淡入-停留-淡出），获得原初纹章时触发
+    this.finaleBanner = document.createElement('div');
+    this.finaleBanner.style.cssText = `
+      position: fixed; top: 16%; left: 50%; transform: translateX(-50%);
+      display: none; z-index: 60; pointer-events: none; text-align: center;
+      opacity: 0; transition: opacity 1.2s ease;
+    `;
+    document.body.appendChild(this.finaleBanner);
 
     // 滑翔指示（鞘翅展开时显示在准星下方偏上，轻提示不打断视野）
     this.glideTag = document.createElement('div');
@@ -168,8 +178,25 @@ export class Hud {
     this.armorRow.style.display = 'none';
     this.glideTag.style.display = 'none';
     this.wingIcon.style.display = 'none';
+    this.finaleBanner.style.display = 'none';
+    this.finaleBanner.style.opacity = '0';
     this.versionTag.style.display = 'none';
     this.witherOverlay.style.opacity = '0'; // 回菜单复位凋零滤镜（防上一存档残留）
+  }
+
+  // 终局横幅（Build 19 K3）：金色大字淡入 → 停留 10s → 淡出（获得原初纹章时触发一次）
+  showFinaleBanner() {
+    this.finaleBanner.innerHTML = `
+      <div style="font-size:42px; font-weight:bold; letter-spacing:14px; color:#ffd98a; text-shadow: 0 0 20px rgba(255,200,90,0.55), 0 2px 0 #7a5a18;">${t('潮归其位')}</div>
+      <div style="margin-top:12px; font-size:15px; color:#e8e0c8; letter-spacing:4px; text-shadow: 0 1px 3px #000;">${t('世界记起了自己曾经是一整片海。')}</div>
+      <div style="margin-top:14px; font-size:12px; color:#c8b878; letter-spacing:3px;">✦ ${t('终局达成')} ✦</div>`;
+    this.finaleBanner.style.display = 'block';
+    requestAnimationFrame(() => { this.finaleBanner.style.opacity = '1'; });
+    clearTimeout(this._finaleBannerTimer);
+    this._finaleBannerTimer = setTimeout(() => {
+      this.finaleBanner.style.opacity = '0';
+      setTimeout(() => { this.finaleBanner.style.display = 'none'; }, 1300);
+    }, 10000);
   }
 
   // 着火滤镜开关（同款幂等开关）
@@ -200,12 +227,14 @@ export class Hud {
     this.witherOverlay.style.opacity = on ? '1' : '0';
   }
 
-  heartSvg(filled, half = false) {
-    const color = filled ? '#ff3030' : '#3a0a0a';
-    const halfColor = half ? '#7a1818' : color;
+  heartSvg(filled, half = false, bedrock = false) {
+    // Build 19 K3：佩戴原初纹章时生命值图标变为基岩心形（深灰岩质）
+    const color = bedrock ? (filled ? '#8a8a8a' : '#262626') : (filled ? '#ff3030' : '#3a0a0a');
+    const halfColor = bedrock ? '#4a4a4a' : (half ? '#7a1818' : color);
+    const edge = bedrock ? 'stroke="#111" stroke-width="0.6"' : '';
     return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges">
-      <path d="M2 3h3v1h1v1h1v1h1v1h1V4h1V3h1V2h3v4h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1H7v-1H6v-1H5v-1H4v-1H3V8H2V3z" fill="${color}"/>
-      ${half ? `<rect x="8" y="2" width="6" height="12" fill="${color}"/>` : ''}
+      <path d="M2 3h3v1h1v1h1v1h1v1h1V4h1V3h1V2h3v4h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1H7v-1H6v-1H5v-1H4v-1H3V8H2V3z" fill="${color}" ${edge}/>
+      ${half ? `<rect x="8" y="2" width="6" height="12" fill="${halfColor}"/>` : ''}
     </svg>`;
   }
 
@@ -239,14 +268,14 @@ export class Hud {
     this.el.style.display = 'flex';
     this.crosshair.style.display = 'block';
     
-    // 血量（10 颗心，每颗 2 点）
+    // 血量（10 颗心，每颗 2 点；佩戴原初纹章时为基岩心形）
     this.hearts.innerHTML = '';
     for (let i = 0; i < 10; i++) {
       const v = player.health - i * 2;
       const filled = v >= 2;
       const half = v === 1;
       const img = document.createElement('div');
-      img.innerHTML = this.heartSvg(filled, half);
+      img.innerHTML = this.heartSvg(filled, half, player.emblemWorn);
       img.style.cssText = 'width: 16px; height: 16px;';
       this.hearts.appendChild(img);
     }

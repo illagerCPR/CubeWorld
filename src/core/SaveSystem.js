@@ -49,6 +49,7 @@ export class SaveSystem {
         dragonDefeated: !!game.world.dragonDefeated, // 末影龙击败标记（进末地是否再生成龙）
         finalePrimordial: game.world.finalePrimordial || null, // 候潮状态（终局篇 F1：祭坛坐标）
         finaleDone: !!game.world.finaleDone, // 听潮完成（终局篇 F3：仪式一次性门控）
+        emblemWorn: !!game.player.emblemWorn, // 纹章佩戴（Build 19 K3：无敌/飞行/基岩心）
         bedSpawn: game.bedSpawn || null, // 床重生点（单机；含维度校验字段）
         redstone: game.redstone ? game.redstone.serialize() : null,
         sky: { time: game.sky.time || 0 }
@@ -107,7 +108,8 @@ export class SaveSystem {
           biomeScale: data.biomeScale || 'small',
           timestamp: data.timestamp || 0,
           seed: data.seed || 0,
-          dimension: data.dimension || 'overworld'
+          dimension: data.dimension || 'overworld',
+          finaleDone: !!data.finaleDone // 通关标记（Build 19 K3：存档栏祝贺字样）
         });
       } catch {
         list.push({ slot, empty: true });

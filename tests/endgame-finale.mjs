@@ -68,6 +68,28 @@ ok(gameSrc.includes('_finaleTide.ritual && p > 0.25 && this.mobManager'), '龙�
 ok(gameSrc.includes('this.net.sendFinaleState({ offered: true'), '献证 LAN 上报（F1 缺口补齐）');
 
 // ── ⑤ 发版 ──
-ok(BUILD === 18, `BUILD 17→18（终局篇统一发版，当前 ${BUILD}）`);
+ok(BUILD === 19, `BUILD 18→19（鲸骨冢篇 K3 统一发版，当前 ${BUILD}）`);
+
+// ── ⑥ K3 终局成就 ──
+const hudSrc = readFileSync('./src/ui/Hud.js', 'utf8');
+ok(hudSrc.includes('showFinaleBanner() {'), '终局横幅方法在场（10s 金色淡入淡出）');
+ok(gameSrc.includes('if (this.hud) this.hud.showFinaleBanner();'), '纹章发放时触发横幅');
+ok(hudSrc.includes('heartSvg(filled, half = false, bedrock = false)'), '心形 SVG 支持基岩参数');
+ok(hudSrc.includes('player.emblemWorn'), 'Hud 按 emblemWorn 渲染基岩心');
+ok(hudSrc.includes('wingIcon.style.display = player.flying'), '翅膀图标全模式判定（K2 在场核对）');
+const playerSrc = readFileSync('./src/player/Player.js', 'utf8');
+ok(playerSrc.includes('if (this.emblemWorn) return false;'), '佩戴纹章=无敌（hurt 顶部拒绝）');
+ok(playerSrc.includes('this.emblemWorn = false;'), 'emblemWorn 默认关闭');
+const ctrlSrc = readFileSync('./src/player/Controls.js', 'utf8');
+ok(ctrlSrc.includes('(this.player.creative || this.player.emblemWorn)'), '双击空格飞行门控放开（creative || emblemWorn）');
+ok(saveSrc.includes('emblemWorn: !!game.player.emblemWorn,'), 'SaveSystem 序列化 emblemWorn');
+ok(gameSrc.includes('this.player.emblemWorn = !!(loadData && loadData.emblemWorn) && this.world.finaleDone;'), 'start 恢复佩戴（仅通关存档有效）');
+ok(gameSrc.includes('emblemWorn: !!this.player.emblemWorn, // 纹章佩戴跨维透传'), '换维透传 emblemWorn');
+const menuSrc = readFileSync('./src/ui/MenuScreen.js', 'utf8');
+ok(menuSrc.includes("s.finaleDone ? `<div style=\"font-size:12px; color:#ffd98a"), '存档栏通关祝贺字样（金色）');
+const invSrc = readFileSync('./src/ui/InventoryScreen.js', 'utf8');
+ok(invSrc.includes('this.game.world.finaleDone'), '纹章槽门控 finaleDone（仅通关显示）');
+ok(invSrc.includes("s && s.name === 'primordial_emblem'"), '佩戴需背包持有纹章（不可凭空）');
+ok(invSrc.includes('this.player.flying = false; // 取下即落地'), '取下即落地（防悬空）');
 
 console.log(`endgame-finale: ${passed} assertions passed`);

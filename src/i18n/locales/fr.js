@@ -417,4 +417,12 @@ export const fr = {
   "风用了很久很久，把它的身体慢慢变成一座拱门。路过的云都会慢下来。": "Le vent a mis très longtemps à changer son corps en arche. Même les nuages qui passent ralentissent.",
   "牧云的孩子在肋骨下躲雨——虽然这里已经很久不下雨。若潮真的归来，请替我们告诉它：我们一直都在。": "Les enfants des gardiens de nuages s’abritent de la pluie sous ses côtes — bien qu’il ne pleuve plus ici depuis longtemps. Si la marée revient un jour, dis-lui de notre part : nous sommes toujours là.",
   "鲸骨冢": "Tumulus de baleine",
+  // ── 鲸骨冢篇 K3：终局成就 ──
+  "潮归其位": "Retour de la marée",
+  "世界记起了自己曾经是一整片海。": "Le monde s’est souvenu qu’il était une fois une mer entière.",
+  "终局达成": "Finale accompli",
+  "已通关 · 潮归其位": "Terminé · Retour de la marée",
+  "纹章": "Emblème",
+  "点击取下纹章": "Cliquer pour retirer l’emblème",
+  "点击佩戴纹章（无敌 · 飞行 · 基岩之心）": "Cliquer pour porter l’emblème (Invulnérabilité · Vol · Cœur de bedrock)",
 };

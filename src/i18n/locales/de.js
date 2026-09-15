@@ -417,4 +417,12 @@ export const de = {
   "风用了很久很久，把它的身体慢慢变成一座拱门。路过的云都会慢下来。": "Der Wind brauchte sehr lange Zeit und machte seinen Körper langsam zu einem Bogen. Selbst die vorbeiziehenden Wolken werden langsamer.",
   "牧云的孩子在肋骨下躲雨——虽然这里已经很久不下雨。若潮真的归来，请替我们告诉它：我们一直都在。": "Die Kinder der Wolkenhirten suchen zwischen seinen Rippen Schutz vor dem Regen – obwohl es hier seit langem nicht mehr regnet. Sollte die Flut jemals zurückkehren, sag ihr von uns: Wir waren immer hier.",
   "鲸骨冢": "Walknochengrab",
+  // ── 鲸骨冢篇 K3：终局成就 ──
+  "潮归其位": "Heimkehr der Flut",
+  "世界记起了自己曾经是一整片海。": "Die Welt erinnerte sich, dass sie einst ein einziges Meer war.",
+  "终局达成": "Finale erreicht",
+  "已通关 · 潮归其位": "Abgeschlossen · Heimkehr der Flut",
+  "纹章": "Emblem",
+  "点击取下纹章": "Klicken, um das Emblem abzunehmen",
+  "点击佩戴纹章（无敌 · 飞行 · 基岩之心）": "Klicken, um das Emblem zu tragen (Unverwundbarkeit · Flug · Betongold-Herz)",
 };

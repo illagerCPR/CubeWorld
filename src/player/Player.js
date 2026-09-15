@@ -11,6 +11,7 @@ export class Player {
     this.onGround = false;
     this.flying = false;
     this.gliding = false;   // 鞘翅滑翔中（Game 每帧维护；Physics 按此切换温和重力）
+    this.emblemWorn = false; // 终局成就（Build 19 K3）：佩戴原初纹章（无敌+可飞行+基岩心）
     this.creative = false;
     this.spectator = false;
     this.survival = false;
@@ -74,6 +75,7 @@ export class Player {
   // 返回 true 表示成功扣血，false 表示被无敌帧/模式拦截。
   hurt(amount, source = 'mob', showVignette = true) {
     if (this.creative || this.spectator) return false;
+    if (this.emblemWorn) return false; // 终局成就（Build 19 K3）：佩戴原初纹章=无敌
     if (this.invulnerable > 0) return false;
     // 盔甲减伤：每点 4%、上限 20 点（原版公式，最高 80%）；armor 由 Game 每帧从装备槽汇总
     if (this.armor > 0) amount *= 1 - Math.min(20, this.armor) * 0.04;

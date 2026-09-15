@@ -60,7 +60,8 @@ export class Controls {
     if (!this.enabled || e.repeat) return;
     if (e.code === 'Space') {
       const now = performance.now();
-      if (now - this.lastJumpTap < 300 && this.player.creative) {
+      // Build 19 K3：佩戴原初纹章的生存玩家同样可双击空格切换飞行（创造式飞行）
+      if (now - this.lastJumpTap < 300 && (this.player.creative || this.player.emblemWorn)) {
         this.player.flying = !this.player.flying;
         if (this.player.flying) this.player.velocity.y = 0;
       }

@@ -417,4 +417,12 @@ export const en = {
   "风用了很久很久，把它的身体慢慢变成一座拱门。路过的云都会慢下来。": "The wind took a very long time, slowly turning its body into an arch. Even the passing clouds slow down.",
   "牧云的孩子在肋骨下躲雨——虽然这里已经很久不下雨。若潮真的归来，请替我们告诉它：我们一直都在。": "The cloud-herders' children shelter from rain between its ribs — though it has not rained here for ages. If the tide ever returns, tell it for us: we never left.",
   "鲸骨冢": "Whalebone Barrow",
+  // ── 鲸骨冢篇 K3：终局成就 ──
+  "潮归其位": "Tide Homecoming",
+  "世界记起了自己曾经是一整片海。": "The world remembered that it was once one whole sea.",
+  "终局达成": "Finale Complete",
+  "已通关 · 潮归其位": "Completed · Tide Homecoming",
+  "纹章": "Emblem",
+  "点击取下纹章": "Click to remove the emblem",
+  "点击佩戴纹章（无敌 · 飞行 · 基岩之心）": "Click to wear the emblem (Invulnerability · Flight · Bedrock Heart)",
 };

@@ -3,6 +3,7 @@
 import { SVGTextures } from '../render/SVGTextures.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { ItemRegistry } from '../core/ItemRegistry.js';
+import { ItemSVGDefinitions } from '../items/ItemDefs.js';
 import { matchRecipe } from '../core/Crafting.js';
 import { CREATIVE_CATEGORIES, CATEGORY_LABEL_KEYS, getItemCategory } from '../core/ItemCategories.js';
 import { t } from '../i18n/index.js';
@@ -17,6 +18,21 @@ function armorSlotIcon(kind) {
     boots: `<path d="M10 6 H15 V18 Q15 22 11 22 H15 M17 6 H22 V20 Q22 24 18 24 H14 M10 22 H15 M14 24 H22" />`,
   };
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><g fill="none" stroke="#5a5a5a" stroke-width="1.6" stroke-linejoin="round" opacity="0.85">${P[kind]}</g></svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
+// 纹章槽底纹（Build 19 K3：方环+波纹环+三点，与原初纹章同源符号）
+function emblemSlotIcon() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+    <g fill="none" stroke="#8a7434" stroke-width="1.5" stroke-linejoin="round" opacity="0.9">
+      <rect x="8" y="8" width="16" height="16"/>
+      <circle cx="16" cy="16" r="4"/>
+      <path d="M16 4 V7 M6 16 H3 M26 16 H23"/>
+    </g>
+    <g fill="#8a7434" opacity="0.9">
+      <circle cx="16" cy="16" r="1.6"/>
+    </g>
+  </svg>`;
   return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 }
 
@@ -235,6 +251,47 @@ export class InventoryScreen {
     });
     armorArea.appendChild(armorGrid);
     topRow.appendChild(armorArea);
+
+    // 终局成就纹章槽（Build 19 K3）：仅通关存档显示，点击佩戴/取下——
+    // 佩戴效果：无敌 + 创造式飞行（双击空格）+ 基岩心形（Hud 按 emblemWorn 渲染）
+    if (this.game && this.game.world && this.game.world.finaleDone) {
+      const emblemArea = document.createElement('div');
+      const emblemLabel = document.createElement('div');
+      emblemLabel.textContent = t('纹章');
+      emblemLabel.style.cssText = 'font-size: 12px; margin-bottom: 4px; color:#c8a848;';
+      emblemArea.appendChild(emblemLabel);
+      const worn = !!this.player.emblemWorn;
+      const emblemSlot = document.createElement('div');
+      emblemSlot.style.cssText = `
+        width: 44px; height: 44px; background: #8b8b8b; position: relative;
+        border: 2px solid ${worn ? '#ffd98a' : '#555'}; box-shadow: ${worn ? '0 0 8px rgba(255,217,138,0.5)' : 'none'};
+        display: flex; align-items: center; justify-content: center; cursor: pointer; image-rendering: pixelated;
+      `;
+      if (!worn) emblemSlot.style.background += `, url(${emblemSlotIcon()}) center / 32px 32px no-repeat`;
+      if (worn && ItemSVGDefinitions.primordial_emblem) {
+        const cv = document.createElement('canvas');
+        cv.width = 32; cv.height = 32;
+        cv.style.cssText = 'width: 32px; height: 32px;';
+        SVGTextures.svgToImage(ItemSVGDefinitions.primordial_emblem).then((img) => {
+          cv.getContext('2d').drawImage(img, 0, 0, 32, 32);
+        });
+        emblemSlot.appendChild(cv);
+      }
+      emblemSlot.title = worn ? t('点击取下纹章') : t('点击佩戴纹章（无敌 · 飞行 · 基岩之心）');
+      emblemSlot.addEventListener('click', () => {
+        if (!this.player.emblemWorn) {
+          const has = this.inventory.slots.some((s) => s && s.name === 'primordial_emblem');
+          if (!has) return; // 背包里没有纹章不能凭空佩戴
+          this.player.emblemWorn = true;
+        } else {
+          this.player.emblemWorn = false;
+          this.player.flying = false; // 取下即落地（防悬空）
+        }
+        this.render();
+      });
+      emblemArea.appendChild(emblemSlot);
+      topRow.appendChild(emblemArea);
+    }
     this.panel.appendChild(topRow);
     
     // 主背包 27 格（索引 9~35）

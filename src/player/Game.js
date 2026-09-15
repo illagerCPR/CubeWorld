@@ -285,6 +285,7 @@ export class Game {
     this.world.dragonDefeated = !!(loadData && loadData.dragonDefeated); // 末影龙击败标记（存档恢复）
     this.world.finalePrimordial = (loadData && loadData.finalePrimordial) || null; // 候潮状态（终局篇 F1：祭坛坐标，存档恢复）
     this.world.finaleDone = !!(loadData && loadData.finaleDone); // 听潮完成（终局篇 F3：存档恢复）
+    this.player.emblemWorn = !!(loadData && loadData.emblemWorn) && this.world.finaleDone; // 佩戴状态（Build 19 K3：仅通关存档有效）
     // LAN：WORLD_INFO 先于 start 到达的候潮/听潮状态（NetworkManager 暂存 finaleInfo）在此落地
     if (this.finaleInfo) {
       if (this.finaleInfo.offered && !this.world.finalePrimordial) {
@@ -2254,6 +2255,7 @@ export class Game {
       }
     }
     this.hotbar.update();
+    if (this.hud) this.hud.showFinaleBanner(); // 终局横幅 10s（Build 19 K3）
     if (this.chatBox) this.chatBox.add(t('潮声落定。碑座上留着一枚纹章。'), '#bfeee8');
   }
 
@@ -3374,6 +3376,7 @@ export class Game {
       dragonDefeated: !!this.world.dragonDefeated, // 击败标记跨维透传（换维重建不丢）
       finalePrimordial: this.world.finalePrimordial || null, // 候潮状态跨维透传（终局篇 F1：换维重建不丢）
       finaleDone: !!this.world.finaleDone, // 听潮完成跨维透传（终局篇 F3：换维重建不丢）
+      emblemWorn: !!this.player.emblemWorn, // 纹章佩戴跨维透传（Build 19 K3）
       aetherDusk: !!this.aetherDusk, // 天域复潮状态跨维透传（批次 D：换维重建不丢）
       player: playerData,
       inventory: this.inventory.serialize(),
