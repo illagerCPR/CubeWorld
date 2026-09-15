@@ -11,6 +11,7 @@ import { AETHER_TEMPLE_DEF, AETHER_TOWER_DEF, AETHER_SHIP_DEF, AETHER_WELL_DEF, 
 import { TIDEFIRE_HEARTH_DEF } from './tidefire_hearth.js';
 import { TIDE_BARROW_DEF } from './tide_barrow.js';
 import { GLEANER_RING_DEF } from './gleaner_ring.js';
+import { WHALE_BARROW_DEF } from './whale_barrow.js';
 
 VILLAGE_DEF.dims = ['overworld'];
 STRONGHOLD_DEF.dims = ['overworld'];
@@ -30,3 +31,5 @@ registerStructureType('tidefire_hearth', TIDEFIRE_HEARTH_DEF);
 registerStructureType('tide_barrow', TIDE_BARROW_DEF);
 // 末地·无潮彼岸（世界观批次 E2）：拾遗者石环（defs 自带 dims: ['end']）
 registerStructureType('gleaner_ring', GLEANER_RING_DEF);
+// 天域后传（鲸骨冢篇 K1）：鲸骨冢（defs 自带 dims: ['aether']）
+registerStructureType('whale_barrow', WHALE_BARROW_DEF);

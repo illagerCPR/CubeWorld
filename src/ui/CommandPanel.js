@@ -377,6 +377,10 @@ export class CommandPanel {
       for (const rec of sm.recordsAround('aether_gate', p.x, p.z, 2)) {
         items.push({ name: '天海之门遗迹', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
       }
+      // 鲸骨冢（鲸骨冢篇 K1）：cell48 稀有，±2 cell 扫描——同 groundY 传送层模式
+      for (const rec of sm.recordsAround('whale_barrow', p.x, p.z, 2)) {
+        items.push({ name: '鲸骨冢', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
+      }
     } else {
       for (const rec of sm.recordsAround('village', p.x, p.z, EXPLORE_VILLAGE_CELL_R)) {
         const d = Math.hypot(rec.ax - p.x, rec.az - p.z);

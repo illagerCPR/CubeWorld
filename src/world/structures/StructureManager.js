@@ -270,6 +270,7 @@ export class StructureManager {
         if (name === 'tidefire_hearth') return '潮火之炉';
         if (name === 'tide_barrow') return '潮冢';
         if (name === 'gleaner_ring') return '拾遗者石环';
+        if (name === 'whale_barrow') return '鲸骨冢';
         return name;
       }
     }

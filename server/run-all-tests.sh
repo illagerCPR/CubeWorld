@@ -178,6 +178,15 @@ else
     exit 1
 fi
 
+# 鲸骨冢篇 K1（鲸骨块注册/归云章/solve 确定性/选址拒绝/箱表/探索列表绊线）
+echo "=== whale-barrow ==="
+if node tests/whale-barrow.mjs; then
+    echo "whale-barrow: OK"
+else
+    echo "whale-barrow: FAILED"
+    exit 1
+fi
+
 # 末影龙 Boss 回归（纯 node：类型注册/柱顶水晶/DragonAI 状态机/击败链路/末地门控）
 echo "=== end-dragon ==="
 if node tests/end-dragon.mjs; then

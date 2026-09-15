@@ -8,7 +8,8 @@ import { Chunk, CHUNK_SIZE } from '../../core/Chunk.js';
 
 // 浮岛下探选址：锚点列群系门 + 9 列（±probeR）下探取暴露地面，全距 ≤ maxSlope 视为平坦。
 // 返回 groundY（立地面首格空气层）或 -1。锚点恒在区块局部 (8,8)，±6 采样不出块。
-function probeIsland(gen, ax, az, biomes, maxSlope = 8, probeR = 6) {
+export function probeIsland(gen, ax, az, biomes, maxSlope = 8, probeR = 6) {
+  // 鲸骨冢篇 K1：导出供 whale_barrow 复用（天域选址单一实现）
   if (typeof gen.getBiome !== 'function') return -1;
   if (!biomes.includes(gen.getBiome(ax, az))) return -1;
   const cx = Math.floor(ax / CHUNK_SIZE), cz = Math.floor(az / CHUNK_SIZE);

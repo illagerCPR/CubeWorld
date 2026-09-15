@@ -86,6 +86,7 @@ const MAP = {
   tide_altar: 'functional',
   primordial_altar: 'functional', // 终局篇 F1：候潮仪式受体
   primordial_emblem: 'misc', // 终局篇 F1：候潮信物（仪式发放，非材料）
+  whale_bone_block: 'building', // 鲸骨冢篇 K1：骨骼建材
   cloud_fluff: 'materials', star_marrow: 'materials', storm_core: 'materials',
   page_rising: 'misc', page_marrow: 'misc', page_sunder: 'misc',
   storm_totem: 'misc', heart_shard: 'misc',

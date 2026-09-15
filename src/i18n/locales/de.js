@@ -411,4 +411,10 @@ export const de = {
   "60 秒窗口 · 四界分段并行 · 换维追潮": "60-Sekunden-Fenster · vier Reiche parallel · Dimensionswechsel-Jagd",
   // ── 终局篇 F3：听潮仪式 ──
   "\u6f6e\u58f0\u843d\u5b9a\u3002\u7891\u5ea7\u4e0a\u7559\u7740\u4e00\u679a\u7eb9\u7ae0\u3002": "Der Klang der Flut verklingt. Auf dem Stelefu\u00df ruht ein Emblem.",
+  // ── 鲸骨冢篇 K1：归云 ──
+  "归云": "Heimkehr in die Wolken",
+  "潮退的时候，所有会游的都走了。最大的那头没有——总得有谁，记得水原来的样子。": "Als die Flut sich zurückzog, ging alles fort, was schwimmen konnte. Das größte blieb – irgendjemand musste sich daran erinnern, wie Wasser einst war.",
+  "风用了很久很久，把它的身体慢慢变成一座拱门。路过的云都会慢下来。": "Der Wind brauchte sehr lange Zeit und machte seinen Körper langsam zu einem Bogen. Selbst die vorbeiziehenden Wolken werden langsamer.",
+  "牧云的孩子在肋骨下躲雨——虽然这里已经很久不下雨。若潮真的归来，请替我们告诉它：我们一直都在。": "Die Kinder der Wolkenhirten suchen zwischen seinen Rippen Schutz vor dem Regen – obwohl es hier seit langem nicht mehr regnet. Sollte die Flut jemals zurückkehren, sag ihr von uns: Wir waren immer hier.",
+  "鲸骨冢": "Walknochengrab",
 };

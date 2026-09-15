@@ -751,6 +751,7 @@ const BlockCN = {
   moss_stele: '苔纹石碑', // 世界观批次 W1：主世界石碑（石碑家族第三员）
   end_stele: '界纹石碑', // 世界观批次 E1：末地石碑（石碑家族第四员）
   primordial_altar: '原初祭坛', // 终局篇 F1：候潮仪式受体
+  whale_bone_block: '鲸骨块', // 鲸骨冢篇 K1：天海巨鲸的骨骼建材
 };
 
 function reg(name, def, svgs) {
@@ -1727,6 +1728,24 @@ function primordialAltarTex(seed) {
   return pixelSvg(px);
 }
 reg('primordial_altar', { light: 13, hardness: -1 }, { primordial_altar: primordialAltarTex(224) });
+
+// 鲸骨块（鲸骨冢篇 K1）：月白骨面 + 三道肋纹浅凹 + 骨孔——天海巨鲸的骨骼建材。
+// 天域"海来过"的实物证词载体（潮冢骨环沉于海底，鲸骨拱搁浅在天空——一沉一浮）。
+function whaleBoneTex() {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb([226, 224, 210], 0.92 + hash2(x, y, 232) * 0.1);
+  }
+  for (const y of [3, 8, 13]) {
+    for (let x = 0; x < 16; x++) {
+      if (hash2(x, y, 233) < 0.8) px[y * 16 + x] = rgb([198, 195, 180]); // 肋纹浅凹
+    }
+  }
+  px[6 * 16 + 5] = rgb([176, 172, 156]); // 骨孔
+  px[11 * 16 + 10] = rgb([176, 172, 156]);
+  return pixelSvg(px);
+}
+reg('whale_bone_block', { hardness: 1.5, tool: 'pickaxe' }, { whale_bone_block: whaleBoneTex() });
 
 export const BlockSVGDefinitions = svgMap;
 

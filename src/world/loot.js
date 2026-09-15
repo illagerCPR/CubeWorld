@@ -74,6 +74,13 @@ const TABLES = {
     ['obsidian', 2, 5, 6], ['purpur_block', 2, 5, 6], ['end_stone_bricks', 2, 6, 6],
     ['diamond', 1, 1, 3], ['ender_eye', 1, 1, 2],
   ],
+  // 鲸骨冢（鲸骨冢篇 K1）：考古收获——星髓/云絮/常规贵重，零 FORCED 依赖线
+  whale_barrow: [
+    ['star_marrow', 2, 4, 12], ['cloud_fluff', 2, 5, 10], ['iron_ingot', 2, 5, 10],
+    ['gold_ingot', 1, 4, 8], ['emerald', 1, 3, 8], ['experience_bottle', 2, 4, 8],
+    ['glowstone', 2, 4, 6], ['quartz_block', 2, 5, 6], ['bread', 1, 3, 6],
+    ['diamond', 1, 2, 3], ['golden_apple', 1, 1, 2],
+  ],
   // 天空神殿：金饰/钻石/发光系（箱子在殿内对角×2）——批次 B 增补裂潮残页/星髓
   aether_temple: [
     ['golden_apple', 1, 2, 6], ['diamond', 1, 3, 8], ['gold_ingot', 2, 5, 12],

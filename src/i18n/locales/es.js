@@ -411,4 +411,10 @@ export const es = {
   "60 秒窗口 · 四界分段并行 · 换维追潮": "Ventana de 60 s · cuatro reinos en paralelo · persecución entre dimensiones",
   // ── 终局篇 F3：听潮仪式 ──
   "\u6f6e\u58f0\u843d\u5b9a\u3002\u7891\u5ea7\u4e0a\u7559\u7740\u4e00\u679a\u7eb9\u7ae0\u3002": "El sonido de la marea se calma. Sobre la base de la estela reposa un emblema.",
+  // ── 鲸骨冢篇 K1：归云 ──
+  "归云": "Regreso a las nubes",
+  "潮退的时候，所有会游的都走了。最大的那头没有——总得有谁，记得水原来的样子。": "Cuando la marea se retiró, todo lo que sabía nadar se fue. El más grande se quedó: alguien tenía que recordar lo que era el agua.",
+  "风用了很久很久，把它的身体慢慢变成一座拱门。路过的云都会慢下来。": "El viento tardó muchísimo en convertir su cuerpo en un arco. Hasta las nubes que pasan se detienen.",
+  "牧云的孩子在肋骨下躲雨——虽然这里已经很久不下雨。若潮真的归来，请替我们告诉它：我们一直都在。": "Los hijos de los pastores de nubes se resguardan de la lluvia entre sus costillas, aunque aquí hace mucho que no llueve. Si la marea vuelve algún día, dile de nuestra parte: siempre estuvimos aquí.",
+  "鲸骨冢": "Tumba de ballena",
 };

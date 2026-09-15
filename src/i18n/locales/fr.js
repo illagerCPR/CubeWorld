@@ -411,4 +411,10 @@ export const fr = {
   "60 秒窗口 · 四界分段并行 · 换维追潮": "Fenêtre de 60 s · quatre mondes en parallèle · poursuite entre dimensions",
   // ── 终局篇 F3：听潮仪式 ──
   "\u6f6e\u58f0\u843d\u5b9a\u3002\u7891\u5ea7\u4e0a\u7559\u7740\u4e00\u679a\u7eb9\u7ae0\u3002": "Le son de la mar\u00e9e s\u2019apaise. Un embl\u00e8me repose sur le socle de la st\u00e8le.",
+  // ── 鲸骨冢篇 K1：归云 ──
+  "归云": "Retour aux nuages",
+  "潮退的时候，所有会游的都走了。最大的那头没有——总得有谁，记得水原来的样子。": "Quand la marée s’est retirée, tout ce qui savait nager est parti. Le plus grand est resté — il fallait bien quelqu’un pour se souvenir de ce qu’était l’eau.",
+  "风用了很久很久，把它的身体慢慢变成一座拱门。路过的云都会慢下来。": "Le vent a mis très longtemps à changer son corps en arche. Même les nuages qui passent ralentissent.",
+  "牧云的孩子在肋骨下躲雨——虽然这里已经很久不下雨。若潮真的归来，请替我们告诉它：我们一直都在。": "Les enfants des gardiens de nuages s’abritent de la pluie sous ses côtes — bien qu’il ne pleuve plus ici depuis longtemps. Si la marée revient un jour, dis-lui de notre part : nous sommes toujours là.",
+  "鲸骨冢": "Tumulus de baleine",
 };
