@@ -91,6 +91,7 @@ const MAP = {
   // ---------- 下界·烬火纪（世界观批次 N1） ----------
   ember_stele: 'functional', mourn_tear: 'materials',
   moss_stele: 'functional', page_rain: 'materials', // 世界观批次 W1
+  end_stele: 'functional', // 世界观批次 E1：末地石碑（石碑家族第四员）
 };
 
 // 取物品分类（未登记 → 杂项）

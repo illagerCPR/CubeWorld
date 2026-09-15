@@ -380,4 +380,18 @@ export const en = {
   "三枚颅骨按进骨泥，缝起来的不是人——是一句没能咽下的怨。": "Set three skulls into the bone-sand, and what is stitched together is not a person — it is a grudge that never learned to swallow.",
 
   "潮冢": "Tide Barrow",
+  "拾遗": "The Gleaning",
+  "守望": "The Vigil",
+  "潮碎的那一天，我们各自抱走了一块。": "The day the tide broke, each of us carried off a piece.",
+  "现在我们只在界壁之间行走，把散落的旧物一件件拾起、搬走、存好。搬得久了，手停下来就不知道该做什么。": "Now we walk only between the boundaries, picking up the scattered relics one by one — carrying them, storing them. Carry long enough, and when your hands stop, you no longer know what to do.",
+  "别盯着我们看。在我们听来，盯着遗物看的，都是想抢的。": "Do not stare at us. As far as we can tell, anyone who stares at a relic means to take it.",
+  "王盘踞在环上，从滩涂干透那天起，就没有挪过位置。": "The King has crouched upon the ring since the day the flats dried out, and has never moved.",
+  "它点验过每一件入库的遗物，却从不下令归还。有年轻的拾遗者问过：王在等什么？": "It has inventoried every relic in the vaults, yet never orders them returned. A young gleaner once asked: what is the King waiting for?",
+  "碑文到这里就断了。凿碑的人说，剩下的字，要等王自己来刻。": "The inscription breaks off here. The carver said the remaining words are the King’s alone to cut.",
+  "从仓库顶棚取下的膜翼，薄得能望见界壁另一侧的光。": "The wing-membrane taken from the warehouse rafters, thin enough to see the light on the far side of the boundary.",
+  "拾遗者靠它滑过无潮的虚空。落在肩上轻得像没有——也许它本来就不是给「人」长的。": "The gleaners ride it across the tideless void. It rests on your shoulders light as nothing — perhaps it never grew for ‘people’ at all.",
+  "别界带回的种子。咬开是空的，吃下去却会把人挪个地方。": "Seeds carried back from other worlds. Bite one open and it is hollow — yet eat it, and it moves you somewhere else.",
+  "拾遗者只在新浮起的碎岛上种它——滩涂上，长不出别的东西了。": "The gleaners plant it only on newly risen islets — on the flats, nothing else will grow.",
+  "扣上就再没有缝的壳，摔不碎，也撬不开。": "A shell that seals without a seam — it will not shatter, and it cannot be pried open.",
+  "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "The gleaner’s pack — their rule: what you pick up goes into your own shell first, and only then into the vault.",
 };

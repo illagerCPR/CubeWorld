@@ -380,4 +380,18 @@ export const fr = {
   "三枚颅骨按进骨泥，缝起来的不是人——是一句没能咽下的怨。": "Trois crânes enfoncés dans le sable d’os, et ce qui est cousu n’est pas une personne — c’est une rancune qui n’a jamais su avaler.",
 
   "潮冢": "Tombe de Marée",
+  "拾遗": "Le Glanage",
+  "守望": "La Veille",
+  "潮碎的那一天，我们各自抱走了一块。": "Le jour où la marée s’est brisée, chacun de nous a emporté un morceau.",
+  "现在我们只在界壁之间行走，把散落的旧物一件件拾起、搬走、存好。搬得久了，手停下来就不知道该做什么。": "Désormais nous ne marchons plus qu’entre les limites, ramassant les vieilles choses éparses une à une, les portant, les rangeant. À force de porter, quand les mains s’arrêtent, on ne sait plus quoi faire.",
+  "别盯着我们看。在我们听来，盯着遗物看的，都是想抢的。": "Ne nous fixez pas du regard. À nous entendre, qui fixe une relique veut la prendre.",
+  "王盘踞在环上，从滩涂干透那天起，就没有挪过位置。": "Le Roi est tapis sur l’anneau depuis le jour où la grève a séché, et n’a jamais bougé.",
+  "它点验过每一件入库的遗物，却从不下令归还。有年轻的拾遗者问过：王在等什么？": "Il a inventorié chaque relique des réserves, sans jamais ordonner de les rendre. Un jeune glaneur a demandé : qu’attend le Roi ?",
+  "碑文到这里就断了。凿碑的人说，剩下的字，要等王自己来刻。": "L’inscription s’interrompt ici. Le graveur a dit que les mots restants reviennent au Roi seul de les graver.",
+  "从仓库顶棚取下的膜翼，薄得能望见界壁另一侧的光。": "La membrane prise au faîte de l’entrepôt, assez mince pour laisser voir la lumière de l’autre côté de la limite.",
+  "拾遗者靠它滑过无潮的虚空。落在肩上轻得像没有——也许它本来就不是给「人」长的。": "Les glaneurs planent avec elle au-dessus du vide sans marée. Elle repose sur les épaules plus légère que rien — peut-être n’a-t-elle jamais poussé pour des « gens ».",
+  "别界带回的种子。咬开是空的，吃下去却会把人挪个地方。": "Des graines rapportées d’ailleurs. Elles s’ouvrent creuses — mais les manger déplace celui qui les mange.",
+  "拾遗者只在新浮起的碎岛上种它——滩涂上，长不出别的东西了。": "Les glaneurs ne la plantent que sur les îlots à peine surgis — sur la grève, rien d’autre ne pousse.",
+  "扣上就再没有缝的壳，摔不碎，也撬不开。": "Une coque qui se referme sans laisser de couture — elle ne se brise pas et ne s’ouvre pas de force.",
+  "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "Le sac du glaneur — leur règle : ce qui est ramassé va d’abord dans sa propre coque, et seulement ensuite au magasin.",
 };

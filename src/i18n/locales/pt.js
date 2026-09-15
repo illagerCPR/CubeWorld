@@ -380,4 +380,18 @@ export const pt = {
   "三枚颅骨按进骨泥，缝起来的不是人——是一句没能咽下的怨。": "Três crânios pressionados na areia de ossos, e o que se costura não é uma pessoa — é um rancor que nunca aprendeu a engolir.",
 
   "潮冢": "Túmulo de Maré",
+  "拾遗": "A Recolha",
+  "守望": "A Vigília",
+  "潮碎的那一天，我们各自抱走了一块。": "No dia em que a maré se partiu, cada um de nós levou um pedaço.",
+  "现在我们只在界壁之间行走，把散落的旧物一件件拾起、搬走、存好。搬得久了，手停下来就不知道该做什么。": "Agora só andamos entre os limites, apanhamos as velhas coisas espalhadas uma a uma, carregamo-las, guardamo-las. Quem carrega muito, quando as mãos param, já não sabe o que fazer.",
+  "别盯着我们看。在我们听来，盯着遗物看的，都是想抢的。": "Não nos encarem. Pelo que ouvimos dizer, quem encara uma relíquia quer levá-la.",
+  "王盘踞在环上，从滩涂干透那天起，就没有挪过位置。": "O Rei está agachado sobre o anel desde o dia em que a praia secou, e nunca se mexeu.",
+  "它点验过每一件入库的遗物，却从不下令归还。有年轻的拾遗者问过：王在等什么？": "Conferiu cada relíquia dos depósitos e nunca ordenou devolvê-las. Um jovem colhedor perguntou: o que espera o Rei?",
+  "碑文到这里就断了。凿碑的人说，剩下的字，要等王自己来刻。": "A inscrição quebra-se aqui. O gravador disse: as palavras que faltam, só o Rei as poderá cinzelar.",
+  "从仓库顶棚取下的膜翼，薄得能望见界壁另一侧的光。": "A membrana tirada do teto do armazém, tão fina que se vê a luz do outro lado do limite.",
+  "拾遗者靠它滑过无潮的虚空。落在肩上轻得像没有——也许它本来就不是给「人」长的。": "Com ela os colhedores planam sobre o vazio sem marés. Nos ombros pesa menos que nada — talvez nunca tenha crescido para «pessoas».",
+  "别界带回的种子。咬开是空的，吃下去却会把人挪个地方。": "Sementes trazidas de outros mundos. Mordam-nas: são ocas — mas comê-las muda a pessoa de lugar.",
+  "拾遗者只在新浮起的碎岛上种它——滩涂上，长不出别的东西了。": "Os colhedores só a plantam nos ilhéus recém-surgidos — na praia, nada mais cresce.",
+  "扣上就再没有缝的壳，摔不碎，也撬不开。": "Uma concha que fecha sem costura: não se parte nem se pode forçar.",
+  "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "O alforje do colhedor — a regra deles: o que se apanha vai primeiro para a própria concha, e só depois para o depósito.",
 };

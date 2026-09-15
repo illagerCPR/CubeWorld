@@ -380,4 +380,18 @@ export const de = {
   "三枚颅骨按进骨泥，缝起来的不是人——是一句没能咽下的怨。": "Drei Schädel in den Knochensand gedrückt, und was zusammengenäht wird, ist kein Mensch — es ist ein Groll, der nie schlucken lernte.",
 
   "潮冢": "Gezeitshügel",
+  "拾遗": "Die Nachlese",
+  "守望": "Die Wacht",
+  "潮碎的那一天，我们各自抱走了一块。": "Am Tag, als die Tide zerbrach, trug jeder von uns ein Stück fort.",
+  "现在我们只在界壁之间行走，把散落的旧物一件件拾起、搬走、存好。搬得久了，手停下来就不知道该做什么。": "Jetzt gehen wir nur noch zwischen den Grenzen umher und lesen die verstreuten alten Dinge Stück für Stück auf, tragen sie fort, lagern sie ein. Wer lange trägt, weiß, wenn die Hände stillstehen, nicht mehr, was er tun soll.",
+  "别盯着我们看。在我们听来，盯着遗物看的，都是想抢的。": "Starrt uns nicht an. Nach unserem Verständnis will jeder, der auf ein Relikt starrt, es nehmen.",
+  "王盘踞在环上，从滩涂干透那天起，就没有挪过位置。": "Der König hockt seit dem Tag, als der Strand austrocknete, auf dem Ring und hat sich nie gerührt.",
+  "它点验过每一件入库的遗物，却从不下令归还。有年轻的拾遗者问过：王在等什么？": "Er hat jedes Relikt in den Lagern gezählt, aber nie befohlen, es zurückzugeben. Ein junger Sammler fragte einmal: worauf wartet der König?",
+  "碑文到这里就断了。凿碑的人说，剩下的字，要等王自己来刻。": "Hier bricht die Inschrift ab. Der Steinhauer sagte, die übrigen Worte dürfe nur der König selbst meißeln.",
+  "从仓库顶棚取下的膜翼，薄得能望见界壁另一侧的光。": "Die Hautflügel vom Dach der Lagerhalle, so dünn, dass man das Licht auf der anderen Seite der Grenze sieht.",
+  "拾遗者靠它滑过无潮的虚空。落在肩上轻得像没有——也许它本来就不是给「人」长的。": "Mit ihnen gleiten die Sammler über die gezeitenlose Leere. Sie liegt leicht wie nichts auf den Schultern — vielleicht wuchs sie gar nicht für »Menschen«.",
+  "别界带回的种子。咬开是空的，吃下去却会把人挪个地方。": "Samen aus anderen Welten. Beißt man sie auf, sind sie hohl — doch wer sie isst, wird an einen anderen Ort versetzt.",
+  "拾遗者只在新浮起的碎岛上种它——滩涂上，长不出别的东西了。": "Die Sammler pflanzen sie nur auf neu aufgetauchten Inselchen — auf dem Strand wächst nichts anderes.",
+  "扣上就再没有缝的壳，摔不碎，也撬不开。": "Eine Schale, die sich ohne Naht schließt — sie zerspringt nicht und lässt sich nicht aufbrechen.",
+  "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "Der Ranzen des Sammlers — ihre Regel: Was man aufliest, kommt erst in die eigene Schale, dann ins Lager.",
 };

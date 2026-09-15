@@ -380,4 +380,18 @@ export const es = {
   "三枚颅骨按进骨泥，缝起来的不是人——是一句没能咽下的怨。": "Tres cráneos hundidos en la arena de huesos, y lo que se cose no es una persona: es un rencor que nunca aprendió a tragar.",
 
   "潮冢": "Túmulo de Marea",
+  "拾遗": "El Rebusque",
+  "守望": "La Vigilia",
+  "潮碎的那一天，我们各自抱走了一块。": "El día que la marea se rompió, cada uno de nosotros se llevó un trozo.",
+  "现在我们只在界壁之间行走，把散落的旧物一件件拾起、搬走、存好。搬得久了，手停下来就不知道该做什么。": "Ahora caminamos solo entre los límites, recogiendo los viejos objetos dispersos uno a uno: cargarlos, guardarlos. Quien carga mucho, al detenerse las manos, ya no sabe qué hacer.",
+  "别盯着我们看。在我们听来，盯着遗物看的，都是想抢的。": "No nos miren fijamente. Por lo que a nosotros llega, quien mira fijamente una reliquia quiere llevársela.",
+  "王盘踞在环上，从滩涂干透那天起，就没有挪过位置。": "El Rey está en el anillo desde el día en que la playa se secó, y jamás se ha movido.",
+  "它点验过每一件入库的遗物，却从不下令归还。有年轻的拾遗者问过：王在等什么？": "Ha revisado cada reliquia de los almacenes y nunca ordena devolverlas. Un joven rebuscador preguntó: ¿qué espera el Rey?",
+  "碑文到这里就断了。凿碑的人说，剩下的字，要等王自己来刻。": "La inscripción se corta aquí. El tallador dijo que las palabras restantes las ha de grabar el Rey mismo.",
+  "从仓库顶棚取下的膜翼，薄得能望见界壁另一侧的光。": "La membrana quitada del techo del almacén, tan fina que se ve la luz del otro lado del límite.",
+  "拾遗者靠它滑过无潮的虚空。落在肩上轻得像没有——也许它本来就不是给「人」长的。": "Con ella los rebuscadores planean sobre el vacío sin mareas. Sobre los hombros pesa menos que nada — quizá nunca creció para la «gente».",
+  "别界带回的种子。咬开是空的，吃下去却会把人挪个地方。": "Semillas traídas de otros mundos. Las muerdes y están huecas — pero comerlas te muda de sitio.",
+  "拾遗者只在新浮起的碎岛上种它——滩涂上，长不出别的东西了。": "Los rebuscadores solo la siembran en islotes recién surgidos — en la playa no crece nada más.",
+  "扣上就再没有缝的壳，摔不碎，也撬不开。": "Un caparazón que se cierra sin costura: no se rompe ni se puede forzar.",
+  "拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。": "El morral del rebuscador — su regla: lo recogido va primero al caparazón propio, y solo después al almacén.",
 };

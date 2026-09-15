@@ -133,6 +133,15 @@ else
     exit 1
 fi
 
+# 末地·无潮彼岸基石（世界观批次 E1：界纹石碑注册/彼岸碑文 2 章/拾遗者体系 lore/龙留白纪律）
+echo "=== end-steles ==="
+if node tests/end-steles.mjs; then
+    echo "end-steles: OK"
+else
+    echo "end-steles: FAILED"
+    exit 1
+fi
+
 # 末影龙 Boss 回归（纯 node：类型注册/柱顶水晶/DragonAI 状态机/击败链路/末地门控）
 echo "=== end-dragon ==="
 if node tests/end-dragon.mjs; then

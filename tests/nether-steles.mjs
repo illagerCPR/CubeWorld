@@ -58,7 +58,7 @@ for (const [id, ch] of Object.entries(STELE_CHAPTERS)) {
 }
 ok(byDim.aether === 9, `天域 9 章 (${byDim.aether})`);
 ok(byDim.nether === 4, `下界 4 章 (${byDim.nether})`);
-ok(byDim.overworld === 3 && byDim.end === undefined, '主世界 3 章（W1 已交付）/ 末地章节尚未开放（E1 交付）');
+ok(byDim.overworld === 3 && byDim.end === 2, '主世界 3 章 / 末地 2 章（E1 已交付）');
 const EMBER_IDS = ['ember_sinking', 'ember_hearth', 'ember_sooted', 'ember_mourning'];
 for (const id of EMBER_IDS) ok(!!STELE_CHAPTERS[id], `烬火纪章节在场: ${id}`);
 ok(!!STELE_CHAPTERS.prologue && !!STELE_CHAPTERS.renewal, '天域既有章节未被破坏（prologue/renewal）');

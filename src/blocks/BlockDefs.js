@@ -749,6 +749,7 @@ const BlockCN = {
   tide_altar: '潮心祭坛',
   ember_stele: '烬纹石碑', // 世界观批次 N1：下界石碑（石碑家族第二员）
   moss_stele: '苔纹石碑', // 世界观批次 W1：主世界石碑（石碑家族第三员）
+  end_stele: '界纹石碑', // 世界观批次 E1：末地石碑（石碑家族第四员）
 };
 
 function reg(name, def, svgs) {
@@ -1396,7 +1397,7 @@ function shulkerBoxTex(seed) {
   fillRect(px, 7, 3, 8, 6, 'rgb(158,148,172)');   // 中央扣饰
   return pixelSvg(px);
 }
-reg('shulker_box', { displayName: '潜影盒', hardness: 2 }, { shulker_box: shulkerBoxTex(977) });
+reg('shulker_box', { displayName: '潜影盒', hardness: 2, lore: ['扣上就再没有缝的壳，摔不碎，也撬不开。', '拾遗者的行囊——他们的规矩：拾来的东西先装进自己的壳，再入库。'] }, { shulker_box: shulkerBoxTex(977) });
 
 // --- 耕种（P3-4）：耕地 / 小麦作物 8 阶段 / 草丛（种子来源） ---
 // 湿土：比 dirt 深 + 水渍暗斑 + 两条犁沟
@@ -1672,6 +1673,29 @@ function mossSteleTex() {
   return pixelSvg(px);
 }
 reg('moss_stele', { hardness: -1, stele: true }, { moss_stele: mossSteleTex() });
+
+// 界纹石碑（世界观批次 E1：末地石碑家族第四员）：风纹石碑同构，色系换成无潮彼岸
+// （苍白滩岩底/界门轮廓符——内芯只刻半截，扣「碑文不写满」的留白），章节本批注册
+// （彼岸碑文 2 章），碑位随批次 E2 落入拾遗者石环
+function endSteleTex() {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb([204, 202, 186], 0.9 + hash2(x, y, 160) * 0.14);
+  }
+  for (const y of [3, 7, 11]) {
+    for (let x = 2; x <= 13; x++) px[y * 16 + x] = rgb([176, 174, 160]);
+  }
+  // 界纹符：界门轮廓（两竖一梁）+ 内芯半截短竖（未刻完的字）+ 底部两点紫斑
+  for (let y = 4; y <= 10; y++) {
+    px[y * 16 + 6] = rgb([92, 72, 120], 0.95);
+    px[y * 16 + 10] = rgb([92, 72, 120], 0.95);
+  }
+  for (let x = 6; x <= 10; x++) px[3 * 16 + x] = rgb([92, 72, 120], 0.95);
+  for (const [x, y] of [[8, 6], [8, 7]]) px[y * 16 + x] = rgb([178, 128, 208], 0.9);
+  for (const [x, y] of [[7, 12], [9, 12]]) px[y * 16 + x] = rgb([140, 100, 176], 0.9);
+  return pixelSvg(px);
+}
+reg('end_stele', { hardness: -1, stele: true }, { end_stele: endSteleTex() });
 
 export const BlockSVGDefinitions = svgMap;
 

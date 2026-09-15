@@ -672,7 +672,7 @@ reg('ghast_tear', { stack: 64 }, art(g => {
   g.s(7, 4, 'rgb(200,230,255)'); g.s(6, 5, 'rgb(200,230,255)');
   g.hl(12, 6, 10, 'rgb(180,200,220)');
 }));
-reg('elytra', { stack: 1, armorSlot: 'chest', armorPoints: 0, displayName: '鞘翅' }, art(g => {
+reg('elytra', { stack: 1, armorSlot: 'chest', armorPoints: 0, displayName: '鞘翅', lore: ['从仓库顶棚取下的膜翼，薄得能望见界壁另一侧的光。', '拾遗者靠它滑过无潮的虚空。落在肩上轻得像没有——也许它本来就不是给「人」长的。'] }, art(g => {
   // 末地船船长箱战利品；穿在胸甲槽（不减伤），空中下落自动展开滑翔
   for (let i = 0; i < 5; i++) {
     g.hl(4 + i, 3 + i * 2, 5 + i * 2, 'rgb(96,84,116)');
@@ -690,7 +690,7 @@ reg('shulker_shell', { stack: 64, displayName: '潜影壳' }, art(g => {
   g.s(5, 10, 'rgb(120,94,146)'); g.s(10, 10, 'rgb(120,94,146)');
   g.s(7, 7, 'rgb(90,64,118)'); g.s(8, 8, 'rgb(90,64,118)');
 }));
-reg('chorus_fruit', { stack: 64, food: 4, displayName: '紫颂果' }, art(g => {
+reg('chorus_fruit', { stack: 64, food: 4, displayName: '紫颂果', lore: ['别界带回的种子。咬开是空的，吃下去却会把人挪个地方。', '拾遗者只在新浮起的碎岛上种它——滩涂上，长不出别的东西了。'] }, art(g => {
   // 食用随机短距传送（原版机制，Game._chorusTeleport）
   g.d(8, 8, 5, 5, 'rgb(120,84,150)');
   g.d(7, 7, 4, 4, 'rgb(152,112,184)');
