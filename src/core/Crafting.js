@@ -115,6 +115,8 @@ addShaped('diamond_block', 1, ['diamond','diamond','diamond','diamond','diamond'
 addShaped('cloud_wool', 1, ['cloud_fluff','cloud_fluff','cloud_fluff','cloud_fluff']);
 addShaped('star_marrow_block', 1, ['star_marrow','star_marrow','star_marrow','star_marrow','star_marrow','star_marrow','star_marrow','star_marrow','star_marrow']);
 addShaped('gale_block', 1, [null,'cloud_wool',null,'cloud_wool','star_marrow','cloud_wool',null,'cloud_wool',null]);
+// 天域批次 C：风暴图腾（四角星髓 + 四边云絮 + 心金块）——对恒昼祭坛右键召唤守誓巨像
+addShaped('storm_totem', 1, ['star_marrow','cloud_fluff','star_marrow','cloud_fluff','gold_block','cloud_fluff','star_marrow','cloud_fluff','star_marrow']);
 
 // 食物
 addShapeless('bread', 1, ['wheat','wheat','wheat']);

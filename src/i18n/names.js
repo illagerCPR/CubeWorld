@@ -298,5 +298,6 @@ export const NAME_I18N = {
   "heart_shard": ["心核碎片","心核碎片","Heart Shard","Éclat de cœur","Herzsplitter","心核の欠片","하트 조각","شظية القلب","Осколок сердца","Fragmento de corazón","Fragmento de coração"],
   "wind_brand": ["缚风之剑","縛風之劍","Windbrand","Lame du vent","Windklinge","風縛の剣","바람의 검","سيف الريح","Клинок ветра","Filo del viento","Lâmina do vento"],
   "gale_cloak": ["御风斗篷","禦風斗篷","Gale Cloak","Cape de la bourrasque","Sturmumhang","嵐のマント","폭풍 망토","عباءة العاصفة","Плащ бури","Capa del vendaval","Capa do vendaval"],
+  "storm_colossus": ["守誓巨像","守誓巨像","Oathbound Colossus","Colosse lié par serment","Eidkoloss","守誓の巨像","서약의 거상","عملاق القَسَم","Колосс Клятвы","Coloso del Juramento","Colosso do Juramento"],
 
 };

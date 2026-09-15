@@ -328,8 +328,15 @@ export class NetworkManager {
         break;
       case MSG.WITHER_SKULL:
         // Idea-2D-②：凋灵之首初速广播——本地生成弹射物（命中本地玩家本地结算，同怪咬人语义）
+        // 批次 C：k='gale' = 守誓巨像风弹（同通道透传）
         if (msg.id !== this.selfId && this.game.world) {
-          this.game.spawnRemoteWitherSkull(msg.x, msg.y, msg.z, msg.dx, msg.dy, msg.dz);
+          this.game.spawnRemoteWitherSkull(msg.x, msg.y, msg.z, msg.dx, msg.dy, msg.dz, msg.k);
+        }
+        break;
+      case MSG.COLOSSUS_SLAM:
+        // 天域批次 C：守誓巨像震地回执——本地结算（伤害/击退各端自算）
+        if (msg.id !== this.selfId && this.game.world) {
+          this.game.spawnRemoteColossusSlam(msg.x, msg.y, msg.z);
         }
         break;
       case MSG.CONTAINER_SET: {
@@ -492,8 +499,16 @@ export class NetworkManager {
   }
 
   // Idea-2D-②：凋灵之首初速上报（同箭矢事件式——各端本地积分，命中本地玩家本地结算）
-  sendWitherSkull(pos, dir) {
-    this._send(MSG.WITHER_SKULL, { x: pos.x, y: pos.y, z: pos.z, dx: dir.x, dy: dir.y, dz: dir.z });
+  // 批次 C：kind='gale' = 守誓巨像风弹（同通道，k 字段透传）
+  sendWitherSkull(pos, dir, kind) {
+    const payload = { x: pos.x, y: pos.y, z: pos.z, dx: dir.x, dy: dir.y, dz: dir.z };
+    if (kind === 'gale') payload.k = 'gale';
+    this._send(MSG.WITHER_SKULL, payload);
+  }
+
+  // 天域批次 C：守誓巨像震地上报（事件式——各端本地结算自己）
+  sendColossusSlam(pos) {
+    this._send(MSG.COLOSSUS_SLAM, { x: pos.x, y: pos.y, z: pos.z });
   }
 
   // 红石源状态（lever/button），低频广播让各端 poweredBlocks 对齐

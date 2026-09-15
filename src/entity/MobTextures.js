@@ -168,6 +168,8 @@ const C = {
   clFluff: [243, 243, 238], clFluffD: [214, 216, 212], clFace: [222, 198, 186], clHoof: [128, 116, 106],
   ghFeather: [98, 112, 140], ghFeatherD: [66, 78, 102], ghBelly: [168, 178, 198], ghBeak: [226, 172, 66], ghEye: [36, 30, 26],
   teCrystal: [110, 228, 210], teCrystalD: [64, 158, 142], teTent: [52, 128, 116], teCore: [222, 255, 248], teEye: [255, 255, 255],
+  // 守誓巨像（批次 C）：白铠 + 星髓脉络 + 青蓝辉眼
+  coArmor: [226, 230, 236], coArmorD: [172, 180, 194], coVein: [96, 232, 210], coEye: [140, 244, 228],
 };
 
 // === 各怪皮肤 SVG 生成（原版风） ===
@@ -816,6 +818,46 @@ const TIDE_ECHO_PARTS = [
   { name: 'tentBR', row: 3, box: [-0.20, 0.00, -0.20, -0.08, 0.34, -0.08] },
 ];
 
+// 守誓巨像（批次 C）：星髓与风暴铸成的巨型卫兵——白铠躯干 + 脉络纹 + 辉眼
+const COLOSSUS_PARTS = [
+  { name: 'head',  row: 0, box: [-0.35, 2.55, -0.35,  0.35, 3.15, 0.35] },
+  { name: 'body',  row: 1, box: [-0.55, 1.30, -0.30,  0.55, 2.60, 0.30] },
+  { name: 'armL',  row: 2, box: [-0.95, 1.10, -0.22, -0.50, 2.45, 0.22] },
+  { name: 'armR',  row: 2, box: [ 0.50, 1.10, -0.22,  0.95, 2.45, 0.22] },
+  { name: 'legL',  row: 3, box: [-0.45, 0.00, -0.24, -0.08, 1.32, 0.24] },
+  { name: 'legR',  row: 3, box: [ 0.08, 0.00, -0.24,  0.45, 1.32, 0.24] },
+];
+
+// 守誓巨像皮肤：白铠 + 星髓脉络（对角斜带）+ 辉眼 + 胸口潮心徽记
+function colossusSkinSVG() {
+  const armorBase = noisy(C.coArmor, 8, 351);
+  const armorD = noisy(C.coArmorD, 8, 352);
+  const headFront = (x, y) => {
+    if (y >= 6 && y <= 7 && ((x >= 3 && x <= 5) || (x >= 10 && x <= 12))) return C.coEye; // 辉眼
+    if (y === 10 && x >= 5 && x <= 10) return C.coArmorD;                                  // 嘴缝
+    if (y <= 1) return C.gTrim;                                                            // 头冠金缘
+    if ((x + y) % 7 === 0) return C.coVein;                                                // 脉络
+    return null;
+  };
+  const headTop = () => C.gTrim;
+  const bodyFront = (x, y) => {
+    if (y >= 6 && y <= 9 && x >= 6 && x <= 9) return C.coVein;        // 胸口潮心徽记
+    if ((x + y) % 6 === 0) return C.coVein;                            // 躯干脉络
+    if (x === 0 || x === 15 || y >= 14) return C.coArmorD;
+    return null;
+  };
+  const armFront = (x, y) => ((x + y) % 5 === 0 ? C.coVein : (x <= 1 ? C.coArmorD : null));
+  const legFront = (x, y) => (y >= 12 ? C.coArmorD : ((x + y) % 6 === 0 ? C.coVein : null));
+
+  const cells = [
+    ...partCells(0, armorBase, { front: headFront, top: headTop }),
+    ...partCells(1, armorBase, { front: bodyFront, top: armorD, bot: armorD }),
+    ...partCells(2, armorBase, { front: armFront, back: armFront, top: armorD, bot: armorD }),
+    ...partCells(3, armorD, { front: legFront, top: armorD, bot: armorD }),
+  ];
+  return buildSkinSVG(cells);
+}
+
 // 云绒兽皮肤：雪绒白 + 粉褐脸（黑豆眼）+ 浅灰蹄
 function cloudLambSkinSVG() {
   const fluffBase = noisy(C.clFluff, 8, 321);
@@ -1124,6 +1166,7 @@ export function generateMobSkinSVGs() {
     cloud_lamb:        cloudLambSkinSVG(),
     gale_hawk:         galeHawkSkinSVG(),
     tide_echo:         tideEchoSkinSVG(),
+    storm_colossus:    colossusSkinSVG(),
     cow:               cowSkinSVG(),
     sheep:             sheepSkinSVG(),
     chicken:           chickenSkinSVG(),
@@ -1437,6 +1480,26 @@ export const MobTypes = {
     drops: [
       { name: 'star_marrow', min: 0, max: 1, chance: 0.35 },  // 潮之骨头碎屑
       { name: 'glowstone', min: 0, max: 1, chance: 0.3 },
+    ],
+  },
+  storm_colossus: {
+    name: 'storm_colossus',
+    displayName: '守誓巨像',
+    width: 1.6,
+    height: 3.2,
+    health: 160,
+    damage: 7,
+    speed: 1.9,
+    attackRange: 3.0,
+    detectionRange: 40,
+    burningInDay: false,   // 永昼不燃烧
+    flying: true,          // StormColossusAI 接管全部速度/朝向（不加重力）
+    boss: true,            // 免疫击退 + Boss 血条；不进自然生成表（仅祭坛召唤）
+    xp: 80,
+    model: { parts: COLOSSUS_PARTS, kind: 'cuboid' },
+    drops: [
+      { name: 'storm_core', min: 1, max: 2 },
+      { name: 'heart_shard', min: 1, max: 1 },
     ],
   },
   cow: {

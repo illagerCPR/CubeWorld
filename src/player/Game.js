@@ -357,6 +357,9 @@ export class Game {
     this.mobManager.onDragonDefeated = (mob) => this._onDragonDefeated(mob);
     // 凋灵齐射回调（Idea-2D-②）：WitherAI 经此生成三发凋灵之首（本地弹 + 联机广播）
     this.mobManager.onWitherShoot = (mob, player) => this._spawnWitherSkullVolley(mob, player);
+    // 守誓巨像回调（天域批次 C）：风弹齐射（k:'gale' 复用 wither_skull 通道）+ 震地广播
+    this.mobManager.onColossusShoot = (mob, player, wide) => this._spawnGaleVolley(mob, player, wide);
+    this.mobManager.onColossusSlam = (mob) => this._colossusSlam(mob);
     this.mobManager.onMobXpAward = (mob, xp) => { if (this.player.survival) this.player.addXp(xp); };
     // 新建的粒子系统按视频设置套密度（其余项已在构造时套用，跨存档不变）
     applySettings(this);
@@ -750,6 +753,12 @@ export class Game {
     this._inUpdraft = !!(d1 && d1.updraft) || !!(d2 && d2.updraft);
   }
 
+  // 御风斗篷穿戴检测（批次 C）：胸甲槽 = armor[1]
+  _hasGaleCloak() {
+    const chest = this.inventory.armor && this.inventory.armor[1];
+    return !!(chest && chest.name === 'gale_cloak');
+  }
+
   // 风阵块放置：上方 12 格写风流柱（只填空气格；逐格 setBlock → 联机逐格自动上报）
   _writeGaleColumn(x, y, z) {
     const wid = BlockRegistry.getId('wind_current');
@@ -808,6 +817,8 @@ export class Game {
     this._updateWaterState();
     // 检测玩家是否在上升气流柱内（天域批次 B：足部/身体任一格为 wind_current）
     this._updateUpdraftState();
+    // 守誓巨像裂心风拽光环（天域批次 C：各端本地结算）
+    this._updateColossusAura(dt);
     // 鞘翅滑翔折叠判定（水中/落地等环境变化要在移动分支前收口，gliding 不得跨分支残留）
     this._updateGlideFold();
 
@@ -881,6 +892,10 @@ export class Game {
           // 信标跳跃效果（Idea-2D-③）：每级 +25% 跳跃初速
           const jb = this.player.getEffectLevel ? this.player.getEffectLevel('jump_boost') : 0;
           if (jb > 0 && this.player.velocity.y > 0) this.player.velocity.y *= 1 + 0.25 * jb;
+          // 御风斗篷（批次 C）：天域内跳跃 +20%（御风者的跳岛底气）
+          if (this._hasGaleCloak() && this.world.dimension === 'aether' && this.player.velocity.y > 0) {
+            this.player.velocity.y *= 1.2;
+          }
         }
       }
       
@@ -889,6 +904,11 @@ export class Game {
       if (this._inUpdraft && !this.controls.isSneaking() &&
           !this.player.flying && !this.player.spectator && !this.player.inWater && !this.player.gliding) {
         this.player.velocity.y = Math.min(6, this.player.velocity.y + 45 * dt);
+      }
+      // 御风斗篷缓降（批次 C）：下落末段限速（-8 m/s 不及摔伤线 -15，天然免摔）
+      if (this._hasGaleCloak() && !this.player.onGround && !this.player.flying &&
+          !this.player.inWater && !this.player.gliding && this.player.velocity.y < -8) {
+        this.player.velocity.y = -8;
       }
       this.player.updateCamera();
       this.sky.update(dt, this.player.position);
@@ -1646,6 +1666,27 @@ export class Game {
           this.controls.mouseRight = false;
           return;
         }
+        // 天域批次 C：恒昼祭坛——持风暴图腾右键召唤守誓巨像（可重复；房间 mobs:false 拒绝）
+        if (targetDef && targetDef.name === 'aether_altar' && !this.player.spectator) {
+          if (sel && sel.name === 'storm_totem') {
+            if (this.networkMode && this.net && this.net.roomSettings && this.net.roomSettings.mobs === false) {
+              if (this.chatBox) this.chatBox.add(t('该房间已关闭怪物生成，祭坛无视图腾。'), '#fbb');
+            } else {
+              if (this.player.survival) {
+                this.inventory.removeSelected(1);
+                this.hotbar.update();
+              }
+              // 殿前苏醒：底台东缘（门侧）地面高度，rise 阶段立起后进入岩卫
+              this.mobManager?._spawnAt('storm_colossus', hit.block.x + 6.5, hit.block.y + 2.05, hit.block.z + 0.5);
+              if (this.particles) {
+                const marrowDef = BlockRegistry.getByName('star_marrow_block');
+                if (marrowDef) this.particles.burstBlockBreak(hit.block.x + 0.5, hit.block.y + 2, hit.block.z + 0.5, marrowDef, this.world);
+              }
+            }
+          }
+          this.controls.mouseRight = false;
+          return;
+        }
         // 红石交互：拉杆/按钮
         if (targetDef && this.redstone) {
           const interacted = this.redstone.onBlockInteract(hit.block.x, hit.block.y, hit.block.z, hit.id);
@@ -1905,6 +1946,7 @@ export class Game {
   _ensureWitherSkullAssets() {
     if (!Game._skullGeo) Game._skullGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
     if (!Game._skullMat) Game._skullMat = new THREE.MeshBasicMaterial({ color: 0x33333c });
+    if (!Game._galeMat) Game._galeMat = new THREE.MeshBasicMaterial({ color: 0x5ee8d2 }); // 天域风弹（批次 C）
   }
 
   // WitherAI 齐射回调：三发扇形（中央直射 + 左右 ±偏航），从胸前高度射出
@@ -1923,24 +1965,42 @@ export class Game {
     }
   }
 
-  _spawnWitherSkull(pos, dir) {
-    this._ensureWitherSkullAssets();
-    const mesh = new THREE.Mesh(Game._skullGeo, Game._skullMat);
-    mesh.position.copy(pos);
-    this.renderer.scene.add(mesh);
-    this.witherSkulls.push({ mesh, pos: pos.clone(), vel: dir.clone().multiplyScalar(16), life: 6 });
-    if (this.networkMode && this.net) this.net.sendWitherSkull(pos, dir); // 初速广播（纯视觉）
+  // 守誓巨像风弹齐射（批次 C）：三发扇形；裂心(wide)=五发宽扇（经 k:'gale' 复用 skull 通道）
+  _spawnGaleVolley(mob, player, wide) {
+    const start = mob.position.clone();
+    start.y += mob.height * 0.7;
+    const base = player.position.clone().add(new THREE.Vector3(0, 1, 0)).sub(start).normalize();
+    const spread = wide ? 0.22 : 0.15;
+    const n = wide ? 2 : 1;
+    for (let i = -n; i <= n; i++) {
+      const yaw = i * spread;
+      const dir = new THREE.Vector3(
+        base.x * Math.cos(yaw) - base.z * Math.sin(yaw),
+        Math.max(-0.2, base.y + Math.abs(i) * 0.03),
+        base.x * Math.sin(yaw) + base.z * Math.cos(yaw)
+      ).normalize();
+      this._spawnWitherSkull(start.clone().addScaledVector(dir, 1.2), dir, 'gale');
+    }
   }
 
-  // 联机：远端凋灵弹初速回执——本地生成弹射物（不再广播，防回声环）
-  spawnRemoteWitherSkull(x, y, z, dx, dy, dz) {
+  _spawnWitherSkull(pos, dir, kind = 'wither') {
+    this._ensureWitherSkullAssets();
+    const mesh = new THREE.Mesh(Game._skullGeo, kind === 'gale' ? Game._galeMat : Game._skullMat);
+    mesh.position.copy(pos);
+    this.renderer.scene.add(mesh);
+    this.witherSkulls.push({ mesh, pos: pos.clone(), vel: dir.clone().multiplyScalar(kind === 'gale' ? 18 : 16), life: 6, kind });
+    if (this.networkMode && this.net) this.net.sendWitherSkull(pos, dir, kind); // 初速广播（纯视觉）
+  }
+
+  // 联机：远端凋灵弹/风弹初速回执——本地生成弹射物（不再广播，防回声环）
+  spawnRemoteWitherSkull(x, y, z, dx, dy, dz, kind) {
     this._ensureWitherSkullAssets();
     const pos = new THREE.Vector3(x, y, z);
     const dir = new THREE.Vector3(dx, dy, dz);
-    const mesh = new THREE.Mesh(Game._skullGeo, Game._skullMat);
+    const mesh = new THREE.Mesh(Game._skullGeo, kind === 'gale' ? Game._galeMat : Game._skullMat);
     mesh.position.copy(pos);
     this.renderer.scene.add(mesh);
-    this.witherSkulls.push({ mesh, pos, vel: dir.multiplyScalar(16), life: 6 });
+    this.witherSkulls.push({ mesh, pos, vel: dir.multiplyScalar(kind === 'gale' ? 18 : 16), life: 6, kind });
   }
 
   _updateWitherSkulls(dt) {
@@ -1957,7 +2017,18 @@ export class Game {
         const dx = s.pos.x - p.position.x, dz = s.pos.z - p.position.z;
         const dy = s.pos.y - (p.position.y + clampedY);
         if (dx * dx + dz * dz < 0.36 && dy * dy < 0.09) {
-          if (p.hurt(8, 'mob', true) && p.applyWither) p.applyWither(10); // 8 伤 + 凋零 II 10s
+          if (s.kind === 'gale') {
+            // 天域风弹（批次 C）：6 伤 + 击退（无凋零）
+            if (p.hurt(6, 'mob', true)) {
+              const dir = p.position.clone().sub(s.pos).setY(0);
+              if (dir.lengthSq() > 0.0001) dir.normalize(); else dir.set(0, 0, 1);
+              p.velocity.x += dir.x * 7;
+              p.velocity.z += dir.z * 7;
+              p.velocity.y += 3.5;
+            }
+          } else if (p.hurt(8, 'mob', true) && p.applyWither) {
+            p.applyWither(10); // 8 伤 + 凋零 II 10s
+          }
           audio.arrowHit();
           this._despawnWitherSkull(i);
           continue;
@@ -1978,6 +2049,62 @@ export class Game {
     const s = this.witherSkulls[i];
     this.renderer.scene.remove(s.mesh);
     this.witherSkulls.splice(i, 1);
+  }
+
+  // ── 守誓巨像震地（批次 C）────────────────────────────────────
+  // StormColossusAI 触发回调：本地结算自己 + 广播 colossus_slam（各端各自结算本地玩家）
+  _colossusSlam(mob) {
+    const pos = mob.position.clone();
+    this._applyColossusSlam(pos);
+    if (this.networkMode && this.net) this.net.sendColossusSlam(pos);
+  }
+
+  // 联机：远端震地回执——本地结算（不回播）
+  spawnRemoteColossusSlam(x, y, z) {
+    this._applyColossusSlam(new THREE.Vector3(x, y, z));
+  }
+
+  _applyColossusSlam(pos) {
+    const p = this.player;
+    if (p && !p.dead && !p.spectator && !p.creative) {
+      const d = p.position.distanceTo(pos);
+      if (d < 6) {
+        const dmg = Math.max(1, Math.round(6 * (1 - d / 8)));
+        if (p.hurt(dmg, 'mob', true)) {
+          const dir = p.position.clone().sub(pos).setY(0);
+          if (dir.lengthSq() > 0.0001) dir.normalize(); else dir.set(1, 0, 0);
+          p.velocity.x += dir.x * 8;
+          p.velocity.z += dir.z * 8;
+          p.velocity.y += 5;
+        }
+      }
+    }
+    // 冲击环粒子（星髓青）+ 屏幕震动（复用受击红屏的 flash 通道太重，只做粒子）
+    if (this.particles) {
+      const def = BlockRegistry.getByName('star_marrow_block');
+      if (def) this.particles.burstBlockBreak(pos.x, pos.y, pos.z, def, this.world);
+    }
+  }
+
+  // 裂心阶段风拽光环（批次 C）：巨像残血时把附近玩家拖向自己（岛缘=真实代价）。
+  // 各端对本地玩家结算（巨像位置经既有怪物同步收敛）；创造飞行/旁观免疫。
+  _updateColossusAura(dt) {
+    if (!this.mobManager || !this.player) return;
+    const p = this.player;
+    if (p.dead || p.spectator || p.flying) return;
+    for (const m of this.mobManager.mobs) {
+      if (m.dead || m.dyingAnim || m.typeName !== 'storm_colossus') continue;
+      const frac = m.maxHealth ? m.health / m.maxHealth : 1;
+      if (frac > 0.33) continue;
+      const d = p.position.distanceTo(m.position);
+      if (d > 11 || d < 0.5) continue;
+      const dir = m.position.clone().sub(p.position).setY(0);
+      if (dir.lengthSq() > 0.0001) dir.normalize();
+      const k = 9 * (1 - d / 11);
+      p.velocity.x += dir.x * k * dt * 6;
+      p.velocity.z += dir.z * k * dt * 6;
+      p.velocity.y += 2.5 * dt; // 微抬升——拖向岛缘的真实威胁
+    }
   }
 
   // A-② 脚步/落地音：水平位移累计达步长触发（走速 4.3m/s ≈ 每 0.5s 一步），涉水步长更短播水花；

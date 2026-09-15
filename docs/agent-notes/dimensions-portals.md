@@ -87,3 +87,15 @@
 - **生物三新增**：cloud_lamb（陆行被动，掉云絮 2-3——云絮唯一常规来源）/ gale_hawk（flying 敌对 3 伤）/ tide_echo（flying 中立）；`Mob.passive` 无实例字段（构造器只抄 neutral/flying），断言用 `type.passive`；生成表 **pickAetherSpawn→pickAetherSpawnV2**（crystal 守卫40/潮鸣30/风灵30；frost 守卫10/岚隼12/风灵余；草地岚隼8/风灵余；神殿周边守卫主导不变）；aether 被动群生成并入 trySpawn 草地块（`overworld||aether`，aether 组=cloud_lamb）。
 - **angerTideEchoes**：MobManager 新方法（挖矿触发器版同族群怒，末影人 attackMob 模式换触发器）；挂 creative+survival 两破坏路径（与 _breakBeacon 同位）；真实鼠标冒烟：挖穿星髓矿石 → 16 格内潮鸣 aggro=true。
 - **测试**：aether-mobs 351 断言（V2 分布 + 真实 MobManager 激怒链路）/ aether-structures 126 断言 ×2 seeds（新结构选址/石碑三向 meta↔方块↔sm.steles/内殿/引路碑/探针防护）/ aether-content 156 断言（cross+updraft/gale_block）。
+
+### 天域守誓巨像批次（批次 C，2026-09-15 交付，未发布——随 Build 14 统一发布）—— Boss 与奖励链
+
+- **召唤路由**：恒昼祭坛右键 + 手持 storm_totem（创造不消耗/生存扣 1）；召唤点 = 祭坛东侧底台（`altar+6.5, y+2.05`）；**房间闸门走 `net.roomSettings.mobs`（客户端预检）**——sendMobSpawn 漏斗兜底但图腾已扣，所以预检拒绝在前（提示走 chatBox，单机无提示）。
+- **StormColossusAI（仿 WitherAI 事件同步）**：rise(0.6s 立起)→guard 岩卫（贴地横扫 + 周期 7s 跳跃震地：跃起→坠砸→触底触发 onColossusSlam）→storm（66% 环绕悬浮 + 2.6s 齐射 + 9s 俯冲）→rupture（33% 更贴脸 + 1.7s 双段齐射 + 风拽光环）。**高危：初始化漏字段 = NaN 污染**——`colossusPhase` 未在 init 块赋值，`undefined += dt` → NaN → 位置/距离全 NaN、齐射静默失效（曾真出）；新 AI 状态字段必须全部在 init 块赋值。
+- **风拽光环**：不在 AI 内（mob 是 host 权威，拉本地玩家会跨端错位）——`Game._updateColossusAura(dt)` 各端对**本地玩家**结算（读 mob.health/maxHealth 判阶段——health 经攻击同步收敛）；creative flying/spectator 免疫。
+- **风弹复用 wither_skull 通道**：`_spawnWitherSkull(pos, dir, kind)` kind='gale' → 青色弹、18 速、命中 6 伤+击退（无凋零）；payload 加 `k:'gale'`（protocol/room/NetworkManager 三处透传，room 端 `msg.k === 'gale'` 才带，缺省凋灵首）；震地为新消息 `COLOSSUS_SLAM`（事件式 except 发起者，各端 `_applyColossusSlam` 本地结算伤害+击退+粒子）。
+- **BossBar 零成本接入**：`type.boss: true` 即自动多实例血条（与龙/凋灵并存）。
+- **御风斗篷效果**：缓降 = **physics.collide 之后**钳 `vy ≥ -8`（不到摔伤线 -15 天然免摔，实测两采样点 vy=-8.0）；跳跃 = 天域内 jump 后 `velocity.y *= 1.2`（底 9.0→10.8 实测）。穿戴检测 `_hasGaleCloak()` 读 `inventory.armor[1]`。
+- **死亡掉落零新增**：type.drops（storm_core 1-2 + heart_shard 1）走标准死亡链，**不需要龙败式持久化**（可重复召唤）；远端死亡链 applyRemoteMobAttack/Death 天然覆盖。
+- **测试**：tests/aether-boss.mjs（27 断言：注册/状态机只进不退/双段齐射计数/震地触发/图腾配方）——AI 测试用真实 Mob + stub mobManager，**player stub 必须带 hurt()（AI 近战咬合会调）**；冒烟时 attackMob 的 rayOrigin/rayDir 必须真 Vector3（§16 陷阱）。
+- **冒烟全绿**：祭坛召唤（BossBar 即现）/三阶段推进/风弹在飞/风拽拖近 1.7 格/击杀掉落 storm_core+heart_shard/缓降钳制/测试存档已删。

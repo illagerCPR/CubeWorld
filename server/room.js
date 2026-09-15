@@ -443,6 +443,7 @@ export class Room {
       case MSG.REDSTONE_STATE: this.onRedstoneState(player, msg); break;
       case MSG.ARROW_SHOT: this.onArrowShot(player, msg); break;
       case MSG.WITHER_SKULL: this.onWitherSkull(player, msg); break;
+      case MSG.COLOSSUS_SLAM: this.onColossusSlam(player, msg); break;
       case MSG.PLAYER_STATE: this.onPlayerState(player, msg); break;
       case MSG.PLAYER_FULL: this.onPlayerFull(player, msg); break;
       case MSG.ATTACK_PLAYER: this.onAttack(player, msg); break;
@@ -606,12 +607,22 @@ export class Room {
     this.broadcastDim(MSG.ARROW_SHOT, { id: player.id, x, y, z, dx, dy, dz }, player.dim, player.id);
   }
 
-  // 凋灵之首（Idea-2D-②）：同箭矢事件转发 except 发起者（发射端已本地生成）；不进账本
+  // 凋灵之首/天域风弹（Idea-2D-② + 批次 C）：同箭矢事件转发 except 发起者（发射端已本地生成）；不进账本
   onWitherSkull(player, msg) {
     const raw = [msg.x, msg.y, msg.z, msg.dx, msg.dy, msg.dz];
     if (!raw.every((v) => typeof v === 'number' && Number.isFinite(v))) return; // 脏包丢弃
     const [x, y, z, dx, dy, dz] = raw;
-    this.broadcastDim(MSG.WITHER_SKULL, { id: player.id, x, y, z, dx, dy, dz }, player.dim, player.id);
+    const payload = { id: player.id, x, y, z, dx, dy, dz };
+    if (msg.k === 'gale') payload.k = 'gale'; // 天域风弹标记透传（缺省 = 凋灵之首）
+    this.broadcastDim(MSG.WITHER_SKULL, payload, player.dim, player.id);
+  }
+
+  // 守誓巨像震地（批次 C）：同款事件转发 except 发起者；不进账本
+  onColossusSlam(player, msg) {
+    const raw = [msg.x, msg.y, msg.z];
+    if (!raw.every((v) => typeof v === 'number' && Number.isFinite(v))) return;
+    const [x, y, z] = raw;
+    this.broadcastDim(MSG.COLOSSUS_SLAM, { id: player.id, x, y, z }, player.dim, player.id);
   }
 
   onPlayerState(player, msg) {

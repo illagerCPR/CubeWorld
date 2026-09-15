@@ -5,6 +5,7 @@ import { MobTypes } from './MobTextures.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { updateDragonAI } from './DragonAI.js';
 import { updateWitherAI } from './WitherAI.js';
+import { updateColossusAI } from './StormColossusAI.js';
 import { audio } from '../audio/AudioEngine.js';
 
 export class Mob extends Entity {
@@ -96,6 +97,14 @@ export class Mob extends Entity {
     if (this.typeName === 'wither') {
       // 凋灵：WitherAI 全接管（升空/环绕/齐射/狂暴），不走通用索敌链
       updateWitherAI(this, dt, player, mobManager);
+      physics.collide(this, dt);
+      if (this.position.y < -20) this.dead = true;
+      return;
+    }
+
+    if (this.typeName === 'storm_colossus') {
+      // 守誓巨像（天域批次 C）：三阶段全接管（岩卫震地/风暴齐射/裂心风拽），不走通用索敌链
+      updateColossusAI(this, dt, player, mobManager);
       physics.collide(this, dt);
       if (this.position.y < -20) this.dead = true;
       return;

@@ -151,6 +151,15 @@ else
     exit 1
 fi
 
+# 守誓巨像回归（纯 node：注册/状态机/齐射震地回调/图腾配方）
+echo "=== aether-boss ==="
+if node tests/aether-boss.mjs; then
+    echo "aether-boss: OK"
+else
+    echo "aether-boss: FAILED"
+    exit 1
+fi
+
 # 语言包三重校验（纯 node：10 包键集对齐/占位符对齐/静态∪动态键覆盖审计/重复键扫描）
 echo "=== i18n-parity ==="
 if node tests/i18n-parity.mjs; then

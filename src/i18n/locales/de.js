@@ -320,4 +320,5 @@ export const de = {
   "守誓巨像碎裂后，仍盘旋不息的风暴之核。": "Ein Sturmkern, der sich ohne Rast weiterdreht, selbst nach dem Zerbrechen des Eidkolosses.",
   "天穹之心的碎片，仍在极缓慢地搏动。": "Ein Splitter des Herzens des Himmelsgewölbes; es schlägt noch, ganz langsam.",
 
+  "该房间已关闭怪物生成，祭坛无视图腾。": "In diesem Raum ist das Monster-Spawnen deaktiviert; der Altar weist das Totem zurück.",
 };

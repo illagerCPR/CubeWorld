@@ -46,6 +46,9 @@ export const MSG = {
   // 凋灵之首（Idea-2D-②，事件式同箭矢：只广播初速；命中本地玩家由各端本地结算）
   WITHER_SKULL: 'wither_skull',
 
+  // 守誓巨像震地（天域批次 C，事件式：只广播震心坐标；伤害/击退由各端本地结算）
+  COLOSSUS_SLAM: 'colossus_slam',
+
   // 玩家
   PLAYER_STATE: 'player_state',
   PLAYER_FULL: 'player_full',

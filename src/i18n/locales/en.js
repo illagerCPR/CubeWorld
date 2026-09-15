@@ -320,4 +320,5 @@ export const en = {
   "守誓巨像碎裂后，仍盘旋不息的风暴之核。": "A storm core that still whirls without rest, even after the Oathbound Colossus broke apart.",
   "天穹之心的碎片，仍在极缓慢地搏动。": "A shard of the Heart of the Firmament; it still beats, ever so slowly.",
 
+  "该房间已关闭怪物生成，祭坛无视图腾。": "This room has mob spawning disabled; the altar rejects the totem.",
 };

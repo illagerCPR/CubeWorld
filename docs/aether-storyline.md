@@ -223,7 +223,7 @@
 - 联机：结构确定性对拍（同 seed 两客户端逐字节）；气流客户端本地（验证互不干扰）。
 - 浏览器冒烟（agent-browser b5 惯例）：入域→读碑→挖星髓被潮鸣袭→乘气流柱跨岛→云绒块落地无伤。
 
-### 批次 C：守誓巨像（Boss 与奖励链）
+### 批次 C：守誓巨像（Boss 与奖励链）✅ 已交付（2026-09-15，未发布——随 Build 14 统一发布）
 - Boss：三阶段状态机（`StormColossusAI.js`，仿 DragonAI 挂 Mob.update 专用分支）；风弹投射物（凋灵之首模式）；风拽（阶段Ⅲ）；BossBar 多实例接入。
 - 联机：host 权威生成/攻击广播/击败幂等链（`_fireColossusDefeated` 参考 `_fireDragonDefeated` 三入口挂法）；`mobs:false` 房间召唤拒绝测试。
 - 掉落→合成闭环：缚风之剑/御风斗篷实装穿戴效果（缓降走 Physics 落地限速，跳跃加成走 Player.effects 既有五挂钩）。

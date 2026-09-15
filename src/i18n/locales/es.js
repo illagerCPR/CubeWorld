@@ -320,4 +320,5 @@ export const es = {
   "守誓巨像碎裂后，仍盘旋不息的风暴之核。": "Un núcleo de tormenta que aún gira sin descanso, incluso después de que el Coloso del Juramento se quebrara.",
   "天穹之心的碎片，仍在极缓慢地搏动。": "Un fragmento del Corazón del Firmamento; todavía late, muy lentamente.",
 
+  "该房间已关闭怪物生成，祭坛无视图腾。": "Esta sala tiene desactivada la aparición de monstruos; el altar rechaza el tótem.",
 };
