@@ -747,6 +747,7 @@ const BlockCN = {
   star_marrow_ore: '星髓矿石', star_marrow_block: '星髓块', cloud_wool: '云绒块',
   wind_stele: '风纹石碑', aether_altar: '恒昼祭坛', wind_current: '气流', gale_block: '风阵块',
   tide_altar: '潮心祭坛',
+  ember_stele: '烬纹石碑', // 世界观批次 N1：下界石碑（石碑家族第二员）
 };
 
 function reg(name, def, svgs) {
@@ -1016,7 +1017,7 @@ reg('crafting_table', { tool: 'axe', textures: { top: 'crafting_table_top', side
 reg('furnace', { textures: { top: 'stone', side: 'furnace_side', bottom: 'stone' }, hardness: 3.5, tool: 'pickaxe', minTier: 1 },
   { furnace_side: furnaceTex(93) });
 reg('glass', { transparent: true, hardness: 0.3 }, { glass: glassTex() });
-reg('glowstone', { displayName: '荧石', light: 15, hardness: 0.3 }, { glowstone: glowstoneTex(95) });
+reg('glowstone', { displayName: '荧石', light: 15, hardness: 0.3, lore: ['坠入地底的海水在地火中凝成的光。', '云民叫它长明灯石，用它造通往家乡的门。'] }, { glowstone: glowstoneTex(95) });
 reg('sea_lantern', { displayName: '海晶灯', light: 15, hardness: 0.3 }, { sea_lantern: seaLanternTex(96) });
 
 // --- 传送门（迭代：原版式维度传送门）---
@@ -1164,7 +1165,7 @@ reg('hay_block', { textures: { top: 'hay_top', side: 'hay_side', bottom: 'hay_to
 // --- 下界/末地 ---
 reg('netherrack', { hardness: 0.4, tool: 'pickaxe' }, { netherrack: blotchTex([102, 38, 38], 121, { dark: 0.65, light: 1.3, dProb: 0.28, lProb: 0.18 }) });
 reg('end_stone', { hardness: 3, tool: 'pickaxe' }, { end_stone: blotchTex([219, 222, 167], 122, { dark: 0.86, light: 1.05, dProb: 0.3, lProb: 0.15 }) });
-reg('soul_sand', { hardness: 0.5, tool: 'shovel' }, { soul_sand: soulTex(123) });
+reg('soul_sand', { hardness: 0.5, tool: 'shovel', lore: ['坠潮裹挟的溺亡者沉进了泥沙。', '把耳朵贴近，雨夜里能听见很轻的潮声。'] }, { soul_sand: soulTex(123) });
 reg('magma_block', { displayName: '岩浆块', light: 6, hardness: 0.5, tool: 'pickaxe' }, { magma_block: magmaTex(124) });
 // 末影水晶：柱顶发光晶体（为龙回血；被击碎时爆炸，Game._breakCrystal 处理）
 reg('end_crystal', { displayName: '末影水晶', light: 15, hardness: 0.5 }, { end_crystal: (function () {
@@ -1623,6 +1624,27 @@ function tideAltarTex(seed) {
   return pixelSvg(px);
 }
 reg('tide_altar', { light: 13, hardness: -1 }, { tide_altar: tideAltarTex(157) });
+
+// 烬纹石碑（世界观批次 N1：下界石碑家族第二员）：暗色岩底 + 三道凹槽 + 余烬裂纹符
+// 与风纹石碑同构（steleTex 同款布局），色系换成烬火（炭黑底/余烬橙红），章节随批次 N2 注册
+function emberSteleTex() {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb([58, 54, 58], 0.9 + hash2(x, y, 158) * 0.18);
+  }
+  for (const y of [3, 7, 11]) {
+    for (let x = 2; x <= 13; x++) px[y * 16 + x] = rgb([40, 37, 41]);
+  }
+  // 余烬裂纹符：一道自上而下的裂谷 + 残火斑点（微光感）
+  for (const [x, y] of [[8, 4], [8, 5], [7, 6], [8, 6], [9, 7], [8, 7], [8, 8], [7, 9]]) {
+    px[y * 16 + x] = rgb([236, 126, 58], 0.95);
+  }
+  for (const [x, y] of [[6, 5], [10, 6], [6, 8], [9, 9], [8, 10]]) {
+    px[y * 16 + x] = rgb([196, 74, 34], 0.9);
+  }
+  return pixelSvg(px);
+}
+reg('ember_stele', { hardness: -1 }, { ember_stele: emberSteleTex() });
 
 export const BlockSVGDefinitions = svgMap;
 

@@ -291,6 +291,7 @@ const ItemCN = {
   page_rising: '潮汐残页·涨潮', page_marrow: '潮汐残页·星髓', page_sunder: '潮汐残页·裂潮',
   storm_totem: '风暴图腾', storm_core: '风暴之核', heart_shard: '心核碎片',
   wind_brand: '缚风之剑', gale_cloak: '御风斗篷',
+  mourn_tear: '哀潮之泪', // 世界观批次 N1
 };
 
 function reg(name, def, svg) {
@@ -1002,6 +1003,18 @@ reg('gale_cloak', { stack: 1, armorSlot: 'chest', armorPoints: 3 }, art(g => {
   g.s(7, 5, marrowP[1]); g.s(8, 5, marrowP[1]);
   g.s(6, 6, marrowP[2]); g.s(9, 6, marrowP[2]);
   g.s(5, 9, 'rgb(170,184,208)'); g.s(10, 10, 'rgb(170,184,208)');
+}));
+
+// 哀潮之泪（世界观批次 N1：下界·哭嚎者掉落，N3 实装掉落链）：青蓝泪滴 + 微光高光
+reg('mourn_tear', { stack: 16, lore: ['哭嚎者坠落时凝下的泪。', '它是咸的——这片地底本没有盐，除了海来过的那部分。'] }, art(g => {
+  const c = ['rgb(120,190,220)', 'rgb(74,142,190)', 'rgb(40,92,150)'];
+  g.d(8, 9, 3, 4, c[2]);
+  g.d(8, 9, 2, 3, c[1]);
+  g.d(8, 10, 1, 2, c[0]);
+  g.vl(8, 3, 5, c[1]);
+  g.s(8, 2, c[0]); g.s(7, 3, c[1]); g.s(9, 3, c[1]);
+  g.s(7, 8, 'rgb(220,242,252)'); g.s(8, 7, 'rgb(220,242,252)');
+  for (const [x, y] of [[5, 12], [11, 12], [6, 13], [10, 13]]) g.s(x, y, c[2]);
 }));
 
 export const ItemSVGDefinitions = svgMap;

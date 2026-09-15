@@ -86,10 +86,15 @@ for (const [name, cat] of Object.entries(WANT_CAT)) {
   ok(getItemCategory(name) === cat, `分类: ${name} → ${cat} (got ${getItemCategory(name)})`);
 }
 
-// ── ④ 碑文章节表 ──
+// ── ④ 碑文章节表（世界观批次 N1 起表为跨维度共享：本测试只锁天域 9 章的相对顺序）──
 const EXPECT_CHAPTERS = ['prologue', 'tide', 'voyage', 'marrow', 'gate', 'delving', 'sundering', 'command', 'renewal'];
-ok(JSON.stringify(Object.keys(STELE_CHAPTERS)) === JSON.stringify(EXPECT_CHAPTERS),
-  `章节 id 集合与顺序 (${Object.keys(STELE_CHAPTERS).join(',')})`);
+const allIds = Object.keys(STELE_CHAPTERS);
+ok(JSON.stringify(allIds.slice(0, EXPECT_CHAPTERS.length)) === JSON.stringify(EXPECT_CHAPTERS),
+  `天域章节前缀顺序不变 (${allIds.slice(0, EXPECT_CHAPTERS.length).join(',')})`);
+for (const id of allIds) {
+  ok(STELE_CHAPTERS[id].dim === 'aether' || STELE_CHAPTERS[id].dim === 'nether',
+    `章节 dim 值域（天域测试只认天域/下界）: ${id}`);
+}
 for (const [id, ch] of Object.entries(STELE_CHAPTERS)) {
   ok(typeof ch.title === 'string' && ch.title.length > 1, `章节标题: ${id}`);
   ok(Array.isArray(ch.lines) && ch.lines.length >= 3, `章节行文 ≥3 行: ${id}`);

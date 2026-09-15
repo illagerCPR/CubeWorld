@@ -1,8 +1,10 @@
-// steles.js -- 风纹石碑章节内容表（天域批次 A：叙事基石）
+// steles.js -- 风纹石碑章节内容表（天域批次 A：叙事基石；世界观批次 N1：跨维度扩展）
 // 值均为简体原文 = 语言包键（SteleScreen 渲染时经 t() 翻译）；缺项回落简体。
+// 每章必须带 dim 字段（'aether'|'nether'|'overworld'|'end'）——命令面板石碑直读按当前
+// 维度过滤；未标注 dim 的章节对玩家不可达（tests/nether-steles.mjs 断言 dim 完备性）。
 // 新增/改动章节必须同步 10 语言包 + names.js（tests/i18n-parity.mjs 动态键断言兜底）。
-// 章节与故事线的对应关系见 docs/aether-storyline.md §2.5/§3.8；章节 id 由
-// 结构 meta.steles（批次 B 起）经 StructureManager.steleChapterAt 解析，未注册的
+// 章节与故事线的对应关系见 docs/aether-storyline.md §2.5/§3.8 与 docs/worldview.md §3/§10；
+// 章节 id 由结构 meta.steles（批次 B 起）经 StructureManager.steleChapterAt 解析，未注册的
 // 石碑（玩家自放/创造获取）回落 STELE_BLANK。
 
 // 无字碑：未被任何章节注册的石碑
@@ -12,8 +14,10 @@ export const STELE_BLANK = {
 };
 
 export const STELE_CHAPTERS = {
+  // ── 天域·天海纪元（9 章）──
   // 第一章（批次 B：出生岛引路碑特典）
   prologue: {
+    dim: 'aether',
     title: '引路碑·给后来的人',
     lines: [
       '灯灭了不知多少年。今天它又亮了——是门那边来的光。',
@@ -24,6 +28,7 @@ export const STELE_CHAPTERS = {
   },
   // 第二章（批次 B：瞭望塔）
   tide: {
+    dim: 'aether',
     title: '涨潮',
     lines: [
       '那时天上是有海的。风比水稠，云就是浪，我们驾船在浪上走。',
@@ -33,6 +38,7 @@ export const STELE_CHAPTERS = {
   },
   // 第三章（批次 B：天域沉船）
   voyage: {
+    dim: 'aether',
     title: '航路',
     lines: [
       '潮退的那一刻，我们正在浪上。',
@@ -42,6 +48,7 @@ export const STELE_CHAPTERS = {
   },
   // 第四章（批次 B：水晶秘境）
   marrow: {
+    dim: 'aether',
     title: '星髓',
     lines: [
       '礁脉深处有光，我们叫它星髓。是它托着千岛不坠，是它把灯点亮。',
@@ -51,6 +58,7 @@ export const STELE_CHAPTERS = {
   },
   // 第五章（批次 B：天海之门遗迹）
   gate: {
+    dim: 'aether',
     title: '穿界之门',
     lines: [
       '以长明灯石为拱，可以凿穿界壁。',
@@ -60,6 +68,7 @@ export const STELE_CHAPTERS = {
   },
   // 第六章（批次 B：天空神殿外围）
   delving: {
+    dim: 'aether',
     title: '掘心',
     lines: [
       '星髓一年比一年稀薄，我们便一年比一年挖得更深。',
@@ -69,6 +78,7 @@ export const STELE_CHAPTERS = {
   },
   // 第七章（批次 B：神殿内殿）
   sundering: {
+    dim: 'aether',
     title: '裂潮之日',
     lines: [
       '心壳裂开的那一天，没有巨响。',
@@ -78,6 +88,7 @@ export const STELE_CHAPTERS = {
   },
   // 第八章（批次 B：神殿内殿）
   command: {
+    dim: 'aether',
     title: '最后一道命令',
     lines: [
       '潮退之际，长老们给星铸卫下了最后一道命令：',
@@ -87,11 +98,53 @@ export const STELE_CHAPTERS = {
   },
   // 第九章（批次 D：复潮后由潮心祭坛浮现）
   renewal: {
+    dim: 'aether',
     title: '复潮',
     lines: [
       '写给新的织风者：',
       '心核已归其位，长夜归还给天空，风里旧人的记忆得以安眠。',
       '潮水不再，潮信长存。愿你的船，比我们的走得更远。',
+    ],
+  },
+  // ── 下界·烬火纪（4 章，世界观批次 N1；碑位随批次 N2/N3 落入要塞与潮火之炉）──
+  // 第一章：坠潮（要塞塔楼）
+  ember_sinking: {
+    dim: 'nether',
+    title: '坠潮',
+    lines: [
+      '地开始下雨的那一年，我们以为是福。',
+      '水从头顶的裂口灌进来，是热的，带着光。老人们说，那是海——从世界的伤口里跌下来的海。',
+      '我们接住了它。潮火从此不熄。',
+    ],
+  },
+  // 第二章：炉火（潮火之炉）
+  ember_hearth: {
+    dim: 'nether',
+    title: '炉火',
+    lines: [
+      '坠潮煮沸即得潮火：照亮，炼石，驱寒。',
+      '潮火凝出的光石，天上的人叫它长明灯石——他们用它造门，我们用它造灯。',
+      '炉在，火民在。',
+    ],
+  },
+  // 第三章：熏黑（潮火之炉深处）
+  ember_sooted: {
+    dim: 'nether',
+    title: '熏黑',
+    lines: [
+      '守炉的卫兵一年比一年黑，先是甲，后是骨。',
+      '熏黑的卫兵仍然站着。没有人记得他们原本的名字，大家只叫他们：炉的骨头。',
+      '别在炉前久留。',
+    ],
+  },
+  // 第四章：哀鸣（熔岩海沿岸）
+  ember_mourning: {
+    dim: 'nether',
+    title: '哀鸣',
+    lines: [
+      '熔岩海上方有哭声。不是风——这里的风不会哭。',
+      '是坠落的人。潮水跌下来的时候，他们还在海里。',
+      '炉火不熄，哭声不停。若你听见，不必害怕；他们只是在找回不去的家。',
     ],
   },
 };

@@ -23,6 +23,7 @@ import '../src/blocks/BlockDefs.js';
 import '../src/items/ItemDefs.js';
 import '../src/world/structures/catalog.js';
 import { ItemRegistry } from '../src/core/ItemRegistry.js';
+import { BlockRegistry } from '../src/core/BlockRegistry.js';
 import { STELE_CHAPTERS, STELE_BLANK } from '../src/world/steles.js';
 import { BEACON_EFFECTS } from '../src/ui/BeaconScreen.js';
 import { CATEGORY_LABEL_KEYS } from '../src/core/ItemCategories.js';
@@ -73,6 +74,7 @@ for (const Gen of [TerrainGenerator, AetherGenerator, NetherGenerator, EndGenera
 for (const ch of Object.values(STELE_CHAPTERS)) { dynamicKeys.add(ch.title); addAll(ch.lines); }
 dynamicKeys.add(STELE_BLANK.title); addAll(STELE_BLANK.lines);
 for (const item of ItemRegistry.all()) if (item.lore) addAll(item.lore);
+for (const b of BlockRegistry.all()) if (b.lore) addAll(b.lore); // 世界观批次 N1：方块 lore
 for (const [, label, desc] of BEACON_EFFECTS) { dynamicKeys.add(label); dynamicKeys.add(desc); }
 addAll(Object.values(CATEGORY_LABEL_KEYS));
 

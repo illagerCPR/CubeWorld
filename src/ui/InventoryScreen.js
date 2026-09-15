@@ -86,9 +86,11 @@ export class InventoryScreen {
     slot.onmouseenter = () => {
       if (!name) { this.tooltip.style.display = 'none'; this._hoverName = null; return; }
       const itemDef = ItemRegistry.getByName(name);
-      const lore = itemDef && itemDef.lore;
+      // 物品 lore 优先；方块（BlockDefs 注册，不在 ItemRegistry）回落方块 lore（世界观批次 N1）
+      const def = itemDef || BlockRegistry.getByName(name);
+      const lore = def && def.lore;
       if (lore && lore.length) {
-        // 物品 lore（天域批次 A）：名称 + 灰蓝斜体残文行（语言包键，缺项回落简体）
+        // 物品/方块 lore（天域批次 A / 世界观批次 N1）：名称 + 灰蓝斜体残文行（语言包键，缺项回落简体）
         const rows = lore.map((l) => `<div style="color:#9fb3c8; font-style:italic; margin-top:2px;">${t(l)}</div>`).join('');
         this.tooltip.innerHTML = `<div>${getDisplayName(name)}</div>${rows}`;
       } else {

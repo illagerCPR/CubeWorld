@@ -88,6 +88,15 @@ else
     exit 1
 fi
 
+# 下界烬火纪基石（世界观批次 N1：ember_stele/mourn_tear/方块 lore/碑文跨维度 dim 完备）
+echo "=== nether-steles ==="
+if node tests/nether-steles.mjs; then
+    echo "nether-steles: OK"
+else
+    echo "nether-steles: FAILED"
+    exit 1
+fi
+
 # 末地外岛锚点场回归（纯 node：群系在场/密度带宽/锚点确定性/群系方块同源）
 echo "=== end-islands ==="
 if node tests/end-islands.mjs; then

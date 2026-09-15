@@ -300,4 +300,7 @@ export const NAME_I18N = {
   "gale_cloak": ["御风斗篷","禦風斗篷","Gale Cloak","Cape de la bourrasque","Sturmumhang","嵐のマント","폭풍 망토","عباءة العاصفة","Плащ бури","Capa del vendaval","Capa do vendaval"],
   "storm_colossus": ["守誓巨像","守誓巨像","Oathbound Colossus","Colosse lié par serment","Eidkoloss","守誓の巨像","서약의 거상","عملاق القَسَم","Колосс Клятвы","Coloso del Juramento","Colosso do Juramento"],
 
+  // ---------- 下界·烬火纪（世界观批次 N1） ----------
+  "ember_stele": ["烬纹石碑","燼紋石碑","Ember Stele","Stèle de braise","Aschestele","燃石の碑","잿불 비석","مسلة الجمر","Стела углей","Estela de rescoldo","Estela de brasas"],
+  "mourn_tear": ["哀潮之泪","哀潮之淚","Mourntear","Larme de deuil","Klageträne","哀潮の涙","애도의 눈물","دمعة الموات","Слеза оплакивания","Lágrima de duelo","Lágrima de luto"],
 };

@@ -70,7 +70,7 @@ export class CommandPanel {
       this._refreshDimensionHighlight();
       this._refreshTimeLabel();
       this._refreshExplore();
-      this._refreshAether();
+      this._refreshDimTools();
     }
   }
 
@@ -257,35 +257,34 @@ export class CommandPanel {
     this.curTimeLabel = curTimeLabel;
     timeCard.appendChild(timeCustomRow);
 
-    // ⑤b 天域检查（仅天域维度显示，显隐在 _refreshExplore 随探索列表一并刷新）：
-    // 复潮切换（单机权威）+ 石碑章节直读（免跑图逐碑检查九幕叙事）
-    const aetherCard = this._mkCard('天域检查');
+    // ⑤b 维度检查（世界观批次 N1 起跨维度）：复潮切换（仅天域，单机权威）+
+    // 石碑章节直读（按当前维度过滤章节，免跑图逐碑检查叙事；无章节的维度整卡隐藏）
+    const aetherCard = this._mkCard('维度检查');
     colR.appendChild(aetherCard);
     this.aetherCard = aetherCard;
+    const duskWrap = document.createElement('div');
+    duskWrap.style.cssText = 'display:flex; flex-direction:column; gap:4px;';
+    aetherCard.appendChild(duskWrap);
+    this.duskWrap = duskWrap;
     const duskBtn = this._mkBtn('触发复潮（解除永昼）');
     duskBtn.addEventListener('click', () => {
       if (this.game.networkMode) return; // 联机房间复潮由服务器权威（潮汐仪式同步），面板不越权
       this.game.applyAetherDusk(!this.game.aetherDusk);
-      this._refreshAether();
+      this._refreshDimTools();
     });
-    aetherCard.appendChild(duskBtn);
+    duskWrap.appendChild(duskBtn);
     this.duskBtn = duskBtn;
     const duskLabel = document.createElement('div');
     duskLabel.style.cssText = 'font-size:11px; color:#9ab;';
-    aetherCard.appendChild(duskLabel);
+    duskWrap.appendChild(duskLabel);
     this.duskLabel = duskLabel;
 
     const steleRow = document.createElement('div');
     steleRow.style.cssText = 'display:flex; gap:6px; align-items:center;';
     steleRow.appendChild(this._mkLabel('石碑章节'));
+    this.steleRow = steleRow;
     this.steleSelect = document.createElement('select');
     this.steleSelect.style.cssText = 'flex:1 1 0; min-width:0; padding:5px 6px; font-size:12px; background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff;';
-    for (const [id, ch] of Object.entries(STELE_CHAPTERS)) {
-      const opt = document.createElement('option');
-      opt.value = id;
-      opt.textContent = t(ch.title);
-      this.steleSelect.appendChild(opt);
-    }
     steleRow.appendChild(this.steleSelect);
     const readBtn = this._mkBtn('阅读');
     readBtn.style.padding = '5px 12px';
@@ -403,17 +402,34 @@ export class CommandPanel {
     return dirs[idx];
   }
 
-  // 天域检查卡刷新：显隐（仅天域维度）+ 复潮按钮文案/状态/联机禁用
-  _refreshAether() {
+  // 维度检查卡刷新：复潮控件（仅天域）+ 石碑章节直读（按当前维度过滤；无内容整卡隐藏）
+  _refreshDimTools() {
     if (!this.aetherCard) return;
     const game = this.game;
     const world = game.world;
-    this.aetherCard.style.display = (world && world.dimension === 'aether') ? 'flex' : 'none';
-    const on = !!game.aetherDusk;
-    this.duskBtn.textContent = t(on ? '恢复永昼' : '触发复潮（解除永昼）');
-    this.duskLabel.textContent = t(on ? '当前：已复潮' : '当前：永昼');
-    this.duskBtn.disabled = !!game.networkMode;
-    this.duskBtn.title = game.networkMode ? t('联机房间复潮由服务器权威（潮汐仪式完成后同步）。') : '';
+    const dim = world ? world.dimension : 'overworld';
+    const isAether = dim === 'aether';
+    // 复潮控件：仅天域显示
+    this.duskWrap.style.display = isAether ? 'flex' : 'none';
+    if (isAether) {
+      const on = !!game.aetherDusk;
+      this.duskBtn.textContent = t(on ? '恢复永昼' : '触发复潮（解除永昼）');
+      this.duskLabel.textContent = t(on ? '当前：已复潮' : '当前：永昼');
+      this.duskBtn.disabled = !!game.networkMode;
+      this.duskBtn.title = game.networkMode ? t('联机房间复潮由服务器权威（潮汐仪式完成后同步）。') : '';
+    }
+    // 石碑章节直读：选项随维度重建（STELE_CHAPTERS[].dim 过滤），无章节整行隐藏
+    const opts = Object.entries(STELE_CHAPTERS).filter(([, ch]) => ch.dim === dim);
+    this.steleRow.style.display = opts.length ? 'flex' : 'none';
+    this.steleSelect.innerHTML = '';
+    for (const [id, ch] of opts) {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = t(ch.title);
+      this.steleSelect.appendChild(opt);
+    }
+    // 整卡显隐：无任何可用工具的维度不显示空壳卡
+    this.aetherCard.style.display = (isAether || opts.length) ? 'flex' : 'none';
   }
 
   _refreshTimeLabel() {
@@ -505,7 +521,7 @@ export class CommandPanel {
     this._refreshDimensionHighlight();
     this._refreshTimeLabel();
     this._refreshExplore();
-    this._refreshAether();
+    this._refreshDimTools();
     this.el.style.display = 'flex';
     if (this.game.inventoryScreen && this.game.inventoryScreen.visible) this.game.inventoryScreen.hide();
     if (this.game.controls) {
