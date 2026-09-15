@@ -1724,6 +1724,12 @@ export class Game {
           this.controls.mouseRight = false;
           return;
         }
+        // 终局篇 F1/K2：原初祭坛——右键浮现候潮章（候潮态受体，随时可复读）
+        if (targetDef && targetDef.name === 'primordial_altar' && this.steleScreen && !this.player.spectator) {
+          this.steleScreen.open(hit.block.x, hit.block.y, hit.block.z, 'tide_waiting');
+          this.controls.mouseRight = false;
+          return;
+        }
         // 红石交互：拉杆/按钮
         if (targetDef && this.redstone) {
           const interacted = this.redstone.onBlockInteract(hit.block.x, hit.block.y, hit.block.z, hit.id);

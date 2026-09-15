@@ -8,6 +8,18 @@ import { CREATIVE_CATEGORIES, CATEGORY_LABEL_KEYS, getItemCategory } from '../co
 import { t } from '../i18n/index.js';
 import { getDisplayName } from './itemName.js';
 
+// 盔甲槽空槽底纹（Build 19 K2：原版式四件套轮廓，灰线风）——svgToDataUri 32×32
+function armorSlotIcon(kind) {
+  const P = {
+    helmet: `<path d="M8 14 V10 Q8 6 16 6 Q24 6 24 10 V14 M8 14 H13 V18 H8 M24 14 H19 V18 H24" />`,
+    chestplate: `<path d="M10 8 L14 6 H18 L22 8 L24 12 V26 H8 V12 Z M14 6 V10 H18 V6" />`,
+    leggings: `<path d="M10 6 H22 L23 14 L22 26 H17 L16 16 L15 26 H10 L9 14 Z" />`,
+    boots: `<path d="M10 6 H15 V18 Q15 22 11 22 H15 M17 6 H22 V20 Q22 24 18 24 H14 M10 22 H15 M14 24 H22" />`,
+  };
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><g fill="none" stroke="#5a5a5a" stroke-width="1.6" stroke-linejoin="round" opacity="0.85">${P[kind]}</g></svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
 
 export class InventoryScreen {
   constructor(inventory, player, game) {
@@ -207,7 +219,7 @@ export class InventoryScreen {
     `;
     craftArea.appendChild(out);
 
-    // 顶部行：合成区 + 盔甲槽（2×2：头/胸/腿/靴）
+    // 顶部行：合成区 + 盔甲槽（2×2：头/胸/腿/靴——Build 19 K2 补原版式空槽底纹）
     const topRow = document.createElement('div');
     topRow.style.cssText = 'display: flex; gap: 20px; align-items: flex-start;';
     topRow.appendChild(craftArea);
@@ -216,7 +228,12 @@ export class InventoryScreen {
     armorLabel.textContent = t('盔甲');
     armorLabel.style.cssText = 'font-size: 12px; margin-bottom: 4px; color: #555;';
     armorArea.appendChild(armorLabel);
-    armorArea.appendChild(this.makeGrid(2, 2, 'armor'));
+    const armorGrid = this.makeGrid(2, 2, 'armor');
+    const ARMOR_ICONS = [armorSlotIcon('helmet'), armorSlotIcon('chestplate'), armorSlotIcon('leggings'), armorSlotIcon('boots')];
+    armorGrid.querySelectorAll('[data-slot^="armor-"]').forEach((el, i) => {
+      el.style.background = `#8b8b8b url(${ARMOR_ICONS[i]}) center / 32px 32px no-repeat`;
+    });
+    armorArea.appendChild(armorGrid);
     topRow.appendChild(armorArea);
     this.panel.appendChild(topRow);
     

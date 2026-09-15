@@ -310,5 +310,8 @@ export const NAME_I18N = {
   "primordial_altar": ["原初祭坛","原初祭壇","Primordial Altar","Autel primordial","Urzeitaltar","原初の祭壇","원초의 제단","مذبح البدء","Первозданный алтарь","Altar primordial","Altar primordial"],
   "primordial_emblem": ["原初纹章","原初紋章","Primordial Emblem","Emblème primordial","Urzeitemblem","原初の紋章","원초의 문장","رمز البدء","Первозданная эмблема","Emblema primordial","Emblema primordial"],
   "whale_bone_block": ["鲸骨块","鯨骨塊","Whalebone Block","Bloc de baleine","Walknochenblock","鯨の骨ブロック","고래 뼈 블록","كتلة عظم الحوت","Блок китовой кости","Bloque de hueso de ballena","Bloco de osso de baleia"],
+  "cloud_lamb": ["云绒兽","雲絨獸","Cloud Lamb","Agneau de nuage","Wolkenlamm","雲の仔","구름 새끼양","حمل الغيوم","Облачный ягнёнок","Cordero de nube","Cordeiro de nuvem"],
+  "gale_hawk": ["岚隼","嵐隼","Gale Hawk","Faucon de la bourrasque","Sturmfalke","嵐の鷹","폭풍 매","صقر العاصفة","Сокол бурь","Halcón de vendaval","Falcão da ventania"],
+  "tide_echo": ["潮鸣","潮鳴","Tide Echo","Écho de marée","Gezeitenecho","潮鳴り","조석의 메아리","صدى المدّ","Эхо прилива","Eco de marea","Eco da maré"],
   "page_rain": ["雨潮残页","雨潮殘頁","Rainpage","Page de pluie","Regenseite","雨潮の紙片","빗물의 낱장","صفحة المطر","Страница дождя","Página de lluvia","Página de chuva"],
 };

@@ -94,6 +94,8 @@ ok(gameSrc.includes("this.steleScreen.open(block.x, block.y, block.z, 'renewal')
 const saveSrc = readFileSync('./src/core/SaveSystem.js', 'utf8');
 ok(saveSrc.includes('finalePrimordial: game.world.finalePrimordial || null'), 'SaveSystem 序列化 finalePrimordial');
 ok(gameSrc.includes("this.steleScreen.open(block.x, block.y, block.z, 'tide_waiting')"), '献证成功浮现候潮章（复潮碑文浮现同款交互）');
+ok(gameSrc.includes("targetDef.name === 'primordial_altar'"), 'K2：原初祭坛右键分支在场');
+ok(gameSrc.includes("this.steleScreen.open(hit.block.x, hit.block.y, hit.block.z, 'tide_waiting');"), 'K2：右键原初祭坛复读候潮章');
 ok(gameSrc.includes("this.steleScreen.open(block.x, block.y, block.z, 'renewal')"), '未集齐/已候潮回落复潮章（不变量 6：复潮行为不回退）');
 const waiting = STELE_CHAPTERS.tide_waiting;
 ok(!!waiting && waiting.dim === 'aether' && waiting.title === '候潮', '候潮章注册（aether/候潮）');

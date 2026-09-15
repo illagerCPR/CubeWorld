@@ -44,6 +44,16 @@ export class Hud {
     `;
     document.body.appendChild(this.armorRow);
 
+    // 飞行翅翼（Build 19 K2：所有模式飞行中显示，快捷栏左侧）——纯装饰零协议
+    this.wingIcon = document.createElement('div');
+    this.wingIcon.style.cssText = `
+      position: fixed; bottom: 24px; left: calc(50% - 252px); width: 44px; height: 30px;
+      display: none; z-index: 10; pointer-events: none;
+      background: url("${Hud.wingSvg()}") center / contain no-repeat;
+      filter: drop-shadow(0 0 5px rgba(150, 220, 255, 0.55));
+    `;
+    document.body.appendChild(this.wingIcon);
+
     // 滑翔指示（鞘翅展开时显示在准星下方偏上，轻提示不打断视野）
     this.glideTag = document.createElement('div');
     this.glideTag.textContent = '🪂 鞘翅滑翔中';
@@ -157,6 +167,7 @@ export class Hud {
     this.airBar.style.display = 'none';
     this.armorRow.style.display = 'none';
     this.glideTag.style.display = 'none';
+    this.wingIcon.style.display = 'none';
     this.versionTag.style.display = 'none';
     this.witherOverlay.style.opacity = '0'; // 回菜单复位凋零滤镜（防上一存档残留）
   }
@@ -166,6 +177,22 @@ export class Hud {
     if (this._onFireShown === on) return;
     this._onFireShown = on;
     this.fireOverlay.style.opacity = on ? '1' : '0';
+  }
+
+  // 飞行翅翼 SVG（Build 19 K2）：浅蓝羽状双翼（展开三笔渐短 + 中心体），data-URI
+  static wingSvg() {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 30">
+      <g fill="#d6ecff" stroke="#8fb8e0" stroke-width="0.8" stroke-linejoin="round">
+        <path d="M21 21 L3 7 Q14 10 20 14 Z"/>
+        <path d="M21 21 L5 14 Q14 15 20 17 Z"/>
+        <path d="M21 21 L8 19 Q15 19 20 20 Z"/>
+        <path d="M23 21 L41 7 Q30 10 24 14 Z"/>
+        <path d="M23 21 L39 14 Q30 15 24 17 Z"/>
+        <path d="M23 21 L36 19 Q29 19 24 20 Z"/>
+        <ellipse cx="22" cy="22" rx="3" ry="4.5"/>
+      </g>
+    </svg>`;
+    return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
   }
 
   // 凋零滤镜开关（Idea-2D-②：凋零 II 剩余秒数 > 0 时常驻）
@@ -200,6 +227,8 @@ export class Hud {
 
   update(player) {
     this.versionTag.style.display = 'block'; // 版本号任意模式常显（含创造/旁观提前 return 前）
+    // 飞行翅翼：所有模式（创造/旁观提前 return 之前判定——用户要求"所有模式"）
+    this.wingIcon.style.display = player.flying ? 'block' : 'none';
     if (player.gamemode === 'spectator' || player.gamemode === 'creative') {
       this.el.style.display = 'none';
       this.xpBar.style.display = 'none';

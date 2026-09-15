@@ -128,4 +128,11 @@ for (const name of [...Object.keys(BLOCKS)]) {
     '回滚：档案一键还原永昼');
 }
 
+// ── ⑧ 生物名 i18n 全员覆盖（Build 19 K2：堵命令面板怪物下拉的翻译盲区）──
+const { MobTypes } = await import('../src/entity/MobTextures.js');
+const { NAME_I18N } = await import('../src/i18n/names.js');
+const missingNames = Object.keys(MobTypes).filter((k) => !Array.isArray(NAME_I18N[k]) || NAME_I18N[k].length !== 11);
+ok(missingNames.length === 0, `MobTypes 全员 names.js 11 列覆盖（缺: ${missingNames.join(',') || '无'}）`);
+ok(NAME_I18N.cloud_lamb && NAME_I18N.gale_hawk && NAME_I18N.tide_echo, 'K2 补全三行: cloud_lamb/gale_hawk/tide_echo');
+
 console.log(`aether-content: OK (${passed} assertions)`);
