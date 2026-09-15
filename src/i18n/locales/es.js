@@ -322,4 +322,16 @@ export const es = {
 
   "该房间已关闭怪物生成，祭坛无视图腾。": "Esta sala tiene desactivada la aparición de monstruos; el altar rechaza el tótem.",
   "祭坛沉默着——集齐三页潮汐残页与三枚心核碎片再来。": "El altar calla: vuelve con las tres páginas de marea y tres fragmentos de corazón.",
+
+  // ── 天域检查工具（命令面板新结构纳入）──
+  "漩风井": "Pozo de Remolino",
+  "天海之门遗迹": "Reliquia de la Puerta del Mar",
+  "天域检查": "Pruebas del Éter",
+  "触发复潮（解除永昼）": "Provocar el Retorno de la Marea (fin del día polar)",
+  "恢复永昼": "Restaurar el día polar",
+  "当前：已复潮": "Actual: marea devuelta",
+  "当前：永昼": "Actual: día polar",
+  "石碑章节": "Capítulo de estela",
+  "阅读": "Leer",
+  "联机房间复潮由服务器权威（潮汐仪式完成后同步）。": "En salas LAN, la marea la decide el servidor (se sincroniza tras el ritual).",
 };

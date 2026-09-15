@@ -3,6 +3,7 @@ import { Mob } from '../entity/Mob.js';
 import { MobTypes } from '../entity/MobTextures.js';
 import { ringPoints } from '../world/structures/stronghold.js';
 import { DIMENSIONS } from '../core/dimensions.js';
+import { STELE_CHAPTERS } from '../world/steles.js';
 import { ensureStoneStyles } from './StoneStyle.js';
 import { t, onLocaleChange } from '../i18n/index.js';
 import { tName } from '../i18n/name.js';
@@ -19,7 +20,7 @@ const MODES = [
 ];
 
 // 生成实体列表 = 全部注册怪物（MobTypes 枚举，新增生物自动纳入面板）
-const MOB_ORDER = ['zombie', 'skeleton', 'zombified_piglin', 'wither_skeleton', 'wither', 'creeper', 'spider', 'blaze', 'wisp', 'aether_guard', 'villager'];
+const MOB_ORDER = ['zombie', 'skeleton', 'zombified_piglin', 'wither_skeleton', 'wither', 'creeper', 'spider', 'blaze', 'wisp', 'aether_guard', 'cloud_lamb', 'gale_hawk', 'tide_echo', 'storm_colossus', 'villager'];
 function mobEntries() {
   const names = Object.keys(MobTypes);
   names.sort((a, b) => {
@@ -69,6 +70,7 @@ export class CommandPanel {
       this._refreshDimensionHighlight();
       this._refreshTimeLabel();
       this._refreshExplore();
+      this._refreshAether();
     }
   }
 
@@ -255,6 +257,47 @@ export class CommandPanel {
     this.curTimeLabel = curTimeLabel;
     timeCard.appendChild(timeCustomRow);
 
+    // ⑤b 天域检查（仅天域维度显示，显隐在 _refreshExplore 随探索列表一并刷新）：
+    // 复潮切换（单机权威）+ 石碑章节直读（免跑图逐碑检查九幕叙事）
+    const aetherCard = this._mkCard('天域检查');
+    colR.appendChild(aetherCard);
+    this.aetherCard = aetherCard;
+    const duskBtn = this._mkBtn('触发复潮（解除永昼）');
+    duskBtn.addEventListener('click', () => {
+      if (this.game.networkMode) return; // 联机房间复潮由服务器权威（潮汐仪式同步），面板不越权
+      this.game.applyAetherDusk(!this.game.aetherDusk);
+      this._refreshAether();
+    });
+    aetherCard.appendChild(duskBtn);
+    this.duskBtn = duskBtn;
+    const duskLabel = document.createElement('div');
+    duskLabel.style.cssText = 'font-size:11px; color:#9ab;';
+    aetherCard.appendChild(duskLabel);
+    this.duskLabel = duskLabel;
+
+    const steleRow = document.createElement('div');
+    steleRow.style.cssText = 'display:flex; gap:6px; align-items:center;';
+    steleRow.appendChild(this._mkLabel('石碑章节'));
+    this.steleSelect = document.createElement('select');
+    this.steleSelect.style.cssText = 'flex:1 1 0; min-width:0; padding:5px 6px; font-size:12px; background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff;';
+    for (const [id, ch] of Object.entries(STELE_CHAPTERS)) {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = t(ch.title);
+      this.steleSelect.appendChild(opt);
+    }
+    steleRow.appendChild(this.steleSelect);
+    const readBtn = this._mkBtn('阅读');
+    readBtn.style.padding = '5px 12px';
+    readBtn.addEventListener('click', () => {
+      const p = this.game.player.position;
+      this.hide();
+      // 章节直读：坐标传玩家脚下（石碑浮层不依赖真实碑位，仅作 pos 记录）
+      this.game.steleScreen.open(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z), this.steleSelect.value);
+    });
+    steleRow.appendChild(readBtn);
+    aetherCard.appendChild(steleRow);
+
     // ⑥ 生成实体（整宽卡片：全部注册怪物动态枚举，网格排布）
     const mobCard = this._mkCard('生成实体（玩家前方 3 格）');
     this.panel.appendChild(mobCard);
@@ -308,6 +351,13 @@ export class CommandPanel {
       for (const rec of sm.recordsAround('aether_ship', p.x, p.z, 2)) {
         items.push({ name: '天域沉船', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
       }
+      // 批次 B/D 新结构：漩风井（cell12）/ 天海之门遗迹（cell24）——同 groundY 传送层模式
+      for (const rec of sm.recordsAround('aether_well', p.x, p.z, 2)) {
+        items.push({ name: '漩风井', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
+      }
+      for (const rec of sm.recordsAround('aether_gate', p.x, p.z, 2)) {
+        items.push({ name: '天海之门遗迹', x: rec.ax, z: rec.az, y: rec.groundY, d: Math.hypot(rec.ax - p.x, rec.az - p.z) });
+      }
     } else {
       for (const rec of sm.recordsAround('village', p.x, p.z, EXPLORE_VILLAGE_CELL_R)) {
         const d = Math.hypot(rec.ax - p.x, rec.az - p.z);
@@ -351,6 +401,19 @@ export class CommandPanel {
     const angle = Math.atan2(tx - px, -(tz - pz));
     const idx = ((Math.round(angle / (Math.PI / 4)) % 8) + 8) % 8;
     return dirs[idx];
+  }
+
+  // 天域检查卡刷新：显隐（仅天域维度）+ 复潮按钮文案/状态/联机禁用
+  _refreshAether() {
+    if (!this.aetherCard) return;
+    const game = this.game;
+    const world = game.world;
+    this.aetherCard.style.display = (world && world.dimension === 'aether') ? 'flex' : 'none';
+    const on = !!game.aetherDusk;
+    this.duskBtn.textContent = t(on ? '恢复永昼' : '触发复潮（解除永昼）');
+    this.duskLabel.textContent = t(on ? '当前：已复潮' : '当前：永昼');
+    this.duskBtn.disabled = !!game.networkMode;
+    this.duskBtn.title = game.networkMode ? t('联机房间复潮由服务器权威（潮汐仪式完成后同步）。') : '';
   }
 
   _refreshTimeLabel() {
@@ -442,6 +505,7 @@ export class CommandPanel {
     this._refreshDimensionHighlight();
     this._refreshTimeLabel();
     this._refreshExplore();
+    this._refreshAether();
     this.el.style.display = 'flex';
     if (this.game.inventoryScreen && this.game.inventoryScreen.visible) this.game.inventoryScreen.hide();
     if (this.game.controls) {

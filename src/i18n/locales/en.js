@@ -322,4 +322,16 @@ export const en = {
 
   "该房间已关闭怪物生成，祭坛无视图腾。": "This room has mob spawning disabled; the altar rejects the totem.",
   "祭坛沉默着——集齐三页潮汐残页与三枚心核碎片再来。": "The altar is silent — return with the three tide pages and three heart shards.",
+
+  // ── 天域检查工具（命令面板新结构纳入）──
+  "漩风井": "Whirlwind Well",
+  "天海之门遗迹": "Sea Gate Relic",
+  "天域检查": "Aether Checks",
+  "触发复潮（解除永昼）": "Trigger the Tide Returns (End Polar Day)",
+  "恢复永昼": "Restore Polar Day",
+  "当前：已复潮": "Current: Tide has returned",
+  "当前：永昼": "Current: Polar Day",
+  "石碑章节": "Stele Chapter",
+  "阅读": "Read",
+  "联机房间复潮由服务器权威（潮汐仪式完成后同步）。": "In LAN rooms the tide state is server-authoritative (syncs after the ritual).",
 };

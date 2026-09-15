@@ -322,4 +322,16 @@ export const de = {
 
   "该房间已关闭怪物生成，祭坛无视图腾。": "In diesem Raum ist das Monster-Spawnen deaktiviert; der Altar weist das Totem zurück.",
   "祭坛沉默着——集齐三页潮汐残页与三枚心核碎片再来。": "Der Altar schweigt — kehre mit den drei Gezeitenseiten und drei Herzsplittern zurück.",
+
+  // ── 天域检查工具（命令面板新结构纳入）──
+  "漩风井": "Wirbelwindbrunnen",
+  "天海之门遗迹": "Relikt des Meerestors",
+  "天域检查": "Äther-Prüfung",
+  "触发复潮（解除永昼）": "Gezeitenrückkehr auslösen (Polartag beenden)",
+  "恢复永昼": "Polartag wiederherstellen",
+  "当前：已复潮": "Aktuell: Gezeiten zurück",
+  "当前：永昼": "Aktuell: Polartag",
+  "石碑章节": "Stelen-Kapitel",
+  "阅读": "Lesen",
+  "联机房间复潮由服务器权威（潮汐仪式完成后同步）。": "Im LAN-Raum ist die Gezeitenwende serverautoritativ (Synchronisation nach dem Ritual).",
 };

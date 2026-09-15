@@ -322,4 +322,16 @@ export const fr = {
 
   "该房间已关闭怪物生成，祭坛无视图腾。": "Cette salle a désactivé l'apparition de monstres ; l'autel rejette le totem.",
   "祭坛沉默着——集齐三页潮汐残页与三枚心核碎片再来。": "L'autel se tait — reviens avec les trois pages de marée et trois éclats de cœur.",
+
+  // ── 天域检查工具（命令面板新结构纳入）──
+  "漩风井": "Puits Tourbillonnant",
+  "天海之门遗迹": "Relique de la Porte des Mers",
+  "天域检查": "Contrôles Aether",
+  "触发复潮（解除永昼）": "Déclencher le Retour de la Marée (fin du jour polaire)",
+  "恢复永昼": "Rétablir le jour polaire",
+  "当前：已复潮": "Actuel : marée revenue",
+  "当前：永昼": "Actuel : jour polaire",
+  "石碑章节": "Chapitre de stèle",
+  "阅读": "Lire",
+  "联机房间复潮由服务器权威（潮汐仪式完成后同步）。": "En salle LAN, la marée fait foi côté serveur (synchronisée après le rituel).",
 };
