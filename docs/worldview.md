@@ -226,6 +226,7 @@
 | 界纹石碑 / 拾遗者石环 | 身份层 | Boundary Stele / Gleaner's Ring | P3 末地篇（Build 17 已定型） |
 | 三潮之证 / 潮归其位 | 身份层 | Seals of Three Tides / Tide Homecoming | 终局提案（设想稿 docs/endgame-proposal.md，未排期） |
 | 原初之潮 / 原初纹章 | 身份层 | Primordial Tide / Primordial Emblem | **已定型**（F1 入码 names.js 11 列 + 纹章 lore 承载终章；候潮 = 状态章 tide_waiting） |
+| 鲸骨冢 / 鲸骨块 / 归云 | 身份层 | Whalebone Barrow / Whalebone Block / Returned-to-Cloud | 立项（鲸骨冢篇 K1，设计方案 docs/whale-barrow-design.md） |
 | 长明灯石（荧石重释）/ 溺亡骨泥（灵魂沙重释） | 来历层 | 仅 lore 文案，不改 item id / displayName | 随 P1 |
 
 ---
@@ -288,6 +289,12 @@
 ### 10.4 远期备选（不排期）
 
 - **三潮终局线「潮归其位」**（§6.4）：**终局篇三批全部交付（Alpha Build 18）**——F1 候潮基石（原初祭坛 / 原初纹章 / 献证分支 / 候潮章）、F2 演出管线（60s 四界同潮窗口 finale-tide.js + 逐帧天色/雾覆盖 + 四段粒子，换维追潮、零持久化）、F3 听潮仪式（守望界碑听潮门控 finaleListenGate + 龙影低头粒子 + finaleDone 持久化 + 纹章发放 + LAN FINALE_STATE 服务器权威只进不退）；终章由纹章 lore 承载，碑文留白纪律完好——王低下了头，剩下的字原初自己会读。
+
+### 10.5 天域后传·鲸骨冢 & Build 19 体验打磨（规划完毕，待确认开工）
+
+- **设计方案**：`docs/whale-barrow-design.md`——鲸骨冢 = 天海巨鲸搁浅遗骸的巨型肋骨拱（"三界海难证据链"最后一块拼图：主世界潮冢沉于海底 / 下界坠落的海 / 天域搁浅的巨物）；归云章（天域第 11 章，3 行留白，龙零出场）；新方块 `whale_bone_block` ×1；密度神殿同档稀有；可选风柱复用 wind_current。
+- **三批**：K1 鲸骨冢（不 bump）→ K2 修复与纹样（命令面板生物名补全 3 行 / 原初祭坛右键候潮章 / 盔甲栏原版纹样 / 飞行翅膀图标，不 bump）→ K3 终局成就（终局横幅 10s / 存档栏通关标记 / 纹章佩戴槽：无敌+创造式飞行+基岩心形，仅 finaleDone 后显示，**BUILD 19 + alpha-build-19**）。
+- 不变量：群系边界与岛场参数零改动 / 既有结构零改动 / 碑文章节克制（+1 章）/ 流体与掉落零回调 / 佩戴效果严格门控 finaleDone（post-game 奖励不触碰终局前难度）。
 - **鲸骨冢**（天域篇 §3.5 遗留备选）与哭嚎者 / 石环等新内容实测反馈的调参批次，视 playtest 结果插入。
 
 ### 10.5 全程纪律（三篇通用）
