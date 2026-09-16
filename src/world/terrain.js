@@ -324,11 +324,12 @@ export class TerrainGenerator {
         const biome = this.getBiome(wx, wz);
         const cfg = BiomeConfig[biome];
         
-        // 找地表
+        // 找地表（跳过薄雪 snow_layer：积雪针叶林全域铺雪层，若不跳过则 surfaceName 恒为
+        // snow_layer、surfaceBlock 匹配失败，treeChance 形同虚设——雪原曾整片无树）
         let surfaceY = -1;
         for (let y = CHUNK_HEIGHT - 1; y >= 0; y--) {
           const b = chunk.get(x, y, z);
-          if (b !== 0 && b !== WATER()) { surfaceY = y; break; }
+          if (b !== 0 && b !== WATER() && b !== SNOW_LAYER()) { surfaceY = y; break; }
         }
         if (surfaceY < 0 || surfaceY >= CHUNK_HEIGHT - 8) continue;
         

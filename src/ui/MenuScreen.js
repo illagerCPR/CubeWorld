@@ -6,14 +6,14 @@ import { VERSION_LABEL } from '../version.js';
 import { t, getLocale, onLocaleChange } from '../i18n/index.js';
 import { globeIconDataUri } from './LanguageScreen.js';
 import { personIconDataUri } from './SkinScreen.js';
-import { getLanHost, setLanHost, lanWsUrl, probeLanServer } from '../net/lanStatus.js';
+import { getLanHost, setLanHost, normalizeLanHost, lanWsUrl, probeLanServer } from '../net/lanStatus.js';
 import logoUrl from '../../res/logo-cubeworld-js-edition.png';
 
-// 刷新图标（Build 23：主界面 LAN 状态组件；石质按钮上浅色描边风格）
+// 刷新图标（Build 23：主界面 LAN 组件；石质浅底上用深色描边——原 #e8e8e8 与按钮浅灰底对比不足）
 function refreshIconDataUri() {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-    <path d="M12 4.5a7.5 7.5 0 1 0 7.1 5.2" fill="none" stroke="#e8e8e8" stroke-width="2.6" stroke-linecap="round"/>
-    <path d="M20.6 3.2 L21 9.6 L15.2 8.4 Z" fill="#e8e8e8" stroke="#1a1a1a" stroke-width="0.8"/>
+    <path d="M12 4.5a7.5 7.5 0 1 0 7.1 5.2" fill="none" stroke="#2e2a26" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M20.6 3.2 L21 9.6 L15.2 8.4 Z" fill="#2e2a26" stroke="#111" stroke-width="0.8"/>
   </svg>`;
   return 'data:image/svg+xml,' + encodeURIComponent(svg);
 }
@@ -72,20 +72,42 @@ export class MenuScreen {
         this._probeLan();
         return;
       }
+      // Build 24：LAN 默认服务器设置——显式保存（输入框 change 只探测不落盘）
+      if (btn.id === 'lan-default-btn') {
+        const input = this.el.querySelector('#lan-host-input');
+        const saved = setLanHost(input ? input.value : '');
+        if (saved != null) {
+          if (input) input.value = saved;
+          const st = this.el.querySelector('#lan-status-text');
+          if (st) {
+            st.textContent = t('已设为默认');
+            st.style.color = '#7fe27f';
+            clearTimeout(this._lanSavedTimer);
+            this._lanSavedTimer = setTimeout(() => this._probeLan(), 1600);
+          } else {
+            this._probeLan();
+          }
+        } else if (input) {
+          input.value = getLanHost(); // 非法输入回滚为当前默认值
+        }
+        return;
+      }
       if (btn.id === 'menu-single' || btn.id === 'menu-lan' || btn.classList.contains('back-btn')) {
         this.page = btn.id === 'menu-single' ? 'single' : (btn.id === 'menu-lan' ? 'lan' : 'main');
         this.render();
       }
     });
-    // Build 23：LAN 状态组件——IP 输入框变更（change 冒泡，事件委托同样免重绑）
+    // Build 24：LAN 默认服务器设置——IP 输入框变更只即时探测（保存走「设置为默认」按钮；
+    // change 冒泡 + 事件委托同样免重绑）
     this.el.addEventListener('change', (e) => {
       if (e.target && e.target.id === 'lan-host-input') {
-        const saved = setLanHost(e.target.value);
-        if (saved != null) {
-          e.target.value = saved;
-          this._probeLan();
+        const host = normalizeLanHost(e.target.value);
+        if (host != null) {
+          e.target.value = host;
+          this._probeLan(host); // 编辑态探测输入值，不动已保存的默认值
         } else {
           e.target.value = getLanHost(); // 非法输入回退当前值
+          this._probeLan();
         }
       }
     });
@@ -138,6 +160,7 @@ export class MenuScreen {
         display: flex; align-items: center; gap: 8px;
         font-size: 12px; color: rgba(255,255,255,0.78);
         font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;">
+        <span style="text-shadow: 1px 1px 0 #000;">${t('LAN默认服务器设置')}</span>
         <input type="text" id="lan-host-input" value="${getLanHost()}" title="${t('LAN 服务器 IP')}"
           style="width: 110px; padding: 3px 6px; font-size: 12px; background: rgba(0,0,0,0.4);
                  border: 1px solid #555; color: #fff;" />
@@ -146,14 +169,16 @@ export class MenuScreen {
           width: 28px; height: 28px; padding: 0; background-size: 72%;
           background-repeat: no-repeat; background-position: center;
           background-image: url('${refreshIconDataUri()}');"></button>
+        <button id="lan-default-btn" class="cw-stone-btn" title="${t('设置为默认')}" style="
+          padding: 4px 10px; font-size: 11px;">${t('设置为默认')}</button>
       </div>
     `;
     this._probeLan(); // 异步探测（结果回写有元素存在性守卫，页面切换不串写）
   }
 
-  // Build 23：探测 LAN 服务器可达性并回写状态文本（在线/离线）
-  _probeLan() {
-    probeLanServer(getLanHost()).then((r) => {
+  // Build 23：探测 LAN 服务器可达性并回写状态文本（在线/离线）；host 缺省用已保存默认值
+  _probeLan(host) {
+    probeLanServer(host != null ? host : getLanHost()).then((r) => {
       const el = this.el.querySelector('#lan-status-text');
       if (!el) return; // 已切页，render() 重建后自然重新探测
       el.textContent = r.online ? t('在线') : t('离线');
@@ -321,8 +346,7 @@ export class MenuScreen {
         <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center; font-size:13px;">
           <label>${t('昵称')}</label>
           <input type="text" id="mp-name" maxlength="16" style="padding:5px 8px; background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; width:90px; font-size:13px;" placeholder="${t('玩家')}" />
-          <label>${t('服务器')}</label>
-          <input type="text" id="mp-url" style="padding:5px 8px; background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; flex:1; font-size:13px;" value="${lanWsUrl(getLanHost())}" />
+          <span style="font-size:11px; color:#aaa;">${t('连接地址（主界面右下角可改）：')}${lanWsUrl(getLanHost())}</span>
         </div>
         <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center; font-size:13px;">
           <label>${t('房间名')}</label>
@@ -345,7 +369,7 @@ export class MenuScreen {
         </div>
       </div>
       <div style="width:520px; font-size:11px; color:#aaa; line-height:1.6; margin-bottom:16px;">
-        ${t('先运行 <b>node server/index.mjs</b> 开启服务器；创建房间决定世界种子，其它电脑填开房机 IP 加入。')}<br/>
+        ${t('先运行 <b>node server/index.mjs</b> 开启服务器；创建房间决定世界种子，其它电脑在主界面把开房机 IP 设为默认服务器后加入。')}<br/>
         ${t('联机支持：方块共建/破坏、玩家可见与移动、互殴、聊天(T)。联机模式不保存本地存档。')}<br/>
         ${t('服务器按<b>房间名</b>把世界存到磁盘（<b>server/world/</b>），重启服务器后同名房间自动恢复原世界。')}
       </div>
@@ -365,7 +389,7 @@ export class MenuScreen {
 
   _mpConnect(kind) {
     const name = this.el.querySelector('#mp-name')?.value.trim() || t('玩家');
-    const url = this.el.querySelector('#mp-url')?.value.trim() || 'ws://127.0.0.1:3001/ws';
+    const url = lanWsUrl(getLanHost()); // Build 24：地址唯一来源 = 主界面「LAN默认服务器设置」（LAN 页输入框已移除）
     const room = this.el.querySelector('#mp-room')?.value.trim() || 'default';
     this.setMpStatus(t('连接中...'), '#9cf');
     this.net.connect(url, name);

@@ -77,8 +77,10 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) < eps;
   ok(ms.includes("function refreshIconDataUri()"), 'SVG 刷新图标（data URI）');
   ok(ms.includes("btn.id === 'lan-refresh-btn'") && ms.includes('this._probeLan()'), '刷新按钮走事件委托重探测');
   ok(ms.includes("e.target.id === 'lan-host-input'"), 'IP 输入框 change 委托');
-  ok(ms.includes('setLanHost(e.target.value)'), 'IP 变更持久化');
-  ok(ms.includes("value=\"${lanWsUrl(getLanHost())}\""), 'LAN 游戏页服务器地址按持久化主机预填');
+  // Build 24 起变更：LAN 页地址输入框移除，地址唯一来源 = 主界面「LAN默认服务器设置」；
+  // change 只探测不落盘（保存走「设置为默认」按钮），此处改作历史行为绊线
+  ok(ms.includes('setLanHost(e.target.value)') === false, 'IP 输入框 change 不再直接落盘（Build 24 迁移到设为默认按钮）');
+  ok(ms.includes('id="mp-url"') === false, 'LAN 游戏页地址输入框已移除');
   ok(ms.includes("r.online ? t('在线') : t('离线')"), '状态文本双态 + i18n');
   ok(ms.includes("t('检测中…')"), '探测中占位文本');
   ok(ms.includes("localStorage") === false, '菜单模块不直接碰 localStorage（持久化收口在 lanStatus）');
@@ -89,7 +91,8 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) < eps;
   const langs = ['zh-TW', 'en', 'fr', 'de', 'ja', 'ko', 'ar', 'ru', 'es', 'pt'];
   for (const lang of langs) {
     const src = srcOf(`../src/i18n/locales/${lang}.js`);
-    for (const key of ['LAN 服务器 IP', '检测中…', '在线', '离线', '刷新']) {
+    for (const key of ['LAN 服务器 IP', '检测中…', '在线', '离线', '刷新',
+                       'LAN默认服务器设置', '设置为默认', '已设为默认', '连接地址（主界面右下角可改）：']) {
       ok(src.includes(`"${key}"`), `语言包 ${lang} 缺键: ${key}`);
     }
   }
