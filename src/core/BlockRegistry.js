@@ -3,6 +3,7 @@
 
 const blocks = new Map();
 const nameToId = new Map();
+const idToName = new Map();
 let nextId = 1; // 0 保留给空气
 
 function register(def) {
@@ -40,12 +41,14 @@ function register(def) {
   };
   blocks.set(id, block);
   nameToId.set(name, id);
+  idToName.set(id, name);
   return id;
 }
 
 function getById(id) { return blocks.get(id); }
 function getByName(name) { const id = nameToId.get(name); return id ? blocks.get(id) : undefined; }
 function getId(name) { return nameToId.get(name) || 0; }
+function getNameById(id) { return idToName.get(id) || null; }
 function all() { return [...blocks.values()]; }
 
-export const BlockRegistry = { register, getById, getByName, getId, all };
+export const BlockRegistry = { register, getById, getByName, getId, getNameById, all };

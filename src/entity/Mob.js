@@ -131,16 +131,18 @@ export class Mob extends Entity {
       this.wander(dt, physics);
     } else {
       const distToPlayer = this.position.distanceTo(player.position);
+      // Build 20 ④：创造/旁观玩家不成为任何索敌目标（同原版——怪物不以创造玩家为敌）
+      const playerTargetable = !player.creative && !player.spectator;
 
       // 敌对目标选择：玩家与村民（仅僵尸/骷髅，苦力怕/蜘蛛限玩家——防自爆拆村）取最近
       let target = null;
       let targetDist = Infinity;
-      if (distToPlayer < this.detectionRange && this.hasLineOfSight(player)) {
+      if (playerTargetable && distToPlayer < this.detectionRange && this.hasLineOfSight(player)) {
         target = player;
         targetDist = distToPlayer;
       }
       // 被激怒的中立生物：无视视线死追玩家（激怒期内）
-      if (this.aggro && distToPlayer < this.detectionRange * 2.5) {
+      if (playerTargetable && this.aggro && distToPlayer < this.detectionRange * 2.5) {
         target = player;
         targetDist = distToPlayer;
       }
@@ -217,12 +219,13 @@ export class Mob extends Entity {
 
   // 潜影贝 AI：原地附着（速度清零）；玩家进入射程 → 0.6s 蓄力（hitFlash 紫闪提示）
   // → 直线视线判定命中（4 伤 + 击退），射击间隔 2.5s；走位脱离视线即可躲（无投射物实体）
+  // Build 20 ④：创造/旁观玩家不触发索敌与射击
   updateShulker(dt, player) {
     this.velocity.x = 0;
     this.velocity.z = 0;
     this.target = null;
     const d = this.position.distanceTo(player.position);
-    if (d > this.detectionRange || player.dead) {
+    if (d > this.detectionRange || player.dead || player.creative || player.spectator) {
       this.shulkerCharge = 0;
       return;
     }
@@ -249,7 +252,8 @@ export class Mob extends Entity {
     let targetDist = Infinity;
 
     // 被玩家攻击的激怒期：追击玩家（比普通索敌优先级低——敌对怪仍是主目标）
-    if (this.aggro && player && !player.dead) {
+    // Build 20 ④：创造/旁观玩家不被追击
+    if (this.aggro && player && !player.dead && !player.creative && !player.spectator) {
       const dp = this.position.distanceTo(player.position);
       if (dp < 24) { target = player; targetDist = dp; }
     }

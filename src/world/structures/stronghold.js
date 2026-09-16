@@ -4,6 +4,7 @@
 import { blockId, hash32 } from './StructureManager.js';
 import { clearBox, floorBox } from './StructureKit.js';
 import { CHUNK_SIZE } from '../../core/Chunk.js';
+import { steleStack } from '../steles.js';
 
 const RING_COUNT = 3;
 
@@ -251,8 +252,11 @@ export function solveStronghold(rng, ax, surfaceY, az, gen) {
   // ── 门厅碑位（世界观批次 W3）：苔纹石碑（雨土纪·门厅）──────────────────
   // 十字枢纽东墙内侧 (ax+4, az+2)——避开门厅走廊轴线/四角柱/中央柱/火把/箱；
   // 硬编码坐标零 rng 消耗，blocks 只追加不改写（旧 seed 要塞布局逐字节稳定）。
+  // Build 20 ① 四格形制：底座苔石嵌地板、碑/荧石/顶帽立于清腔内（room 高至 hubY+4）。
   meta.steles.push([ax + 4, hubY, az + 2, 'rain_hall']);
-  set(ax + 4, hubY, az + 2, blockId('moss_stele'));
+  for (const [bx, by, bz, bid] of steleStack(ax + 4, hubY, az + 2, 'overworld')) {
+    blocks.push([bx, by, bz, bid]);
+  }
 
   return { blocks, meta };
 }

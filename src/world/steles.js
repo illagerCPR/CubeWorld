@@ -6,12 +6,45 @@
 // 章节与故事线的对应关系见 docs/aether-storyline.md §2.5/§3.8 与 docs/worldview.md §3/§10；
 // 章节 id 由结构 meta.steles（批次 B 起）经 StructureManager.steleChapterAt 解析，未注册的
 // 石碑（玩家自放/创造获取）回落 STELE_BLANK。
+// 石碑形制表（Build 20 ①）在此取方块 id——调用方结构 solve 均在方块注册完成后运行。
+import { BlockRegistry } from '../core/BlockRegistry.js';
 
 // 无字碑：未被任何章节注册的石碑
 export const STELE_BLANK = {
   title: '无字碑',
   lines: ['石面被风磨平，只余一道旧刻痕：「潮起，潮落。」'],
 };
+
+// ── 石碑四格形制（Build 20 ①）：单格碑太矮，统一升为 4 格立碑 ─────────────
+// 从下往上：底座 = 维度特色方块（基岩感锚定群系）→ 石碑 → 荧石（夜里自明）
+// → 顶帽 = 维度特色方块。y0 为碑格（原单格碑的 y），底座在 y0-1、帽在 y0+2。
+export const STELE_STELE_BY_DIM = {
+  overworld: 'moss_stele',
+  nether: 'ember_stele',
+  end: 'end_stele',
+  aether: 'wind_stele',
+};
+
+export const STELE_BASE_BY_DIM = {
+  overworld: 'mossy_cobblestone', // 苔石：雨土纪的苔痕
+  nether: 'magma_block',          // 岩浆块：烬火纪的余温
+  end: 'purpur_block',            // 紫珀块：拾遗者囤积的末地城遗物
+  aether: 'star_marrow_block',    // 星髓块：潮的骨头
+};
+
+// 返回四格 [x,y,z,方块id] 列表（调用方按序 push/写入，碑位注册键仍取 y0）。
+// dim 必须是四维度之一；未注册的维度回落主世界形制。
+export function steleStack(x, y0, z, dim) {
+  const stele = BlockRegistry.getId(STELE_STELE_BY_DIM[dim] || STELE_STELE_BY_DIM.overworld);
+  const base = BlockRegistry.getId(STELE_BASE_BY_DIM[dim] || STELE_BASE_BY_DIM.overworld);
+  const glow = BlockRegistry.getId('glowstone');
+  return [
+    [x, y0 - 1, z, base],
+    [x, y0, z, stele],
+    [x, y0 + 1, z, glow],
+    [x, y0 + 2, z, base],
+  ];
+}
 
 export const STELE_CHAPTERS = {
   // ── 天域·天海纪元（9 章）──

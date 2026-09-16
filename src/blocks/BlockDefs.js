@@ -1196,15 +1196,17 @@ reg('dragon_egg', { displayName: '龙蛋', hardness: 3, tool: 'pickaxe', lore: [
   }
   return pixelSvg(px); })()
 });
-// 末地折跃门：龙败后在主岛缘/外岛缘生成（基岩框内嵌光束；踩入触发同维传送）
-reg('end_gateway', { displayName: '末地折跃门', transparent: true, solid: false, light: 15, hardness: -1, renderType: 'cross', ambientParticles: true },
+// 末地折跃门：龙败后在主岛缘/外岛缘生成（基岩框内嵌光束；踩入触发同维传送）。
+// Build 20 ②：视觉改末地传送门式——去 cross 渲染（正常立方面）、黑洞星空纹理
+//（折跃门用绿色星点区分传送门的蓝白星点），solid:false 陷入语义不变。
+reg('end_gateway', { displayName: '末地折跃门', transparent: true, solid: false, light: 15, hardness: -1, ambientParticles: true },
   { end_gateway: (function () { const px = makeTex();
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-      const beam = Math.abs(x - 8) < 2 + (y % 3);
-      let c = beam ? 'rgb(196,140,255)' : 'rgb(120,70,190)';    // 紫白光束
-      if (hash2(x, y, 211) < 0.1) c = 'rgb(240,220,255)';       // 星点
-      if (!beam && hash2(x, y, 212) < 0.5) c = 'rgb(90,50,150)';
-      px[y * 16 + x] = c;
+      px[y * 16 + x] = 'rgb(3,6,4)';                            // 黑洞底色（微绿）
+      const t = hash2(x, y, 213);
+      if (t > 0.93) px[y * 16 + x] = 'rgb(150,255,170)';        // 亮绿星点
+      else if (t > 0.86) px[y * 16 + x] = 'rgb(60,140,80)';
+      else if (t > 0.80) px[y * 16 + x] = 'rgb(20,50,28)';
     }
     return pixelSvg(px); })()
   });

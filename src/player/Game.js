@@ -47,6 +47,7 @@ import { matchRecipe } from '../core/Crafting.js';
 import { SMELT_TIME, getSmeltingResult, getFuelTime } from '../core/Smelting.js';
 import { MobManager } from '../entity/MobManager.js';
 import { Mob } from '../entity/Mob.js';
+import { LocalPlayerModel } from '../entity/LocalPlayerModel.js';
 import { VoxelLightUniforms, GfxState, ShadowUniforms } from '../render/VoxelLight.js';
 import { RedstoneSystem } from '../core/RedstoneSystem.js';
 import { SaveSystem } from '../core/SaveSystem.js';
@@ -97,6 +98,7 @@ export class Game {
     this.player = new Player(this.renderer.camera);
     this.physics = new Physics(null);
     this.controls = new Controls(this.renderer.domElement, this.player);
+    this.controls.onPickBlock = () => this._pickBlock(); // Build 20 ③：创造中键取物
     this.inventory = new Inventory();
     this.hud = new Hud();
     this.infoBar = new InfoBar();
@@ -122,6 +124,8 @@ export class Game {
     this.paused = false;
     // 阶段10：第一人称手持物（跨存档共享相机挂点，start 时重置手持内容）
     this.hand = new FirstPersonHand(this);
+    // Build 20 ⑤：本地玩家第三人称模型（跨存档共享场景挂点，可见性随视角模式）
+    this.playerModel = new LocalPlayerModel(this.renderer.scene, this);
     this.currentSlot = 1;
     this.onExit = null;
     this.mobManager = null;
@@ -293,11 +297,16 @@ export class Game {
       }
       if (this.finaleInfo.done) this.world.finaleDone = true; // 历史事实恢复，不重播演出
     }
-    // 天域复潮状态（批次 D）：存档恢复；MP 下 WORLD_INFO 可能先于 start 到达
-    //（已写入 this.aetherDusk）——loadData 无字段时保留现值，有字段（单机存档/换维合成）以其为准
-    this.aetherDusk = !!(loadData && loadData.aetherDusk !== undefined
-      ? loadData.aetherDusk
-      : this.aetherDusk);
+    // 天域复潮状态（批次 D）：Build 20 ⑦ 修复跨存档泄漏——this.aetherDusk 挂在跨存档
+    // 共享的 Game 实例上，旧逻辑"loadData 无字段时保留现值"会让上一存档（A 已复潮）的
+    // 状态泄进新开存档 B（B 进天域即永昼被解除）。单机改为只信存档字段（无字段=未复潮；
+    // 换维重建的 loadData 合成总是携带该字段，不受影响）；联机保留现值（WORLD_INFO 可能
+    // 先于 start 到达，房间状态权威）。
+    if (this.networkMode) {
+      // 联机：保留现值（WORLD_INFO 先达时 NetworkManager 已写入房间权威状态）
+    } else {
+      this.aetherDusk = !!(loadData && loadData.aetherDusk);
+    }
     if (dimension === 'aether') {
       setAetherDuskProfile(this.aetherDusk);
       this.sky.time = this.aetherDusk ? 0.32 : 0.35; // 复潮后从上午起（能亲眼看到第一次日落）
@@ -316,6 +325,8 @@ export class Game {
     // 重置跨存档共享的玩家运行时状态（避免上一存档的 invulnerable / 状态效果残留）
     this.player.invulnerable = 0;
     this.player.clearEffects();
+    this.player.viewMode = 0; // Build 20 ⑤：视角回落第一人称（Player 跨存档共享）
+    this.playerModel.update(0, this.player, false, false); // 第三人称模型同步隐藏
     // 受击红屏：所有调用 player.hurt(amount, ..., true) 的源都触发
     this.player.onHurt = (amount, source) => {
       if (this.hud) this.hud.flashDamage(amount);
@@ -566,11 +577,11 @@ export class Game {
     document.addEventListener('keydown', (e) => {
       // Build 12：文本输入焦点（创造/JEI 搜索框、命令面板输入框等）或输入法合成中，
       // 不触发任何游戏快捷键，也不再 preventDefault（避免打断输入法合成）；
-      // 放行：非合成态 ESC（关界面）与 F5（手动保存防误刷新）；聊天输入的 ESC/Enter 由 ChatBox 自理不放行。
+      // 放行：非合成态 ESC（关界面）与 F6（手动保存防误刷新）；聊天输入的 ESC/Enter 由 ChatBox 自理不放行。
       const t = e.target;
       const editable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
       if (e.isComposing || e.keyCode === 229) return; // 输入法合成中一律不处理（ESC 先交给输入法取消合成）
-      if (editable && !((e.key === 'Escape' && !(this.chatBox && this.chatBox.input)) || e.code === 'F5')) return;
+      if (editable && !((e.key === 'Escape' && !(this.chatBox && this.chatBox.input)) || e.code === 'F6')) return;
       if (e.code === 'KeyE') {
         if (this.paused || this.spectating || (this.deathScreen && this.deathScreen.visible)) return;
         if (this.chestScreen && this.chestScreen.visible) { this.chestScreen.hide(); return; }
@@ -664,13 +675,23 @@ export class Game {
           if (this.hotbar) { this.hotbar.update(); this.hotbar.flashName(); }
         }
       }
-      // F5 手动保存（联机模式不保存本地槽位）；观战模式下 F5 切换观战目标
+      // Build 20 ⑤：F5 = 第一/二/三人称视角循环（0 第一人称 → 1 第三人称背后 →
+      // 2 第三人称正面）；观战模式下 F5 仍为切换观战目标（死亡观战键位不变）。
+      // 未运行时早退不 preventDefault——启动失败页保留浏览器 F5 刷新语义。
       if (e.code === 'F5') {
+        if (!this.running || !this.world) return;
         e.preventDefault();
         if (this.spectating) {
           this.cycleSpectateTarget();
           this._spectateHint();
-        } else if (this.running && this.world && !this.networkMode) SaveSystem.save(this);
+        } else if (!this.player.spectator) {
+          this.player.viewMode = (this.player.viewMode + 1) % 3;
+        }
+      }
+      // Build 20 ⑤：F6 = 手动保存（原 F5 功能挪位；联机模式不保存本地槽位）
+      if (e.code === 'F6') {
+        e.preventDefault();
+        if (this.running && this.world && !this.networkMode) SaveSystem.save(this);
       }
       // R 键：观战模式重生退出观战
       if (e.code === 'KeyR' && this.spectating) {
@@ -932,7 +953,7 @@ export class Game {
           !this.player.inWater && !this.player.gliding && this.player.velocity.y < -8) {
         this.player.velocity.y = -8;
       }
-      this.player.updateCamera();
+      this.player.updateCamera(this.world);
       this.sky.update(dt, this.player.position);
     }
     
@@ -1068,7 +1089,10 @@ export class Game {
     }
 
     // 阶段10：第一人称手持物（物品变化检测 + bob/挥动；观战与旁观隐藏）
-    this.hand.setVisible(!this.spectating && !this.player.spectator);
+    // Build 20 ⑤：第三人称视角隐藏第一人称手，同步驱动本地玩家模型（F5 切换）
+    const thirdPerson = !this.spectating && !this.player.spectator && !this.player.dead && this.player.viewMode > 0;
+    this.hand.setVisible(!this.spectating && !this.player.spectator && this.player.viewMode === 0);
+    this.playerModel.update(dt, this.player, thirdPerson, this._miningActive);
     {
       const sel = this.inventory.getSelected();
       const selName = sel ? sel.name : null;
@@ -1406,6 +1430,25 @@ export class Game {
     }
   }
 
+  // Build 20 ③：创造模式中键取物（同原版 pick block）——准星指向的方块进入快捷栏：
+  // 热栏已有该物品 → 直接选中那格；否则以 1 个替换当前选中格。仅创造响应，生存/旁观忽略。
+  _pickBlock() {
+    if (!this.player.creative || !this.selectedBlock || !this.world) return;
+    const name = BlockRegistry.getNameById(this.selectedBlock.id);
+    if (!name) return;
+    const slots = this.inventory.slots;
+    for (let i = 0; i < 9; i++) {
+      if (slots[i] && slots[i].name === name && !slots[i].data) {
+        this.inventory.setSelected(i);
+        if (this.hotbar) { this.hotbar.update(); this.hotbar.flashName(); }
+        return;
+      }
+    }
+    const sel = this.inventory.hotbarSelected;
+    slots[sel] = { name, count: 1 };
+    if (this.hotbar) { this.hotbar.update(); this.hotbar.flashName(); }
+  }
+
   updateRaycast() {
     const origin = this.player.position.clone();
     origin.y += 1.62;
@@ -1506,7 +1549,8 @@ export class Game {
         const dir = new THREE.Vector3();
         this.renderer.camera.getWorldDirection(dir);
         const damage = this.player.creative ? 100 : this.getAttackDamage();
-        const hit = this.mobManager.attackMob(origin, dir, 4, damage);
+        // Build 20 ④：创造玩家攻击不激怒中立/守卫生物（怪物不以创造玩家为敌）
+        const hit = this.mobManager.attackMob(origin, dir, 4, damage, { provoke: !this.player.creative });
         if (hit) {
           this.hand.swing(); // 阶段10：命中怪物挥动
           this.controls.mouseLeft = false;
@@ -1527,7 +1571,7 @@ export class Game {
         if (def.name === 'shulker_box') this._breakShulkerBox(hit.block, false); // Idea-2C：创造也掉盒（内容跟随）
         if (def.name === 'furnace') this._breakFurnace(hit.block);
         if (def.name === 'end_crystal') this._breakCrystal(hit.block.x, hit.block.y, hit.block.z);
-        if (def.name === 'star_marrow_ore') this.mobManager?.angerTideEchoes(hit.block.x, hit.block.y, hit.block.z); // 批次 B：潮鸣激怒
+        // Build 20 ④：创造挖星髓不再激怒潮鸣（激怒调用仅生存分支保留）
         if (def.name === 'gale_block') this._clearGaleColumn(hit.block.x, hit.block.y, hit.block.z); // 批次 B：拆风阵块清气流柱
         this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
         removeConnectedPortals(this.world, hit.block.x, hit.block.y, hit.block.z);
@@ -3533,11 +3577,13 @@ export class Game {
     // 联机：断开网络连接并复位联机状态
     if (this.net) this.net.close();
     this.networkMode = false;
+    this.aetherDusk = false; // Build 20 ⑦：回菜单复位复潮状态（防跨存档残留；全局档案在下次进天域 start 时按存档重设）
     if (this.infoBar) this.infoBar.hide();
     if (this.hud) { this.hud.setUnderwater(false); this.hud.hideAll(); }
     this.paused = false;
     if (this.controls) this.controls.enabled = false;
     if (this.hand) this.hand.setVisible(false); // 回菜单不显示第一人称手臂
+    if (this.playerModel) this.playerModel.update(0, this.player, false, false); // 第三人称模型一并隐藏（Build 20 ⑤）
     if (this.hud) this.hud.setOnFire(false);
     if (document.pointerLockElement) document.exitPointerLock();
     if (this.onExit) this.onExit();

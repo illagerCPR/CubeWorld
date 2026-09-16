@@ -9,6 +9,7 @@
 import { blockId, hash32 } from './StructureManager.js';
 import { Biomes } from '../biomes.js';
 import { SEA_LEVEL } from '../../core/Chunk.js';
+import { steleStack } from '../steles.js';
 
 const CELL = 28;        // 28 区块网格（448 格）——要塞同稀有档
 const SALT = 7267;      // 与 fortress(5150)/tidefire_hearth(7266) 等既有类型错开
@@ -88,7 +89,6 @@ export function solveBarrow(rng, ax, groundY, az, gen) {
   const WOOL = blockId('white_wool');
   const SKULL = blockId('wither_skeleton_skull');
   const MARROW = blockId('star_marrow_block');
-  const STELE = blockId('moss_stele');
   const CHEST = blockId('chest');
   const LOG = blockId('spruce_log');
   const PLANK = blockId('spruce_planks');
@@ -128,10 +128,13 @@ export function solveBarrow(rng, ax, groundY, az, gen) {
     blocks.push([cx + dx, floorY + 1, cz + dz, MARROW]);
   }
 
-  // ⑤ 苔纹石碑（坑体北缘，正对残骸）+ 箱（tide_barrow 表，FORCED 雨潮残页保底）
+  // ⑤ 苔纹石碑（坑体北缘，正对残骸；Build 20 ① 四格形制：底座苔石压坑底沙、荧石在
+  //    水下发亮照亮骨环）+ 箱（tide_barrow 表，FORCED 雨潮残页保底）
   meta.steles.push([cx, floorY + 1, cz + 4, 'rain_salted']);
   meta.chests.push([cx + 3, floorY + 1, cz + 1, 'tide_barrow']);
-  for (const s of meta.steles) blocks.push([s[0], s[1], s[2], STELE]);
+  for (const s of meta.steles) {
+    for (const [bx, by, bz, bid] of steleStack(s[0], s[1], s[2], 'overworld')) blocks.push([bx, by, bz, bid]);
+  }
   for (const c of meta.chests) blocks.push([c[0], c[1], c[2], CHEST]);
 
   return { blocks, meta };

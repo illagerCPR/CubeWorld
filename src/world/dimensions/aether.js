@@ -7,6 +7,7 @@ import { SimplexNoise } from '../noise.js';
 import { BlockRegistry } from '../../core/BlockRegistry.js';
 import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT } from '../../core/Chunk.js';
 import { StructureManager } from '../structures/StructureManager.js';
+import { steleStack } from '../steles.js';
 
 // ── 天域参数 ─────────────────────────────────────────────────────────
 const ISLE_FREQ = 0.008;      // 岛屿场频率（独立岛轮廓，波长 ~125 格）
@@ -182,7 +183,11 @@ export class AetherGenerator {
           // 碑位列跳过树木/晶柱装饰（防断干浮叶）；章节注册进 structureManager.steles
           //（键与 steleChapterAt 一致）；decorate=false 的选址/出生探针不注册（防递归污染）。
           if (cx === 0 && cz === 0 && x === 8 && z === 8) {
-            blocks[idx(top + 1, z, x)] = BlockRegistry.getId('wind_stele');
+            // Build 20 ①：单格碑升四格（底座星髓块/碑/荧石/顶帽星髓块）
+            const [sx, sz] = [x, z];
+            for (const [bx, by, bz, bid] of steleStack(sx, top + 1, sz, 'aether')) {
+              blocks[idx(by, bz, bx)] = bid;
+            }
             this.structureManager.steles.set(`8,${top + 1},8`, 'prologue');
           } else {
             this._decorate(chunk, x, z, wx, wz, span, biome, ids);

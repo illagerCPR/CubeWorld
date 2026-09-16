@@ -11,7 +11,7 @@ export const en = {
   '← 返回': '← Back',
   'WASD 移动 / 空格 跳跃 / 双击空格 飞行(创造) / Shift 下蹲': 'WASD Move / Space Jump / Double-Space Fly (Creative) / Shift Sneak',
   '鼠标左键 破坏 / 右键 放置 / E 打开背包 / ESC 暂停 / C 命令面板(需启用)': 'Left Click Break / Right Click Place / E Inventory / ESC Pause / C Command Panel (cheats required)',
-  '滚轮 切换物品 / 1-9 快捷栏 / F5 手动保存': 'Scroll Switch Item / 1-9 Hotbar / F5 Save Now',
+  '滚轮 切换物品 / 1-9 快捷栏 / F5 切换视角 / F6 手动保存': 'Scroll Switch Item / 1-9 Hotbar / F5 Cycle View / F6 Save Now',
   // ── 单人页 ──
   '选择存档继续，或点击空槽新建世界': 'Pick a save to continue, or click an empty slot to create a world',
   '空存档槽 {n}': 'Empty Slot {n}',

@@ -11,7 +11,7 @@ export const es = {
   '← 返回': '← Volver',
   'WASD 移动 / 空格 跳跃 / 双击空格 飞行(创造) / Shift 下蹲': 'WASD Moverse / Espacio Saltar / Doble espacio Volar (creativo) / Shift Agacharse',
   '鼠标左键 破坏 / 右键 放置 / E 打开背包 / ESC 暂停 / C 命令面板(需启用)': 'Clic izq. Romper / clic der. Colocar / E Inventario / ESC Pausa / C Panel de comandos (requiere activarlos)',
-  '滚轮 切换物品 / 1-9 快捷栏 / F5 手动保存': 'Rueda Cambiar objeto / 1-9 Barra rápida / F5 Guardar',
+  '滚轮 切换物品 / 1-9 快捷栏 / F5 切换视角 / F6 手动保存': 'Rueda Cambiar objeto / 1-9 Barra rápida / F5 Cambiar vista / F6 Guardar',
   // ── 单人页 ──
   '选择存档继续，或点击空槽新建世界': 'Elige una partida o haz clic en un hueco vacío para crear un mundo',
   '空存档槽 {n}': 'Hueco vacío {n}',

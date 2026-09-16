@@ -4,6 +4,7 @@
 import { Biomes } from '../biomes.js';
 import { blockId } from './StructureManager.js';
 import { fillBox, wallsBox, clearBox, floorBox, foundation } from './StructureKit.js';
+import { steleStack } from '../steles.js';
 
 const CLEAR_TOP = 7;   // 建筑足迹上方清空高度（容纳树冠）
 const ROAD_LEN = 28;   // 道路臂长（自井心）
@@ -223,9 +224,10 @@ export function solveVillage(rng, ax, groundY, az, gen) {
   // ── 井旁碑位（世界观批次 W3）：苔纹石碑（雨土纪·纹样）──────────────────
   // 硬编码坐标零 rng 消耗，blocks 只追加不改写（旧 seed 村庄布局逐字节稳定）；
   // 井区外缘 (ax+3, az-2)——不触碰道路/房屋/农田/出生景位，bbox 判定不受影响。
+  // Build 20 ① 四格形制：clearBox 已清 groundY+1..+4 四格，底座苔石压地表层。
   clearBox(blocks, ax + 3, groundY + 1, az - 2, ax + 3, groundY + 4, az - 2);
   for (let y = baseAt(ax + 3, az - 2); y < groundY; y++) blocks.push([ax + 3, y, az - 2, M.base]);
-  blocks.push([ax + 3, groundY + 1, az - 2, blockId('moss_stele')]);
+  for (const [bx, by, bz, bid] of steleStack(ax + 3, groundY + 1, az - 2, 'overworld')) blocks.push([bx, by, bz, bid]);
   meta.steles.push([ax + 3, groundY + 1, az - 2, 'rain_pattern']);
 
   return { blocks, meta };

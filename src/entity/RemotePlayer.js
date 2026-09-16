@@ -11,7 +11,8 @@ import { RemoteHotbarSprite } from '../render/RemoteHotbarSprite.js';
 
 // 简化方块人部件（局部坐标原点在脚 y=0，单位：格）
 // 关节部件（head/arm/leg）用 pivot 支撑：mesh 挂在 pivot 下，旋转 pivot 即旋转肢体
-const PARTS = [
+// 导出供 LocalPlayerModel（Build 20 ⑤ 第三人称本地玩家模型）共用同一布局
+export const PARTS = [
   { box: [-0.25, 1.5, -0.25, 0.25, 2.0, 0.25], role: 'head', pivot: [0, 1.5, 0] },
   { box: [-0.3, 0.6, -0.2, 0.3, 1.5, 0.2], role: 'body' },
   { box: [-0.5, 0.6, -0.15, -0.3, 1.45, 0.15], role: 'armL', pivot: [-0.4, 1.45, 0] },

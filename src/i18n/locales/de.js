@@ -11,7 +11,7 @@ export const de = {
   '← 返回': '← Zurück',
   'WASD 移动 / 空格 跳跃 / 双击空格 飞行(创造) / Shift 下蹲': 'WASD Bewegen / Leertaste Springen / Doppelte Leertaste Fliegen (Kreativ) / Shift Schleichen',
   '鼠标左键 破坏 / 右键 放置 / E 打开背包 / ESC 暂停 / C 命令面板(需启用)': 'Linksklick Abbauen / Rechtsklick Platzieren / E Inventar / ESC Pause / C Befehlspanel (Cheats erforderlich)',
-  '滚轮 切换物品 / 1-9 快捷栏 / F5 手动保存': 'Mausrad Gegenstand wechseln / 1-9 Schnellleiste / F5 Jetzt speichern',
+  '滚轮 切换物品 / 1-9 快捷栏 / F5 切换视角 / F6 手动保存': 'Mausrad Gegenstand wechseln / 1-9 Schnellleiste / F5 Ansicht wechseln / F6 Jetzt speichern',
   // ── 单人页 ──
   '选择存档继续，或点击空槽新建世界': 'Wähle einen Spielstand zum Fortsetzen oder klicke auf einen leeren Platz, um eine Welt zu erstellen',
   '空存档槽 {n}': 'Leerer Speicherplatz {n}',

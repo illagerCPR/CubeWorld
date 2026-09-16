@@ -1,6 +1,6 @@
 // end-gateway.mjs -- 龙败奖励链回归：折跃门/返程喷泉门/配对传送（node 直跑）
 // 断言：
-//   ① end_gateway 方块注册：cross 非固体发光不可破坏
+//   ① end_gateway 方块注册：末地传送门式立面（Build 20 ②）非固体发光不可破坏
 //   ② gatewayPlacements：角度均布 / outer 在锚点边缘 / inner 在主岛缘半径
 //   ③ buildGatewayPad：表面建门（门格入账本 + 基岩框）/ 虚空码头垫台
 //   ④ gatewayTarget：角度最近配对 / 自身排除 / 双向可达
@@ -33,6 +33,8 @@ const ES = BlockRegistry.getId('end_stone');
   ok(def.solid === false && def.transparent === true, 'end_gateway 应非固体透明（可陷入）');
   ok(def.light >= 13, `end_gateway light=${def.light}（应 ≥13 进光源 LUT）`);
   ok(def.hardness < 0, 'end_gateway 应不可破坏（hardness<0）');
+  // Build 20 ②：视觉改末地传送门式——去 cross、走正常立方面渲染（黑洞星空纹理）
+  ok(def.renderType !== 'cross', 'end_gateway 应已去 cross 渲染（末地传送门式立面）');
   ok(DIM_PORTAL_KINDS.end.includes('gateway'), '末地维度传送门种类缺少 gateway');
   ok(portalBlockId('gateway') === GW, 'gateway kind → end_gateway id 映射失败');
 }

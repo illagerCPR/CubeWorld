@@ -6,6 +6,7 @@
 import { blockId } from './StructureManager.js';
 import { clearBox, floorBox, wallsBox } from './StructureKit.js';
 import { Chunk, CHUNK_SIZE } from '../../core/Chunk.js';
+import { steleStack } from '../steles.js';
 
 const LAVA_SEA_TOP = 33; // 与 fortress 同款支撑下限（熔岩海面之上）
 
@@ -57,7 +58,6 @@ export function solveHearth(rng, ax, groundY, az) {
   const GS = blockId('glowstone');
   const SS = blockId('soul_sand');
   const MG = blockId('magma_block');
-  const ES = blockId('ember_stele');
   const blocks = [];
   const meta = { kind: 'tidefire_hearth', chests: [], steles: [] };
   const y0 = groundY;
@@ -128,9 +128,12 @@ export function solveHearth(rng, ax, groundY, az) {
   };
   for (const px of [ax - 8, ax + 8]) for (const pz of [az - 5, az + 5]) pillar(px, pz);
 
-  // 箱子与石碑方块（声明坐标同步放置；碑位批次 N2 起有真实章节）
+  // 箱子与石碑方块（声明坐标同步放置；碑位批次 N2 起有真实章节；Build 20 ① 四格形制——
+  // 底座岩浆块嵌平台、碑/荧石/顶帽立于其上，clearBox 已清至 y0+10 净空充足）
   for (const c of meta.chests) blocks.push([c[0], c[1], c[2], CH]);
-  for (const s of meta.steles) blocks.push([s[0], s[1], s[2], ES]);
+  for (const s of meta.steles) {
+    for (const [bx, by, bz, bid] of steleStack(s[0], s[1], s[2], 'nether')) blocks.push([bx, by, bz, bid]);
+  }
 
   return { blocks, meta };
 }

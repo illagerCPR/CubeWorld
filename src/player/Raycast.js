@@ -39,7 +39,8 @@ export class Raycast {
           return {
             block: { x, y, z },
             normal: lastFace,
-            id
+            id,
+            t          // 射程参数（Build 20 ⑤：第三人称相机遮挡裁剪用；既有消费方不受影响）
           };
         }
       }

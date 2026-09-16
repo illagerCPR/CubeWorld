@@ -187,6 +187,16 @@ else
     exit 1
 fi
 
+# Build 20 修复与改进（石碑四格/折跃门传送门式/中键取物/创造不激怒/F5 视角 F6 保存/
+# 终局演出全维度/永昼泄漏修复）
+echo "=== build20-fixes ==="
+if node tests/build20-fixes.mjs; then
+    echo "build20-fixes: OK"
+else
+    echo "build20-fixes: FAILED"
+    exit 1
+fi
+
 # 末影龙 Boss 回归（纯 node：类型注册/柱顶水晶/DragonAI 状态机/击败链路/末地门控）
 echo "=== end-dragon ==="
 if node tests/end-dragon.mjs; then

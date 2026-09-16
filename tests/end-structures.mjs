@@ -137,8 +137,11 @@ for (const seed of SEEDS) {
   const lx = 26 - 16, lz = 26 - 16;
   ok(c.get(lx, span.top + 1, lz) === id('end_stele'), `守望碑方块在 (26,${span.top + 1},26)`);
   ok(gen.structureManager.steles.get(`26,${span.top + 1},26`) === 'end_watch', 'sm.steles 注册 end_watch');
-  // 周边无柱环冲突绊线：碑位不落在黑曜石上（r≈37 > 柱环最大延伸）
-  ok(c.get(lx, span.top, lz) === id('end_stone'), '碑座为末地石（未被黑曜石柱覆盖）');
+  // 周边无柱环冲突绊线：Build 20 ① 四格形制——碑座=紫珀底座、碑列完整、下方仍是主岛末地石
+  ok(c.get(lx, span.top, lz) === id('purpur_block'), '碑座为紫珀底座（Build 20 ① 四格形制）');
+  ok(c.get(lx, span.top + 2, lz) === id('glowstone') && c.get(lx, span.top + 3, lz) === id('purpur_block'),
+    '碑列荧石/顶帽完整（四格形制）');
+  ok(c.get(lx, span.top - 1, lz) === id('end_stone'), '碑位下方为主岛末地石（未被黑曜石柱覆盖）');
 
   const gen2 = new EndGenerator(seed);
   const c2 = new Chunk(1, 1);

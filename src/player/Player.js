@@ -1,5 +1,9 @@
 // Player.js -- 玩家实体
 import * as THREE from 'three';
+import { Raycast } from './Raycast.js';
+
+// Build 20 ⑤：第三人称相机与眼睛的默认距离（格）；贴墙时按射线遮挡裁剪拉近
+const THIRD_PERSON_DIST = 4;
 
 export class Player {
   constructor(camera) {
@@ -15,6 +19,7 @@ export class Player {
     this.creative = false;
     this.spectator = false;
     this.survival = false;
+    this.viewMode = 0; // Build 20 ⑤：0=第一人称 1=第三人称背后 2=第三人称正面（F5 循环）
     
     // 生存属性
     this.health = 20;
@@ -127,11 +132,41 @@ export class Player {
     }
   }
 
-  updateCamera() {
-    this.camera.position.copy(this.position);
-    this.camera.position.y += 1.62; // 视点高度
+  // 相机位姿（Game.update 每帧调用；world 供第三人称遮挡裁剪，缺省跳过裁剪）。
+  // Build 20 ⑤ 三态：0 第一人称（眼点） / 1 第三人称背后（视线反方向退距） /
+  // 2 第三人称正面（视线正方向退距，相机回望玩家）。准星射线仍从眼睛发射（原版语义）。
+  updateCamera(world = null) {
     this.camera.rotation.order = 'YXZ';
-    this.camera.rotation.y = this.yaw;
-    this.camera.rotation.x = this.pitch;
+    if (this.viewMode === 0) {
+      this.camera.position.copy(this.position);
+      this.camera.position.y += 1.62; // 视点高度
+      this.camera.rotation.y = this.yaw;
+      this.camera.rotation.x = this.pitch;
+      return;
+    }
+    const ex = this.position.x, ey = this.position.y + 1.62, ez = this.position.z;
+    const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
+    const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
+    const dx = -sy * cp, dy = sp, dz = -cy * cp; // 视线方向（yaw=0 朝 -Z，pitch 正抬头）
+    const sign = this.viewMode === 1 ? -1 : 1;   // 背后=逆视线、正面=顺视线
+    let dist = THIRD_PERSON_DIST;
+    if (world) {
+      if (!this._camRay) this._camRay = new Raycast(world);
+      else this._camRay.world = world; // 存档切换时 world 实例更换，必须跟随
+      const hit = this._camRay.cast(
+        new THREE.Vector3(ex, ey, ez),
+        new THREE.Vector3(dx * sign, dy * sign, dz * sign),
+        dist
+      );
+      if (hit && hit.t != null) dist = Math.max(0.3, hit.t - 0.25); // 贴墙拉近防穿墙
+    }
+    this.camera.position.set(ex + dx * sign * dist, ey + dy * sign * dist, ez + dz * sign * dist);
+    if (this.viewMode === 1) {
+      this.camera.rotation.y = this.yaw;
+      this.camera.rotation.x = this.pitch;
+    } else {
+      this.camera.rotation.y = this.yaw + Math.PI; // 正面视角：相机回望玩家
+      this.camera.rotation.x = -this.pitch;
+    }
   }
 }

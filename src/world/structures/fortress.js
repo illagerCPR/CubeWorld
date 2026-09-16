@@ -7,6 +7,7 @@ import { blockId } from './StructureManager.js';
 import { clearBox, floorBox, wallsBox } from './StructureKit.js';
 import { Chunk, CHUNK_SIZE } from '../../core/Chunk.js';
 import { BlockRegistry } from '../../core/BlockRegistry.js';
+import { steleStack } from '../steles.js';
 
 const LAVA_SEA_TOP = 33;        // 支撑柱底（熔岩海面之上 2 格）
 
@@ -128,9 +129,9 @@ export function solveFortress(rng, ax, groundY, az) {
 
   // ⑨ 烬火纪碑位（世界观批次 N2）：主堡顶盖上方 ember_sinking（坠潮——火民篇开篇）。
   // 写死坐标零 rng 消耗：旧 seed 的 fortress blocks 序列只追加不改写（联机确定性不变）。
-  const ES = blockId('ember_stele');
+  // Build 20 ①：四格形制——底座岩浆块嵌顶盖、碑/荧石/顶帽岩浆块立于顶盖上方（clearBox 已清至 y0+9）
   meta.steles.push([ax - 12, y0 + 7, az, 'ember_sinking']);
-  blocks.push([ax - 12, y0 + 7, az, ES]);
+  for (const [bx, by, bz, bid] of steleStack(ax - 12, y0 + 7, az, 'nether')) blocks.push([bx, by, bz, bid]);
 
   return { blocks, meta };
 }

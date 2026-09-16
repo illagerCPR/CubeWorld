@@ -95,7 +95,7 @@ export class MenuScreen {
       <div style="font-size: 11px; color: #aaa; text-align: center; line-height: 1.7; margin-top: 4vh;">
         ${t('WASD 移动 / 空格 跳跃 / 双击空格 飞行(创造) / Shift 下蹲')}<br/>
         ${t('鼠标左键 破坏 / 右键 放置 / E 打开背包 / ESC 暂停 / C 命令面板(需启用)')}<br/>
-        ${t('滚轮 切换物品 / 1-9 快捷栏 / F5 手动保存')}
+        ${t('滚轮 切换物品 / 1-9 快捷栏 / F5 切换视角 / F6 手动保存')}
       </div>
     `;
   }

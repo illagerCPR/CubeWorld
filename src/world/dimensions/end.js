@@ -8,6 +8,7 @@ import { SimplexNoise } from '../noise.js';
 import { BlockRegistry } from '../../core/BlockRegistry.js';
 import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT } from '../../core/Chunk.js';
 import { StructureManager } from '../structures/StructureManager.js';
+import { steleStack } from '../steles.js';
 
 // ── 末地参数 ─────────────────────────────────────────────────────────
 const ISLAND_R = 60;          // 主岛基准半径
@@ -217,8 +218,11 @@ export class EndGenerator {
     // 选址/出生探针不写不注册（防递归污染——与天域出生岛引路碑同款）。
     if (decorate && ox <= 26 && 26 < ox + CHUNK_SIZE && oz <= 26 && 26 < oz + CHUNK_SIZE) {
       const wSpan = this._islandSpan(26, 26);
-      if (wSpan && wSpan.top + 1 < CHUNK_HEIGHT - 1) {
-        blocks[idx(wSpan.top + 1, 26 - oz, 26 - ox)] = BlockRegistry.getId('end_stele');
+      if (wSpan && wSpan.top + 4 < CHUNK_HEIGHT - 1) {
+        // Build 20 ①：单格碑升四格（底座紫珀块/碑/荧石/顶帽紫珀块）——帽顶上方须有净空
+        for (const [bx, by, bz, bid] of steleStack(26, wSpan.top + 1, 26, 'end')) {
+          blocks[idx(by, bz - oz, bx - ox)] = bid;
+        }
         this.structureManager.steles.set(`26,${wSpan.top + 1},26`, 'end_watch');
       }
     }

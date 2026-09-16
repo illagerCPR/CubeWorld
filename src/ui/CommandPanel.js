@@ -258,7 +258,8 @@ export class CommandPanel {
     timeCard.appendChild(timeCustomRow);
 
     // ⑤b 维度检查（世界观批次 N1 起跨维度）：复潮切换（仅天域，单机权威）+
-    // 石碑章节直读（按当前维度过滤章节，免跑图逐碑检查叙事；无章节的维度整卡隐藏）
+    // 终局演出调试口（Build 20 ⑥：不再限定天域——四界分段本就全维度并行，任意维度可预览）+
+    // 石碑章节直读（按当前维度过滤章节，免跑图逐碑检查叙事；无章节的维度整行隐藏）
     const aetherCard = this._mkCard('维度检查');
     colR.appendChild(aetherCard);
     this.aetherCard = aetherCard;
@@ -274,6 +275,15 @@ export class CommandPanel {
     });
     duskWrap.appendChild(duskBtn);
     this.duskBtn = duskBtn;
+    const duskLabel = document.createElement('div');
+    duskLabel.style.cssText = 'font-size:11px; color:#9ab;';
+    duskWrap.appendChild(duskLabel);
+    this.duskLabel = duskLabel;
+    // 终局演出：独立行（duskWrap 之外），所有维度可见可用
+    const finaleWrap = document.createElement('div');
+    finaleWrap.style.cssText = 'display:flex; flex-direction:column; gap:4px;';
+    aetherCard.appendChild(finaleWrap);
+    this.finaleWrap = finaleWrap;
     const finaleBtn = this._mkBtn('终局演出：原初之潮（调试）');
     finaleBtn.addEventListener('click', () => {
       // F2 调试口：本地触发 60s 四界同潮窗口（正式触发链 = F3 守望界碑听潮；
@@ -281,15 +291,11 @@ export class CommandPanel {
       if (this.game._finaleTide) this.game._stopFinaleTide();
       else this.game._startFinaleTide();
     });
-    duskWrap.appendChild(finaleBtn);
+    finaleWrap.appendChild(finaleBtn);
     const finaleLabel = document.createElement('div');
     finaleLabel.style.cssText = 'font-size:11px; color:#9ab;';
     finaleLabel.textContent = t('60 秒窗口 · 四界分段并行 · 换维追潮');
-    duskWrap.appendChild(finaleLabel);
-    const duskLabel = document.createElement('div');
-    duskLabel.style.cssText = 'font-size:11px; color:#9ab;';
-    duskWrap.appendChild(duskLabel);
-    this.duskLabel = duskLabel;
+    finaleWrap.appendChild(finaleLabel);
 
     const steleRow = document.createElement('div');
     steleRow.style.cssText = 'display:flex; gap:6px; align-items:center;';
@@ -437,7 +443,7 @@ export class CommandPanel {
     const world = game.world;
     const dim = world ? world.dimension : 'overworld';
     const isAether = dim === 'aether';
-    // 复潮控件：仅天域显示
+    // 复潮控件：仅天域显示（终局演出行已独立，全维度可用）
     this.duskWrap.style.display = isAether ? 'flex' : 'none';
     if (isAether) {
       const on = !!game.aetherDusk;
@@ -456,8 +462,8 @@ export class CommandPanel {
       opt.textContent = t(ch.title);
       this.steleSelect.appendChild(opt);
     }
-    // 整卡显隐：无任何可用工具的维度不显示空壳卡
-    this.aetherCard.style.display = (isAether || opts.length) ? 'flex' : 'none';
+    // 整卡显隐：终局演出全维度可用 → 卡恒显示（Build 20 ⑥）
+    this.aetherCard.style.display = 'flex';
   }
 
   _refreshTimeLabel() {

@@ -10,6 +10,7 @@
 //      密度预案：cell 48 / attempts 2 / chance 0.35 / salt 7291（神殿同档稀有，实测调参）。
 import { blockId } from './StructureManager.js';
 import { probeIsland } from './aetherStructures.js';
+import { steleStack } from '../steles.js';
 
 // 选址：四群系大岛皆可，中心 ±5 平坦（maxSlope 8）——肋骨拱悬挑出岛缘 = "搁浅在岸线"
 function placeWhale(gen, ax, az) {
@@ -20,7 +21,6 @@ export function solveWhale(rng, ax, y0, az) {
   const WB = blockId('whale_bone_block');
   const SM = blockId('star_marrow_block');
   const CW = blockId('cloud_wool');
-  const ST = blockId('wind_stele');
   const CH = blockId('chest');
   const WC = blockId('wind_current');
   const blocks = [];
@@ -89,8 +89,8 @@ export function solveWhale(rng, ax, y0, az) {
   for (let h = 1; h <= 8; h++) blocks.push([hx, y0 + h, az, WC]);
   for (let h = 1; h <= 6; h++) blocks.push([ax - 13, y0 + h, az, WC]);
 
-  // ⑧ 归云章碑位（第一对肋骨内侧）+ 考古箱（对称位）
-  blocks.push([ax, y0, az + 2, ST]);
+  // ⑧ 归云章碑位（第一对肋骨内侧；Build 20 ① 四格形制：底座星髓压骨粉地）+ 考古箱（对称位）
+  for (const [bx, by, bz, bid] of steleStack(ax, y0, az + 2, 'aether')) blocks.push([bx, by, bz, bid]);
   meta.steles.push([ax, y0, az + 2, 'aether_whale']);
   blocks.push([ax, y0, az - 2, CH]);
   meta.chests.push([ax, y0, az - 2, 'whale_barrow']);

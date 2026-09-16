@@ -108,3 +108,10 @@
 - **夜表**：pickAetherSpawnV2 加 isNight 第 3 参（永昼期恒 false）——夜表守卫/岚隼加成（草地岚隼 18%/水晶守卫 50%/银霜岚隼 45% 上限段）；云绒兽被动组白天限定=天然夜间缩群。复潮后 sky.time 锚定 0.32（玩家亲眼看到第一次日落）。
 - **Boss 清除豁免（顺手修历史缺陷）**：despawn 条件加 `!mob.type.boss`——80 格静态清除半径曾会把走远的守誓巨像/龙/凋灵直接抹掉（Boss 只经死亡链移除）。
 - **冒烟全绿**：仪式全链路（材料扣/置换/档案三项/时间锚定/第九章）/真实昼夜（0.78 夜 light 0.0、0.5 昼 1.0）/存档往返（duskRestored+polarDay false+潮心祭坛在）/MP 三路状态字段就位；测试存档已删。
+
+### Build 20 修复与改进批次（2026-09-16 交付）—— 石碑四格形制 / 折跃门传送门式 / 永昼泄漏修复
+
+- **石碑四格形制（①）**：单格碑升 4 格——底座=维度特色方块、第 2 格石碑、第 3 格荧石、顶帽=维度特色方块（`src/world/steles.js` 新增 `STELE_STELE_BY_DIM`/`STELE_BASE_BY_DIM`/`steleStack(x,y0,z,dim)` 单一来源；steleStack 内 `BlockRegistry.getId` 转数字 id——solve 在方块注册后运行）。维度特色块：overworld=mossy_cobblestone（苔石·雨土苔痕）/ nether=magma_block（岩浆块·烬火余温，**项目里无踩踏伤害逻辑**）/ end=purpur_block（紫珀·拾遗者遗物）/ aether=star_marrow_block（星髓·潮的骨头）。**14 处碑位逐一核对净空后全部原位升级**：结构内 9 处（temple 内殿×2 碑位 y0-2 底座压圣所地面、顶帽压台面海晶灯十字两端；sea_gate/whale/gleaner_ring/ring 中心碑；fortress y0+7 底座嵌顶盖；hearth×3 clearBox 清至 y0+10；tide_barrow 水下碑荧石在水中发光）+ 维度直写 2 处（aether.js 出生岛 8,8/end.js 主岛 26,26——end 侧净空条件从 top+1 收紧为 top+4）+ village/stronghold 各 1 处（village clearBox 已清 groundY+1..+4；stronghold room 清腔至 hubY+4）。**碑位注册键（meta.steles 与 steles.set）仍取碑体格 y0 不变**——steleChapterAt 兼容零改动。碑列条目全部在结构 blocks 序列**末尾追加**（后写覆盖先写=压过砾石/基座材/水）。
+- **折跃门传送门式（②）**：`end_gateway` 去 `renderType:'cross'`（走 end_portal 同款正常立方面渲染）+ 纹理改黑洞星空（微绿底 + 绿色星点，区分 end_portal 蓝白星点）；solid:false 陷入触发（脚下 cellId(-0.3) 探测）/light 15/ambientParticles 不变；ParticleSystem PORTAL_TINTS.end_gateway 同步绿色星尘。基岩框内嵌语义不变——视觉从"十字光束片"变"黑洞星空面"。
+- **永昼泄漏修复（⑦）**：`this.aetherDusk` 挂在跨存档共享的 Game 实例上，旧逻辑"loadData 无字段时保留现值"使存档 A（已复潮）的状态泄进新开存档 B（B 进天域=永昼被解除，表现为"解除效果对全存档生效"）。修法：start() 中**单机只信存档字段**（`this.aetherDusk = !!(loadData && loadData.aetherDusk)`——换维透传的 loadData 合成总是携带该字段故不受影响；旧存档无字段=未复潮正确）；联机保留现值（WORLD_INFO 先达，房间权威）；`returnToMenu()` 末尾复位 `this.aetherDusk=false`（防残留；DIMENSIONS.aether 全局档案在下一次进天域 start 时按存档重设，闭环）。
+- **测试**：`tests/build20-fixes.mjs`（153 断言，含 steleStack 纯函数四维映射/9 个结构 solve 行为级四格验证/维度生成器绊线）；end-gateway.mjs 增"去 cross"断言。

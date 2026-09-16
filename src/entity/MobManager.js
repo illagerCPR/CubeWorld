@@ -1175,8 +1175,9 @@ export class MobManager {
     }
   }
 
-  // 玩家攻击怪物
-  attackMob(rayOrigin, rayDir, maxDist, damage) {
+  // 玩家攻击怪物。opts.provoke=false（Build 20 ④：创造玩家）时命中仍生效（伤害/击退/
+  // 受击反馈）但不设置激怒——怪物不会以创造玩家为敌，激怒态失去意义。
+  attackMob(rayOrigin, rayDir, maxDist, damage, opts = {}) {
     let closest = null;
     let closestDist = maxDist;
     for (const mob of this.mobs) {
@@ -1204,7 +1205,8 @@ export class MobManager {
       // 末影人受击瞬移（60% 概率，原版风味）
       if (closest.typeName === 'enderman' && Math.random() < 0.6) this._teleportMob(closest);
       // 中立生物被激怒：激怒 25s + 16 格内同族共同激怒（僵尸猪灵群怒，原版行为）
-      if (closest.type && closest.type.neutral) {
+      const provoke = opts.provoke !== false;
+      if (provoke && closest.type && closest.type.neutral) {
         closest.aggro = true;
         closest.aggroTimer = 25;
         for (const m of this.mobs) {
@@ -1216,7 +1218,7 @@ export class MobManager {
         }
       }
       // Idea-2E：铁傀儡被玩家攻击 → 激怒追击攻击者（20s，guardian AI 消费）
-      if (closest.type && closest.type.guardian) {
+      if (provoke && closest.type && closest.type.guardian) {
         closest.aggro = true;
         closest.aggroTimer = 20;
       }

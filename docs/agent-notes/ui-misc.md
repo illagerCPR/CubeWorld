@@ -133,3 +133,9 @@
 - **创造网格取物 = 容器式光标拿取（同步原版）**：左键点创造物品 → `setCursorItem(name, 64)` 一整组上光标（原版 doClick 语义：空手拿整组/同类 grow 封顶/异类替换——三分支在"上限 64"下同一条语句即可表达）；放置走既有槽位事件（swapCursorWithSlot 左键换/合、rightClickSlot 右键放 1）；右键创造物品=拿 1 个（保留）；✗ 摧毁槽销毁光标物品；关闭物品栏光标物品自动 `inventory.add` 回包（hide 既有逻辑，创造下同样成立）。
 - **eval 引用别名读数陷阱**：断言 `cursorItem` 后又对它做变更操作的同一 IIFE 里，先前捕获的是**对象引用**——序列化发生在 return 时，读数是变更后的值（本次右键拿 1 显示 count:0 实为放置后递减）——要快照值就 `[...item]` 浅拷贝或分两次 eval。
 - **i18n 补漏批（同车，未随 Build 12 发布）**：JEI 5 处漏 t() + 14 个维度群系名 ×10 包（233→252 键），详见上一节备忘；本批随 Build 13 一并发布。
+
+### Build 20 批次（2026-09-16 交付）—— F5 视角三态 / 中键取物 / 命令面板终局演出全维度
+
+- **F5 视角循环 + F6 保存（⑤）**：`Player.viewMode`（0=第一人称 1=第三人称背后 2=第三人称正面，F5 循环；观战模式 F5 仍为切目标，死亡观战键位不变）。`updateCamera(world)` 重写：第三人称从眼点沿视线 ±4 格退距 + **遮挡裁剪**（`Raycast.cast` 新增返回命中距离 `t`——既有消费方不受影响；命中格前 0.25 拉近防穿墙；存档切换时 `_camRay.world` 必须跟随更新）；正面视角相机 `rotation.y=yaw+PI / x=-pitch` 回望。**准星射线仍从眼睛发射**（原版语义，第三人称射击/挖掘判定不变）。本地玩家模型 `src/entity/LocalPlayerModel.js`（与 RemotePlayer **共用导出的 PARTS 布局常量**，零插值直驱：行走摆臂/挖掘挥臂/头俯仰/右臂挂手持物 buildHeldItemTemplate；颜色=联机 selfId 派生色与远端看到的一致，单机 id=1）；Game.update 中 `thirdPerson` 时隐藏 FirstPersonHand（`viewMode===0` 才显示）并驱动模型；**Player/hand/playerModel 均跨存档共享**——start 复位 viewMode=0 + 隐藏模型，returnToMenu 同步隐藏（防主菜单全景残影）。F6=原 F5 手动保存（editable 输入放行同步改 F6）；F5 分支在 `!running` 时早退**不 preventDefault**——启动失败页保留浏览器刷新语义（原提示"按 F5 刷新"不矛盾化）。MenuScreen 键位提示整句换键（10 语言包同步）。
+- **创造中键取物（③）**：Controls.onMouseDown `button===1` → preventDefault（防浏览器自动滚动）→ `onPickBlock` 回调（Game 构造注入）；`Game._pickBlock()`：仅创造响应（生存/旁观早退）、准星 `selectedBlock.id` 经 `BlockRegistry.getNameById`（BlockRegistry 新增 id→name Map 反查导出）取方块名；热栏 0..8 已有该物品（无 data）→ setSelected 选中那格；否则以 1 个替换当前选中格。原版创造 pick-block 同语义。
+- **命令面板终局演出全维度（⑥）**：finaleBtn/finaleLabel 从 duskWrap 拆出独立 `finaleWrap`（aetherCard 直属），duskWrap 仍仅天域（复潮控件），`_refreshDimTools` 末尾 `aetherCard.style.display='flex'` 恒显——终局演出（60s 四界分段）本就全维度并行，任意维度可调试预览。`_startFinaleTide` 本身无维度门，纯 UI 解锁。

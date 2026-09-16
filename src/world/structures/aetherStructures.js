@@ -5,6 +5,7 @@
 import { blockId } from './StructureManager.js';
 import { fillBox, floorBox, wallsBox } from './StructureKit.js';
 import { Chunk, CHUNK_SIZE } from '../../core/Chunk.js';
+import { steleStack } from '../steles.js';
 
 // 浮岛下探选址：锚点列群系门 + 9 列（±probeR）下探取暴露地面，全距 ≤ maxSlope 视为平坦。
 // 返回 groundY（立地面首格空气层）或 -1。锚点恒在区块局部 (8,8)，±6 采样不出块。
@@ -90,15 +91,15 @@ export function solveTemple(rng, ax, y0, az) {
   // ⑥ 内殿圣所（批次 B）：殿心下沉 3×3×3（净空 y0-2..y0，底 y0-3）
   const SM = blockId('star_marrow_block');
   const AL = blockId('aether_altar');
-  const ST = blockId('wind_stele');
   for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
     for (let yy = y0; yy >= y0 - 2; yy--) blocks.push([ax + dx, yy, az + dz, 0]); // 凿空（含地板层）
     blocks.push([ax + dx, y0 - 3, az + dz, QB]); // 圣所地面
   }
-  // 恒昼祭坛居中（light 13 兼任圣所照明）；双碑记史；第三箱（内殿表）
+  // 恒昼祭坛居中（light 13 兼任圣所照明）；双碑记史（Build 20 ① 四格形制：底座星髓/
+  // 碑/荧石/顶帽星髓——底座压圣所地面、顶帽压台面海晶灯十字两端）；第三箱（内殿表）
   blocks.push([ax, y0 - 2, az, AL]);
-  blocks.push([ax - 1, y0 - 2, az - 1, ST]);
-  blocks.push([ax + 1, y0 - 2, az + 1, ST]);
+  for (const [bx, by, bz, bid] of steleStack(ax - 1, y0 - 2, az - 1, 'aether')) blocks.push([bx, by, bz, bid]);
+  for (const [bx, by, bz, bid] of steleStack(ax + 1, y0 - 2, az + 1, 'aether')) blocks.push([bx, by, bz, bid]);
   meta.steles.push([ax - 1, y0 - 2, az - 1, 'sundering'], [ax + 1, y0 - 2, az + 1, 'command']);
   meta.chests.push([ax - 1, y0 - 2, az + 1, 'aether_sanctum']);
   blocks.push([ax - 1, y0 - 2, az + 1, CH]);
@@ -266,7 +267,6 @@ export function solveSeaGate(rng, ax, y0, az) {
   const GL = blockId('glowstone');
   const QB = blockId('quartz_block');
   const SB = blockId('stone_bricks');
-  const WS = blockId('wind_stele');
   const blocks = [];
   const meta = { kind: 'aether_gate', chests: [], steles: [] };
 
@@ -287,8 +287,8 @@ export function solveSeaGate(rng, ax, y0, az) {
     const dx = Math.floor(rng() * 9) - 4, dz = Math.floor(rng() * 5) - 2;
     blocks.push([ax + dx, y0, az + dz, SB]);
   }
-  // 核心石碑（第五章·穿界之门）——最后写入压过同格砾石
-  blocks.push([ax, y0, az + 2, WS]);
+  // 核心石碑（第五章·穿界之门；Build 20 ① 四格形制）——最后写入压过同格砾石
+  for (const [bx, by, bz, bid] of steleStack(ax, y0, az + 2, 'aether')) blocks.push([bx, by, bz, bid]);
   meta.steles.push([ax, y0, az + 2, 'gate']);
 
   return { blocks, meta };

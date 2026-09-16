@@ -8,6 +8,7 @@
 // 密度预案 §10.3：cell 14 / attempts 2 / chance 0.5 / salt 7268（与 end_city 6260 错开）。
 import { blockId } from './StructureManager.js';
 import { Chunk, CHUNK_SIZE } from '../../core/Chunk.js';
+import { steleStack } from '../steles.js';
 
 // 选址：锚点列必须是末地高原（end_highlands），±5 八向 9 列下探找暴露地面，
 // 全距 ≤6 视为平坦（与末地城同款外岛透镜剖面门；环体小故探针半径比末地城收小）。
@@ -52,7 +53,6 @@ export const GLEANER_RING_DEF = {
 export function solveRing(rng, ax, groundY, az) {
   const ES = blockId('end_stone');
   const EB = blockId('end_stone_bricks');
-  const ST = blockId('end_stele');
   const CP = blockId('chorus_plant');
   const CF = blockId('chorus_flower');
   const CH = blockId('chest');
@@ -60,11 +60,12 @@ export function solveRing(rng, ax, groundY, az) {
   const meta = { kind: 'gleaner_ring', chests: [], steles: [], center: [ax, groundY, az] };
   const y0 = groundY;
 
-  // ① 中央圆台：3×3 末地砖拼面（贴岛面）+ 界纹石碑（拾遗章）
+  // ① 中央圆台：3×3 末地砖拼面（贴岛面）+ 界纹石碑（拾遗章；Build 20 ① 四格形制：
+  //    底座紫珀块压圆台、碑/荧石/顶帽紫珀块立其上——露天圆台净空充足）
   for (let dx = -1; dx <= 1; dx++) {
     for (let dz = -1; dz <= 1; dz++) blocks.push([ax + dx, y0 - 1, az + dz, EB]);
   }
-  blocks.push([ax, y0, az, ST]);
+  for (const [bx, by, bz, bid] of steleStack(ax, y0, az, 'end')) blocks.push([bx, by, bz, bid]);
   meta.steles.push([ax, y0, az, 'end_gleaner']);
 
   // ② 存物箱（拾遗者的收藏）：圆台东侧贴地

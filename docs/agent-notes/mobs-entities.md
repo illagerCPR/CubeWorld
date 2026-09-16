@@ -98,3 +98,9 @@
 - **光柱**：`_beaconBeams` Map<key, Mesh>（BoxGeometry 半透明白，y 到 250），`_ensureBeaconBeam` 先 remove 再建；`_breakBeacon`/失效/`_clearBeaconState`（Game.start 换世界）三处都清 + dispose。
 - **BeaconScreen**：ChestScreen 同款生命周期（show 设 controls.enabled=false + 退指针锁 / hide 恢复 / E 键关闭 / paused 判定 / `_disposeWorld` dispose）。事件委托挂 **panel** 构造期（render 重建 innerHTML 无需重绑）。无基座只显示提示不出效果按钮。
 - **实测锚点**：power:4 / 脉冲 lv2 无缝续期（time 9.8@5s 步进）/ 抗性 hurt(5)→3.0 / 力量 1→5 / 拆层降级 & 全拆 beacons:0 beams:0 / UI"金字塔 3 级"实时 / beacon 方块 ID 129 / 配方 matchRecipe→beacon x1。
+
+### Build 20 批次（2026-09-16 交付）—— 创造模式不激怒生物（④）
+
+- **索敌排除（同原版：怪物不以创造玩家为敌）**：`Mob.update` 通用索敌链加 `playerTargetable = !player.creative && !player.spectator`（普通视线索敌与 aggro 死追两处目标选择都排除；旁观顺手一并排除——此前旁观会被追打只是 hurt() 无效）；`updateShulker` 射击入口排除；`updateGuardianAI` 激怒追击分支排除；苦力怕引爆条件 `this.target === player` 因 target 不再指向创造玩家而自然短路。**Boss AI（DragonAI/WitherAI/StormColossusAI）刻意不动**——Boss 战由召唤/龙战触发，不在"激怒"语义内，且终局调试（F2/F3）依赖创造打龙。
+- **激怒设置排除**：`MobManager.attackMob(origin,dir,maxDist,damage,opts)` 新增 `opts.provoke`（默认 true 不改既有调用）——创造玩家命中仍生效（伤害/击退/受击反馈/掉落）但不设置 neutral/guardian 激怒（怪物无力反击创造玩家，激怒态失去意义）；Game 攻击调用传 `{ provoke: !this.player.creative }`。创造分支挖星髓的 `angerTideEchoes` 调用移除（生存分支保留）。联机重放走 `applyRemoteMobAttack`（不经 attackMob），激怒语义零漂移。
+- **测试**：build20-fixes.mjs 行为级——mock mob 验证 provoke=false 命中生效不激怒 / true 激怒 25s / 缺省保持旧行为。

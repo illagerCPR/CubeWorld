@@ -88,6 +88,12 @@ export class Controls {
       this.requestLock();
       return;
     }
+    // Build 20 ③：中键取物（原版创造行为）——回调由 Game 注入，吞掉浏览器中键自动滚动
+    if (e.button === 1) {
+      e.preventDefault();
+      if (this.onPickBlock) this.onPickBlock();
+      return;
+    }
     if (e.button === 0) this.mouseLeft = true;
     if (e.button === 2) this.mouseRight = true;
   }
