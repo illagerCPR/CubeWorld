@@ -17,7 +17,7 @@ export const DEFAULT_SETTINGS = {
   smoothLighting: true,
   viewBobbing: true,
   sensitivity: 100,    // 30..200 (%)
-  gfx: 'off',          // off | basic | full 光照增强档位（基础=水面反射+云影，完整=再加后处理）
+  gfx: 'full',         // off | basic | full 光照增强档位（默认完整档大满：基础=水面反射+云影，完整=再加后处理）
   gfxBloom: true,      // 完整档子开关：泛光
   gfxGodRays: true,    // 完整档子开关：体积光
   gfxWaterReflection: true, // 完整档子开关：平面真反射（L4-A，镜像相机二次渲染场景）

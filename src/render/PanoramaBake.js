@@ -1,9 +1,9 @@
 // PanoramaBake.js -- 全景图烘焙工具（dev，URL ?bake-panorama=1 触发）
-// 在固定种子世界的六个群系机位，用 6 个 90° 方向各渲染一张 512²，导出 JPEG dataURL。
+// 在固定种子世界的单一机位，用 6 个 90° 方向各渲染一张 512²，导出 JPEG dataURL。
 // 产物保存为 res/panorama/{px,nx,py,ny,pz,nz}.jpg，由 Panorama 播放器加载（贴 cubemap 球面旋转播放）。
 // 烘焙时云层隐藏（播放器单独叠加动态云），体素光定格上午。
-// Build 25：机位改为六群系各一面（蘑菇岛/沙漠/向日葵平原/针叶林/积雪针叶林/沼泽），
-// 烘焙世界禁用结构生成 → 画面零建筑；每面独立生命周期（加载→建 mesh→拍→释放）。
+// Build 25 返工：机位回归"同一地点"（六面共享一个 center → cubemap 连续无分界），
+// 选点改为多群系交界（蘑菇岛边缘优先入镜）；烘焙世界禁用结构生成 → 画面零建筑。
 // 完整光照增强档（ACES+PostFX+真反射+太阳阴影，4 子项全开）沿用 Build 24 接线。
 import * as THREE from 'three';
 import { World } from '../core/World.js';
@@ -16,22 +16,20 @@ import { ItemSVGDefinitions } from '../items/ItemDefs.js';
 import { VoxelLightUniforms, GfxState, ShadowUniforms } from './VoxelLight.js';
 import { PostFX } from './PostFX.js';
 import { SunShadow } from './SunShadow.js';
-import { Biomes, BiomeNames } from '../world/biomes.js';
+import { Biomes } from '../world/biomes.js';
 
 export const PANO_SIZE = 512;
 const SEED = 20250903;
 const RADIUS = 5;
 
-// 六面拍摄计划（普通 2D 语义：up 正常，天在图上方；py/ny 特殊 up 由播放端 BoxGeometry UV 校准）。
-// 每面一个目标群系（互不重复）；面序 = 播放端 CubeTexture 面序 px nx py ny pz nz。
-// ny 为俯瞰面（相机抬高拍群系全貌）；fallbacks 依次尝试，全空回落原点。
-const FACE_PLANS = [
-  { name: 'px', dir: [1, 0, 0], up: [0, 1, 0], biome: Biomes.MUSHROOM_FIELDS, fallbacks: [Biomes.PLAINS, Biomes.SUNFLOWER_PLAINS] },
-  { name: 'nx', dir: [-1, 0, 0], up: [0, 1, 0], biome: Biomes.DESERT, fallbacks: [Biomes.MOUNTAINS] },
-  { name: 'py', dir: [0, 1, 0], up: [0, 0, -1], biome: Biomes.SUNFLOWER_PLAINS, fallbacks: [Biomes.PLAINS] },
-  { name: 'ny', dir: [0, -1, 0], up: [0, 0, 1], biome: Biomes.TAIGA, fallbacks: [Biomes.BIRCH_FOREST] },
-  { name: 'pz', dir: [0, 0, 1], up: [0, 1, 0], biome: Biomes.SNOWY_TAIGA, fallbacks: [Biomes.MOUNTAINS] },
-  { name: 'nz', dir: [0, 0, -1], up: [0, 1, 0], biome: Biomes.SWAMP, fallbacks: [Biomes.BIRCH_FOREST] },
+// 六面拍摄方向（普通 2D 语义：up 正常，天在图上方；py/ny 特殊 up 由播放端 BoxGeometry UV 校准）
+const FACES = [
+  ['px', [1, 0, 0], [0, 1, 0]],
+  ['nx', [-1, 0, 0], [0, 1, 0]],
+  ['py', [0, 1, 0], [0, 0, -1]],
+  ['ny', [0, -1, 0], [0, 0, 1]],
+  ['pz', [0, 0, 1], [0, 1, 0]],
+  ['nz', [0, 0, -1], [0, 1, 0]],
 ];
 
 // 自上而下找第一格非空气（实际地表，含树/植被/雪层）
@@ -43,8 +41,8 @@ function surfaceTop(world, x, z) {
   return { y: 40, name: '' };
 }
 
-// 群系机位纯函数扫描：从原点向外环形步进（步长 24），找到首个满足
-// "本体+八向探针同群系、陆地、平整"的代表点。maxR 上限 6000（蘑菇岛占比 ~2.2% 实测够）。
+// 群系机位纯函数扫描：从原点向外环形步进（步长 24），返回首个满足
+// "本体+八向探针同群系、陆地、平整"的代表点（用于求蘑菇岛斑块锚点）。
 function pickBiomeSpot(gen, biomeId, maxR = 6000, maxSlope = 10) {
   const probe = [[12, 0], [-12, 0], [0, 12], [0, -12], [8, 8], [-8, 8], [8, -8], [-8, -8]];
   for (let r = 0; r <= maxR; r += 24) {
@@ -68,21 +66,82 @@ function pickBiomeSpot(gen, biomeId, maxR = 6000, maxSlope = 10) {
   return null;
 }
 
-// 每面选定机位：目标群系 → fallback 链 → 原点回落（确定性纯函数，不生成区块）
-function pickFaceSpots(gen) {
-  const out = [];
-  for (const plan of FACE_PLANS) {
-    let spot = null, used = plan.biome;
-    for (const b of [plan.biome, ...plan.fallbacks]) {
-      spot = pickBiomeSpot(gen, b);
-      if (spot) { used = b; break; }
-    }
-    if (!spot) { used = null; spot = { x: 8, z: 8, h: gen.getBaseHeight(8, 8) }; }
-    const entry = { ...plan, spot, biomeName: used === null ? '原点回落' : BiomeNames[used] };
-    out.push(entry);
-    console.log('[Bake] 机位 ' + plan.name + ' → ' + entry.biomeName + ' @ (' + spot.x + ',' + spot.z + ')');
+// 单机位选点：找"多群系交界"——同一地点六面连续拍摄（cubemap 无分界）的前提下
+// 让画面尽量覆盖多个群系。打分 = 群系多样性（24 探针 distinct）+ 蘑菇岛入镜优先
+// + 陆地机位 + 距离近优先。纯函数，不生成区块。
+const SPOT_PROBES = [];
+for (const ring of [24, 48, 72]) {
+  for (const [dx, dz] of [[ring, 0], [-ring, 0], [0, ring], [0, -ring],
+    [ring * 0.71, ring * 0.71], [-ring * 0.71, ring * 0.71],
+    [ring * 0.71, -ring * 0.71], [-ring * 0.71, -ring * 0.71]]) {
+    SPOT_PROBES.push([Math.round(dx), Math.round(dz)]);
   }
-  return out;
+}
+
+function diversityScore(gen, x, z) {
+  const set = new Set();
+  for (const [dx, dz] of SPOT_PROBES) set.add(gen.getBiome(x + dx, z + dz));
+  if (set.has(Biomes.MUSHROOM_FIELDS)) set.add('mushroom-bonus');
+  return set.size;
+}
+
+function vantageOk(gen, x, z) {
+  const h = gen.getBaseHeight(x, z);
+  if (h < 62 || h > 84) return false; // 排除高山顶：雾中俯瞰只见远景轮廓，群系交界不可辨
+  let minH = h, maxH = h;
+  for (const [dx, dz] of [[12, 0], [-12, 0], [0, 12], [0, -12]]) {
+    const hh = gen.getBaseHeight(x + dx, z + dz);
+    if (hh < 60) return false;
+    minH = Math.min(minH, hh); maxH = Math.max(maxH, hh);
+  }
+  return maxH - minH <= 10;
+}
+
+function pickPanoramaSpot(gen) {
+  let best = null;
+  const consider = (x, z, dist) => {
+    if (!vantageOk(gen, x, z)) return;
+    const h = gen.getBaseHeight(x, z);
+    const score = diversityScore(gen, x, z) * 100 - dist - Math.max(0, h - 76) * 20; // 低地优先
+    if (!best || score > best.score) best = { x, z, score };
+  };
+  // 阶段A：蘑菇岛斑块锚点（至多 4 个，互距 >256）
+  const anchors = [];
+  const mushroomMaxR = 6000;
+  for (let r = 0; r <= mushroomMaxR && anchors.length < 4; r += 24) {
+    const steps = Math.max(1, Math.round((r * Math.PI * 2) / 24));
+    for (let i = 0; i < steps && anchors.length < 4; i++) {
+      const a = (i / steps) * Math.PI * 2;
+      const x = Math.round(Math.cos(a) * r), z = Math.round(Math.sin(a) * r);
+      if (gen.getBiome(x, z) !== Biomes.MUSHROOM_FIELDS) continue;
+      if (anchors.some(p => (p.x - x) * (p.x - x) + (p.z - z) * (p.z - z) < 256 * 256)) continue;
+      anchors.push({ x, z });
+    }
+  }
+  // 阶段B：各锚点周边 0~96 格找交界带（机位可站在斑块外的相邻群系上）
+  for (const p of anchors) {
+    for (let r = 0; r <= 96; r += 8) {
+      const steps = Math.max(1, Math.round((r * Math.PI * 2) / 8));
+      for (let i = 0; i < steps; i++) {
+        const a = (i / steps) * Math.PI * 2;
+        consider(Math.round(p.x + Math.cos(a) * r), Math.round(p.z + Math.sin(a) * r), r);
+      }
+    }
+    if (best && best.score >= 500) break; // 已是高多样性交界（≥5 类），不再外扫
+  }
+  // 阶段C：无蘑菇交界时全局扫"普通多群系交界"（含水/河岸与群系边缘）
+  if (!best || best.score < 300) {
+    for (let r = 0; r <= 3000 && (!best || best.score < 300); r += 24) {
+      const steps = Math.max(1, Math.round((r * Math.PI * 2) / 24));
+      for (let i = 0; i < steps; i++) {
+        const a = (i / steps) * Math.PI * 2;
+        consider(Math.round(Math.cos(a) * r), Math.round(Math.sin(a) * r), r);
+      }
+    }
+  }
+  // 阶段D：兜底普通平原机位
+  if (!best) best = { x: 8, z: 8 };
+  return best;
 }
 
 // 避水偏航：8 方向 × 3 距离采样实测地表，选水面占比最低的方向（水平面取景用）
@@ -101,12 +160,12 @@ function avoidWaterYaw(world, x0, z0) {
   return bestYaw;
 }
 
-// 构建烘焙场景（全局一次）：图集/builder/天空 + 六面机位计划。烘焙世界禁用结构。
+// 构建烘焙场景（单机位一次成型）：禁结构 → 选点 → 加载 ±RADIUS → 建全部 mesh
 async function buildWorldScene() {
   const scene = new THREE.Scene();
   const sky = new Sky(scene);
   // 雾在边缘前收掉：地形远端融进天色，遮住 ±80 格的世界边缘
-  if (scene.fog) { scene.fog.near = 30; scene.fog.far = 90; }
+  if (scene.fog) { scene.fog.near = 38; scene.fog.far = 90; }
   sky.time = 0.42; // 上午光线
 
   const world = new World(SEED);
@@ -117,16 +176,8 @@ async function buildWorldScene() {
   const builder = new ChunkMeshBuilder(world, atlasTexture, atlasUV, waterTexture);
 
   console.log('[Bake] 阶段1: 图集完成(结构生成已禁用)');
-  const plans = pickFaceSpots(world.generator);
-  console.log('[Bake] 阶段2: 六面机位选定');
-  return { scene, sky, world, builder, plans };
-}
-
-// 单面生命周期：加载该机位 ±RADIUS 区块 → 定相机(实测最高点+抬升) → 建全部 mesh
-async function prepareFace(ctx, plan) {
-  const { scene, sky, world, builder } = ctx;
-  const { x, z } = plan.spot;
-  const cx0 = Math.floor(x / CHUNK_SIZE), cz0 = Math.floor(z / CHUNK_SIZE);
+  const spot = pickPanoramaSpot(world.generator);
+  const cx0 = Math.floor(spot.x / CHUNK_SIZE), cz0 = Math.floor(spot.z / CHUNK_SIZE);
   let i = 0;
   for (let dx = -RADIUS; dx <= RADIUS; dx++) {
     for (let dz = -RADIUS; dz <= RADIUS; dz++) {
@@ -134,16 +185,18 @@ async function prepareFace(ctx, plan) {
       if (++i % 4 === 0) await new Promise(r => setTimeout(r, 0));
     }
   }
-  // 机位实测最高点（含树冠/巨型蘑菇）
+  console.log('[Bake] 阶段2: 数据区块完成', world.chunks.size);
+  // 相机架在脚下实测最高点上（±3 小范围；12 格探针已保证周边平整，大范围 max 会
+  // 把远处的山体高度算进机位，导致"山顶俯瞰雾中远景"）
   let top = 0;
-  for (let dx = -10; dx <= 10; dx += 2) {
-    for (let dz = -10; dz <= 10; dz += 2) {
-      top = Math.max(top, surfaceTop(world, x + dx, z + dz).y);
+  for (let dx = -3; dx <= 3; dx++) {
+    for (let dz = -3; dz <= 3; dz++) {
+      top = Math.max(top, surfaceTop(world, spot.x + dx, spot.z + dz).y);
     }
   }
-  // 水平面 top+8；俯瞰面(ny) top+28 拍群系全貌
-  const center = new THREE.Vector3(x + 0.5, top + (plan.name === 'ny' ? 28 : 8), z + 0.5);
-  const yaw = (plan.dir[1] === 0) ? avoidWaterYaw(world, x, z) : 0;
+  const center = new THREE.Vector3(spot.x + 0.5, top + 6, spot.z + 0.5);
+  const yaw = avoidWaterYaw(world, spot.x, spot.z);
+  console.log('[Bake] 阶段3: 机位选定', spot.x, spot.z, '多样性分', spot.score, '避水yaw', yaw.toFixed(2));
   sky.clouds.visible = false;
   i = 0;
   for (const [, chunk] of world.chunks) {
@@ -157,59 +210,19 @@ async function prepareFace(ctx, plan) {
     chunk.dirty = false;
     if (++i % 6 === 0) await new Promise(r => setTimeout(r, 0));
   }
-  // 天空状态与体素光按本面机位落地一次
+  console.log('[Bake] 阶段4: mesh 完成');
+  // 天空状态落地一次：skyMesh 颜色 / 雾色 / 太阳月亮位置 / sunTint 都在 update 里初始化
   sky.update(0.016, center);
+  // 体素光定格上午
   VoxelLightUniforms.uDayLight.value = 0.10 + 0.90 * sky.getLightLevel();
   VoxelLightUniforms.uSunTint.value.copy(sky.sunTint);
-  console.log('[Bake] 面准备完成 ' + plan.name + ' (' + plan.biomeName + ') center=' + center.x.toFixed(0) + ',' + center.y.toFixed(0) + ',' + center.z.toFixed(0));
-  return { center, yaw };
+  return { scene, sky, world, builder, center, yaw };
 }
 
-// 释放单面全部 mesh 与区块数据（下一面重新加载，控制内存峰值）
-function releaseFace(ctx) {
-  const { scene, world } = ctx;
-  for (const [, chunk] of world.chunks) {
-    for (const key of ['mesh', 'waterMesh', 'lightMesh']) {
-      if (chunk[key]) { scene.remove(chunk[key]); chunk[key].geometry.dispose(); chunk[key] = null; }
-    }
-  }
-  world.chunks.clear();
-}
-
-// 渲染一帧并导出 JPEG dataURL（skipRead=true 仅渲染预热，不读像素）
-function renderFace(renderer, scene, camera, postfx, sunShadow, sky, face, skipRead) {
-  const { center, yaw } = face;
-  const plan = face.plan;
-  camera.position.copy(center);
-  camera.rotation.set(0, 0, 0);
-  camera.up.set(plan.up[0], plan.up[1], plan.up[2]);
-  // 水平面按避水 yaw 旋转取景方向；py/ny 保持天顶/天底
-  const d = plan.dir[1] !== 0 ? plan.dir : [Math.cos(yaw), 0, Math.sin(yaw)];
-  camera.lookAt(center.x + d[0], center.y + d[1], center.z + d[2]);
-  // 逐面刷新体积光投影与 shadow 相机（map 与矩阵同帧），PostFX 链完成反射/泛光/分级
-  postfx.updateGodRays(sky, camera);
-  sunShadow.update(center, 5);
-  postfx.render(scene, camera);
-  if (skipRead) return null;
-  const gl = renderer.getContext();
-  const px = new Uint8Array(PANO_SIZE * PANO_SIZE * 4);
-  gl.readPixels(0, 0, PANO_SIZE, PANO_SIZE, gl.RGBA, gl.UNSIGNED_BYTE, px);
-  const cv = document.createElement('canvas');
-  cv.width = PANO_SIZE; cv.height = PANO_SIZE;
-  const ctx2d = cv.getContext('2d');
-  const img = ctx2d.createImageData(PANO_SIZE, PANO_SIZE);
-  for (let y = 0; y < PANO_SIZE; y++) {
-    img.data.set(px.subarray(y * PANO_SIZE * 4, (y + 1) * PANO_SIZE * 4), (PANO_SIZE - 1 - y) * PANO_SIZE * 4);
-  }
-  ctx2d.putImageData(img, 0, 0);
-  return cv.toDataURL('image/jpeg', 0.88);
-}
-
-// 渲染 6 面并返回 { faces: { px: dataURL, ... }, plans }
+// 渲染 6 面并返回 { faces: { px: dataURL, ... }, spot }
 export async function bakePanorama(rendererWrapper) {
   const renderer = rendererWrapper.renderer; // Game.renderer 是封装类，THREE 实例在 .renderer
-  const ctx = await buildWorldScene();
-  const { scene, sky, world, builder, plans } = ctx;
+  const { scene, sky, world, builder, center, yaw } = await buildWorldScene();
   const camera = new THREE.PerspectiveCamera(90, 1, 0.1, 1000);
   // 完整档：体积光天体在 layer 1、反射排除层水面在 layer 2（与 Game 相机分层一致）
   camera.layers.enable(1);
@@ -243,17 +256,38 @@ export async function bakePanorama(rendererWrapper) {
   if (sky.sun) sky.sun.material.color.setScalar(1.25);
   if (sky.sunGlow) sky.sunGlow.visible = false;
   VoxelLightUniforms.uCloudShadow.value = 0;    // 云已隐藏（播放器动态叠加），云影关闭
-  console.log('[Bake] 阶段3: 六面渲染开始');
+  // 预热一帧：首次 shadow pass 建 map，之后 uShadowOn 生效、正式面全带影子
+  sunShadow.update(center, 5);
+  postfx.render(scene, camera);
+  sunShadow.update(center, 5);
+  ShadowUniforms.uShadowOn.value = sunShadow.ready ? 1 : 0;
+  console.log('[Bake] 阶段5: 六面渲染开始 (shadow ready=' + sunShadow.ready + ')');
   const out = {};
   try {
-    for (const plan of plans) {
-      const faceCtx = await prepareFace(ctx, plan);
-      faceCtx.plan = plan;
-      // 预热一帧：机位变化后首次 shadow pass 重建 map，之后 uShadowOn 生效
-      renderFace(renderer, scene, camera, postfx, sunShadow, sky, faceCtx, true);
-      ShadowUniforms.uShadowOn.value = sunShadow.ready ? 1 : 0;
-      out[plan.name] = renderFace(renderer, scene, camera, postfx, sunShadow, sky, faceCtx, false);
-      releaseFace(ctx);
+    for (const [name, dir, up] of FACES) {
+      camera.position.copy(center);
+      camera.rotation.set(0, 0, 0);
+      camera.up.set(up[0], up[1], up[2]);
+      // 水平面按避水 yaw 绕 y 轴旋转各自的基准方向（四向保持正交）；py/ny 保持天顶/天底
+      const cs = Math.cos(yaw), sn = Math.sin(yaw);
+      const d = dir[1] !== 0 ? dir : [dir[0] * cs + dir[2] * sn, 0, -dir[0] * sn + dir[2] * cs];
+      camera.lookAt(center.x + d[0], center.y + d[1], center.z + d[2]);
+      // 逐面刷新体积光投影与 shadow 相机（map 与矩阵同帧），PostFX 链完成反射/泛光/分级
+      postfx.updateGodRays(sky, camera);
+      sunShadow.update(center, 5);
+      postfx.render(scene, camera);
+      const gl = renderer.getContext();
+      const px = new Uint8Array(PANO_SIZE * PANO_SIZE * 4);
+      gl.readPixels(0, 0, PANO_SIZE, PANO_SIZE, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      const cv = document.createElement('canvas');
+      cv.width = PANO_SIZE; cv.height = PANO_SIZE;
+      const ctx = cv.getContext('2d');
+      const img = ctx.createImageData(PANO_SIZE, PANO_SIZE);
+      for (let y = 0; y < PANO_SIZE; y++) {
+        img.data.set(px.subarray(y * PANO_SIZE * 4, (y + 1) * PANO_SIZE * 4), (PANO_SIZE - 1 - y) * PANO_SIZE * 4);
+      }
+      ctx.putImageData(img, 0, 0);
+      out[name] = cv.toDataURL('image/jpeg', 0.88);
       await new Promise(r => setTimeout(r, 0));
     }
   } finally {
@@ -262,8 +296,5 @@ export async function bakePanorama(rendererWrapper) {
     renderer.toneMapping = oldToneMapping;
     renderer.shadowMap.enabled = oldShadowEnabled;
   }
-  return {
-    faces: out,
-    plans: plans.map(p => ({ name: p.name, biomeName: p.biomeName, x: p.spot.x, z: p.spot.z })),
-  };
+  return { faces: out, spot: [center.x, center.y, center.z], yaw };
 }

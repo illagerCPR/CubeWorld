@@ -3,7 +3,7 @@
 //   ① 树让位结构：footprintsNear/disabled 源码绊线 + 行为级（seed 20250903 村庄足迹本体
 //     与外扩1内树冠方块数=0，周边环带仍有树——修复前树冠伸进建筑）
 //   ② 村庄农田改原版式：行为级（耕地+每格 wheat_crop_0..7+水渠贴耕地）+ 源码绊线（melon 移除）
-//   ③ 全景烘焙：结构禁用 + 六群系机位（含蘑菇岛）+ per-face 生命周期绊线
+//   ③ 全景烘焙：结构禁用 + 单机位多群系交界选点（同点六面连续拍摄）+ 光照增强默认完整档绊线
 //   ④ BUILD = 25（本批次 bump）
 import { readFileSync } from 'fs';
 import { TerrainGenerator } from '../src/world/terrain.js';
@@ -140,18 +140,23 @@ function farmWaterAt(at, nameOf, rec) {
   return n;
 }
 
-// ── ③ 全景烘焙：禁结构 + 六群系机位 + per-face 生命周期 ──
+// ── ③ 全景烘焙：禁结构 + 单机位多群系交界 + 同点六面连续拍摄 ──
 {
   const bake = srcOf('../src/render/PanoramaBake.js');
   ok(bake.includes('structureManager.disabled = true'), '烘焙世界禁用结构生成（画面零建筑）');
-  ok(bake.includes('MUSHROOM_FIELDS'), '机位计划含蘑菇岛');
-  ok(bake.includes('const FACE_PLANS'), '六面机位计划存在（每面一个群系）');
-  ok(bake.includes('function pickBiomeSpot'), '群系机位纯函数扫描存在');
+  ok(bake.includes('function pickPanoramaSpot'), '单机位多群系交界选点存在');
+  ok(bake.includes('const SPOT_PROBES'), '群系多样性探针集存在');
+  ok(bake.includes('Biomes.MUSHROOM_FIELDS'), '蘑菇岛入镜优先（斑块锚点）');
   ok(bake.includes('avoidWaterYaw'), '水平面避水偏航存在');
-  ok(bake.includes('function releaseFace'), 'per-face 生命周期：拍摄后释放 mesh/区块');
-  ok(bake.includes('world.chunks.clear()'), '面间清理区块数据（内存峰值=单机位）');
-  ok(bake.includes('pickVillage') === false, '旧村庄机位逻辑已移除（全景不含建筑）');
-  ok(bake.includes("plan.name === 'ny' ? 28 : 8"), '俯瞰面相机抬高拍群系全貌');
+  ok(bake.includes('const FACES = ['), '固定 FACES 六面共享同一 center（cubemap 连续无分界）');
+  ok(bake.includes('FACE_PLANS') === false, '六面独立机位计划已移除（分界返工）');
+  ok(bake.includes('releaseFace') === false, 'per-face 生命周期已移除（分界返工）');
+
+  const settings = srcOf('../src/core/Settings.js');
+  ok(settings.includes("gfx: 'full'"), '光照增强默认完整档（大满）');
+  for (const k of ['gfxBloom: true', 'gfxGodRays: true', 'gfxWaterReflection: true', 'gfxShadows: true']) {
+    ok(settings.includes(k), `完整档子项默认全开: ${k.split(':')[0]}`);
+  }
 }
 
 // ── ④ BUILD 钉值 ──
