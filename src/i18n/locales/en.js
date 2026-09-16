@@ -431,7 +431,7 @@ export const en = {
   "上传皮肤 PNG": "Upload Skin PNG",
   "恢复默认": "Reset to Default",
   "皮肤须为 64×64 PNG（旧版 64×32 可自动转换）。": "Skin must be a 64×64 PNG (legacy 64×32 is converted automatically).",
-  "正版用户名": "Minecraft Username",
+  "Minecraft®: Java Edition档案用户名": "Minecraft®: Java Edition profile username",
   "按用户名获取": "Fetch by Username",
   "正在获取皮肤…": "Fetching skin…",
   "获取失败：需连接中的服务器（代理 Mojang API）或改用上传 PNG。": "Fetch failed: needs a connected server (Mojang API proxy) or upload a PNG instead.",

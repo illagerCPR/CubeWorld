@@ -9,6 +9,7 @@ import { SVGTextures } from '../render/SVGTextures.js';
 import { buildHeldItemTemplate } from '../render/HeldItemMesh.js';
 import { RemoteHotbarSprite } from '../render/RemoteHotbarSprite.js';
 import { applySkinToRig, loadImageFromURL, normalizeSkin } from './PlayerSkin.js';
+import { applyEntityLight } from '../render/entityLight.js';
 
 // 简化方块人部件（局部坐标原点在脚 y=0，单位：格；1px = 1/16 格）
 // Build 21 M1：尺寸对齐原版（head 8³ / body 8×12×4 / arm 4×12×4 / leg 4×12×4 px），
@@ -263,6 +264,12 @@ export class RemotePlayer {
   }
 
   update(dt) {
+    // Build 22：体素光染色——火把/荧石照亮远端玩家本体（base+overlay，与怪物同一公式）。
+    // 受击红光帧跳过（emissive 让位红光通道；红光结束的下一帧由本调用重写火光辉光）
+    if (this.hitFlash <= 0 && this.game && this.game.world) {
+      applyEntityLight(this.game.world, this.game.sky, this.group.position, this.parts, this.overlayMeshes);
+    }
+
     // 受击红光（per-player 材质 emissive）
     if (this.hitFlash > 0) {
       this.hitFlash -= dt;
@@ -270,8 +277,6 @@ export class RemotePlayer {
         m.material.emissive.setRGB(0.8, 0.05, 0.05);
         m.material.emissiveIntensity = Math.max(0, this.hitFlash / 0.2) * 0.8;
       }
-    } else if (this.parts.length && this.parts[0].material.emissiveIntensity > 0) {
-      for (const m of this.parts) { m.material.emissive.setRGB(0, 0, 0); m.material.emissiveIntensity = 0; }
     }
 
     // 阶段5 时间戳对齐插值：从缓冲找包围"渲染时刻"的两个样本，线性插值出目标位姿

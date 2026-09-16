@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { buildHeldItemTemplate } from './HeldItemMesh.js';
 import { partRects, loadActiveSkin } from '../entity/PlayerSkin.js';
+import { applyEntityLight } from './entityLight.js';
 
 export class FirstPersonHand {
   constructor(game) {
@@ -18,12 +19,12 @@ export class FirstPersonHand {
     this.group.rotation.set(0, -0.35, 0.05);
     this.camera.add(this.group);
 
-    // 空手手臂（肤色小盒，从右下伸向前方）
+    // 空手手臂（肤色小盒，从右下伸向前方）；尺寸与 applySkin 贴皮肤后保持一致（Build 22）
     this.armMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.13, 0.13, 0.48),
+      new THREE.BoxGeometry(0.16, 0.16, 0.42),
       new THREE.MeshLambertMaterial({ color: 0xe0b080 })
     );
-    this.armMesh.position.set(0, -0.06, 0.30);
+    this.armMesh.position.set(0, -0.07, 0.30);
     this.armMesh.rotation.x = 0.55;
     this.group.add(this.armMesh);
 
@@ -66,8 +67,9 @@ export class FirstPersonHand {
     tex.minFilter = THREE.NearestFilter;
     tex.generateMipmaps = false;
     const r = partRects(model).armR.base.front;
-    // 第一人称手臂段（4×4×8px），六面全贴右臂 front 区（可见面以正面为主，拉伸观感足够）
-    const geo = new THREE.BoxGeometry(0.25, 0.25, 0.5);
+    // 第一人称手臂段（Build 22：0.16×0.16×0.42，4px 臂宽 1:1 换算的 0.25 截面观感过大），
+    // 六面全贴右臂 front 区（可见面以正面为主，拉伸观感足够）
+    const geo = new THREE.BoxGeometry(0.16, 0.16, 0.42);
     const uv = geo.attributes.uv;
     const u0 = r.x / 64, u1 = (r.x + r.w) / 64, vT = 1 - r.y / 64, vB = 1 - (r.y + r.h) / 64;
     for (let f = 0; f < 6; f++) {
@@ -80,7 +82,7 @@ export class FirstPersonHand {
     this.armMesh.geometry.dispose();
     this.armMesh.geometry = geo;
     this.armMesh.material = new THREE.MeshLambertMaterial({ map: tex });
-    this.armMesh.position.set(0, -0.08, 0.34);
+    this.armMesh.position.set(0, -0.07, 0.30);
   }
 
   // 弓蓄力姿态开关（Game 蓄力通道每帧写入；松手/取消传 null 复位）
@@ -111,6 +113,10 @@ export class FirstPersonHand {
 
   update(dt, moving, sprinting) {
     if (!this.visible) return;
+    // Build 22：体素光染色——火把/荧石照亮第一人称手臂（按玩家眼睛所在格，与怪物同一公式）
+    if (this.game.world && this.game.player) {
+      applyEntityLight(this.game.world, this.game.sky, this.game.player.position, this.armMesh);
+    }
     // 走路 bob（移动时幅度更大、频率更高）；视频设置可关
     const bobOn = !(this.game.settings && this.game.settings.viewBobbing === false);
     this.bobPhase += dt * (moving ? (sprinting ? 11 : 8) : 2.5);

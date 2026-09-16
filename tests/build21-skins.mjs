@@ -178,7 +178,7 @@ function noOverlap(a, b) {
   for (const lang of ['zh-TW', 'en', 'fr', 'de', 'ja', 'ko', 'ar', 'ru', 'es', 'pt']) {
     const src = srcOf(`../src/i18n/locales/${lang}.js`);
     for (const key of ['皮肤', '经典模型', '纤细模型', '上传皮肤 PNG', '恢复默认',
-      '正版用户名', '按用户名获取', '正在获取皮肤…']) {
+      'Minecraft®: Java Edition档案用户名', '按用户名获取', '正在获取皮肤…']) {
       ok(src.includes(key), `语言包 ${lang} 缺键: ${key}`);
     }
   }
@@ -221,6 +221,6 @@ function noOverlap(a, b) {
   ok(ss.includes("prefs.source = 'username'"), '拉取成功标记来源');
 }
 
-ok(BUILD === 21, `BUILD 21（Build 21 批次 2 统一 bump，当前 ${BUILD}）`);
+ok(BUILD === 22, `BUILD 22（Build 22 修复批次统一 bump，当前 ${BUILD}）`);
 
 console.log(`build21-skins: ${passed} passed`);

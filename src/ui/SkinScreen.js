@@ -134,7 +134,7 @@ export class SkinScreen {
     nameRow.style.cssText = 'display:flex; gap:8px; align-items:center;';
     this._nameInput = document.createElement('input');
     this._nameInput.type = 'text';
-    this._nameInput.placeholder = t('正版用户名');
+    this._nameInput.placeholder = t('Minecraft®: Java Edition档案用户名');
     this._nameInput.style.cssText = 'width: 150px; padding: 8px 10px; font-size: 13px; background: rgba(0,0,0,0.4); border: 1px solid #555; color: #fff;';
     nameRow.appendChild(this._nameInput);
     const fetchBtn = document.createElement('button');

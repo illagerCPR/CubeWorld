@@ -112,6 +112,10 @@ export function applySkinToRig(rig, img, model = 'classic') {
     for (const fm of FACE_MAP) setFaceUV(ovGeo, fm.face, rect.overlay[fm.sel], fm.flipU, fm.flipV);
     ovGeo.attributes.uv.needsUpdate = true;
     const ovMesh = new THREE.Mesh(ovGeo, ovMat);
+    // 关节部件的 mesh 相对 pivot 有偏移（head +0.25 / 臂 -0.25 / 腿 -0.375；body 相对 group (0,1.125,0)），
+    // overlay 壳必须复制同款局部变换，否则整体错位（曾表现为 hat 层下移 4px、猫耳盖到眼睛）
+    ovMesh.position.copy(mesh.position);
+    ovMesh.rotation.copy(mesh.rotation);
     const s = rect.dims;
     ovMesh.scale.set((s.w + 0.5) / s.w, (s.h + 0.5) / s.h, (s.d + 0.5) / s.d);
     pivot.add(ovMesh);

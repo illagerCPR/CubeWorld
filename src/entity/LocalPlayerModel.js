@@ -9,6 +9,7 @@ import { buildParts } from './RemotePlayer.js';
 import { playerColorHue } from '../net/playerColor.js';
 import { buildHeldItemTemplate } from '../render/HeldItemMesh.js';
 import { applySkinToRig, loadActiveSkin, SKIN_STORAGE_KEY } from './PlayerSkin.js';
+import { applyEntityLight } from '../render/entityLight.js';
 
 export class LocalPlayerModel {
   constructor(scene, game) {
@@ -111,6 +112,10 @@ export class LocalPlayerModel {
     if (!visible) return;
     this.group.position.copy(player.position);
     this.group.rotation.y = player.yaw;
+    // Build 22：体素光染色——火把/荧石照亮玩家本体（base+overlay，与怪物同一公式）
+    if (this.game.world) {
+      applyEntityLight(this.game.world, this.game.sky, this.group.position, this.parts, this.overlayMeshes);
+    }
     // Build 21 修复 A：原为 -player.pitch——抬头时模型反向低头，翻正符号
     if (this.joints.head) this.joints.head.pivot.rotation.x = player.pitch;
 

@@ -90,6 +90,6 @@ ok(smSrc.includes("if (name === 'whale_barrow') return '鲸骨冢';"), 'structur
 const cpSrc = readFileSync('./src/ui/CommandPanel.js', 'utf8');
 ok(cpSrc.includes("sm.recordsAround('whale_barrow', p.x, p.z, 2)"), '命令面板探索列表纳入（用户要求）');
 ok(cpSrc.includes("name: '鲸骨冢'"), '探索列表条目名在场');
-ok(BUILD === 21, `BUILD 21（Build 21 玩家皮肤批次统一 bump）`);
+ok(BUILD === 22, `BUILD 22（Build 22 修复批次统一 bump）`);
 
 console.log(`whale-barrow: ${passed} assertions passed`);

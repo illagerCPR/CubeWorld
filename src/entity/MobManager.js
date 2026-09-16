@@ -10,6 +10,7 @@ import { CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from '../core/Chunk.js';
 import { villagerTradeSeed } from '../world/loot.js';
 import { audio } from '../audio/AudioEngine.js';
 import { DROP_HALF, makeShadowMesh, makeCountSprite, updateCountSprite, attachDropModel } from '../render/DropMesh.js';
+import { applyEntityLight } from '../render/entityLight.js';
 
 const MAX_MOBS = 20;
 const MAX_PASSIVE = 12; // 被动动物上限（不含村民——村庄系统单独管理）
@@ -723,16 +724,10 @@ export class MobManager {
       mob.update(dt, player, sky, this.physics, this);
 
       // 体素光染色：按怪物所在格光照（max(天光×昼夜, 方块光)）调制 material 颜色，
-      // 洞穴里变暗、火把旁带暖色；受击/死亡的 emissive 反馈走独立通道不冲突
-      if (mob.mesh && mob.mesh.material && this.world) {
-        const p = mob.mesh.position;
-        const bx = Math.floor(p.x), by = Math.floor(p.y + 0.5), bz = Math.floor(p.z);
-        const skyL = this.world.getSkyLight(bx, by, bz) / 15;
-        const blkL = this.world.getBlockLightAt(bx, by, bz) / 15;
-        const day = 0.10 + 0.90 * (sky ? sky.getLightLevel() : 1);
-        const l = Math.max(skyL * day, blkL);
-        const v = 0.55 + 0.45 * l;
-        mob.mesh.material.color.setRGB(v * (1 + 0.18 * blkL), v, v * (1 - 0.10 * blkL));
+      // 洞穴里变暗、火把旁带暖色；受击/死亡的 emissive 反馈走独立通道不冲突。
+      // Build 22：公式抽到 render/entityLight.js 单一来源（玩家模型共用同一套）
+      if (mob.mesh && this.world) {
+        applyEntityLight(this.world, sky, mob.mesh.position, mob.mesh);
       }
 
       // 处理爆炸请求
@@ -749,7 +744,8 @@ export class MobManager {
 
         const mm = mesh.material;
         if (mm) {
-          // 受击红光（优先）；否则燃烧ulfilled 火光
+          // 受击红光/燃烧火光临时覆盖 emissive；常态 emissive 由 applyEntityLight 的
+          // 方块光辉光每帧重写（Build 22），故不再无条件清零
           if (mob.hitFlash > 0) {
             mob.hitFlash -= dt;
             if (!mm.emissive) mm.emissive = new THREE.Color();
@@ -759,9 +755,6 @@ export class MobManager {
             if (!mm.emissive) mm.emissive = new THREE.Color();
             mm.emissive.setRGB(1.0, 0.27, 0.0);
             mm.emissiveIntensity = 0.5;
-          } else if (mm.emissive) {
-            mm.emissive.setRGB(0, 0, 0);
-            mm.emissiveIntensity = 0;
           }
         }
       }

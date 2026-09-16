@@ -273,6 +273,6 @@ ok(BlockRegistry.getNameById(99999) === null, 'getNameById 未注册 id 返回 n
   ok(srcOf('../src/core/SaveSystem.js').includes('aetherDusk: !!game.aetherDusk'), '存档仍持久化复潮状态');
 }
 
-ok(BUILD === 21, `BUILD 21（Build 21 玩家皮肤批次统一 bump，当前 ${BUILD}）`);
+ok(BUILD === 22, `BUILD 22（Build 22 修复批次统一 bump，当前 ${BUILD}）`);
 
 console.log(`build20-fixes: ${passed} passed`);

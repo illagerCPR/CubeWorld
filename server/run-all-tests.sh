@@ -207,6 +207,15 @@ else
     exit 1
 fi
 
+# Build 22 修复批次（overlay 双层对齐/第一人称手臂缩小/实体体素光染色/皮肤拉取日志绊线/i18n 改版）
+echo "=== build22-fixes ==="
+if node tests/build22-fixes.mjs; then
+    echo "build22-fixes: OK"
+else
+    echo "build22-fixes: FAILED"
+    exit 1
+fi
+
 # 末影龙 Boss 回归（纯 node：类型注册/柱顶水晶/DragonAI 状态机/击败链路/末地门控）
 echo "=== end-dragon ==="
 if node tests/end-dragon.mjs; then
@@ -307,7 +316,7 @@ if [ "$port_ready" -ne 1 ]; then
 fi
 
 failed=0
-for t in test-mp test-store test-admin test-stage5 test-stage6 test-stage10 test-stage11 test-idea2 test-profile test-idea4 test-t5 test-dim; do
+for t in test-mp test-store test-admin test-stage5 test-stage6 test-stage10 test-stage11 test-idea2 test-profile test-idea4 test-t5 test-dim test-skinlog; do
     echo "=== $t ==="
     if node "server/$t.mjs"; then
         echo "$t: OK"
