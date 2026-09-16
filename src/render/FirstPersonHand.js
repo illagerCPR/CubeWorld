@@ -1,7 +1,9 @@
 // FirstPersonHand.js -- 第一人称手持物渲染（阶段10）
 // 相机子节点：右下角基座 + 空手肤色手臂 + 手持物挂点；走路 bob + 挖掘/放置挥动动画。
+// Build 21 M1：applySkin 后手臂贴皮肤右臂 UV（原版第一人称效果），未加载前保持肤色兜底。
 import * as THREE from 'three';
 import { buildHeldItemTemplate } from './HeldItemMesh.js';
+import { partRects, loadActiveSkin } from '../entity/PlayerSkin.js';
 
 export class FirstPersonHand {
   constructor(game) {
@@ -40,11 +42,45 @@ export class FirstPersonHand {
     this.bowDraw = null;          // Idea-2A：拉弓蓄力姿态（null=未拉弓；0..1=蓄力进度）
     this.visible = false;         // 默认隐藏（主菜单不显示第一人称手臂），Game.start 里 setVisible(true)
     this.group.visible = false;
+    this.loadSkin(); // Build 21：异步贴皮肤右臂（失败保持肤色兜底）
   }
 
   setVisible(v) {
     this.visible = v;
     this.group.visible = v;
+  }
+
+  // Build 21 M1：按当前皮肤设置给手臂贴右臂 UV（原版第一人称效果，含内置默认皮肤）。
+  // SkinScreen 保存后可重复调用（loadActiveSkin 读最新 prefs）。
+  async loadSkin() {
+    try {
+      const { img, model } = await loadActiveSkin();
+      this.applySkin(img, model);
+    } catch (e) { /* 皮肤加载失败保持肤色兜底 */ }
+  }
+
+  applySkin(img, model = 'classic') {
+    if (!this.armMesh) return;
+    const tex = new THREE.CanvasTexture(img);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    const r = partRects(model).armR.base.front;
+    // 第一人称手臂段（4×4×8px），六面全贴右臂 front 区（可见面以正面为主，拉伸观感足够）
+    const geo = new THREE.BoxGeometry(0.25, 0.25, 0.5);
+    const uv = geo.attributes.uv;
+    const u0 = r.x / 64, u1 = (r.x + r.w) / 64, vT = 1 - r.y / 64, vB = 1 - (r.y + r.h) / 64;
+    for (let f = 0; f < 6; f++) {
+      uv.setXY(f * 4 + 0, u0, vT); uv.setXY(f * 4 + 1, u1, vT);
+      uv.setXY(f * 4 + 2, u0, vB); uv.setXY(f * 4 + 3, u1, vB);
+    }
+    uv.needsUpdate = true;
+    if (this.armMesh.material && this.armMesh.material.map) this.armMesh.material.map.dispose();
+    if (this.armMesh.material) this.armMesh.material.dispose();
+    this.armMesh.geometry.dispose();
+    this.armMesh.geometry = geo;
+    this.armMesh.material = new THREE.MeshLambertMaterial({ map: tex });
+    this.armMesh.position.set(0, -0.08, 0.34);
   }
 
   // 弓蓄力姿态开关（Game 蓄力通道每帧写入；松手/取消传 null 复位）

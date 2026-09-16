@@ -197,6 +197,16 @@ else
     exit 1
 fi
 
+# Build 21 M1 玩家皮肤（partRects 双模型区域表/原版比例布局/修复 A 俯仰符号/
+# 修复 B 挂点/皮肤管线接线/i18n 新键）
+echo "=== build21-skins ==="
+if node tests/build21-skins.mjs; then
+    echo "build21-skins: OK"
+else
+    echo "build21-skins: FAILED"
+    exit 1
+fi
+
 # 末影龙 Boss 回归（纯 node：类型注册/柱顶水晶/DragonAI 状态机/击败链路/末地门控）
 echo "=== end-dragon ==="
 if node tests/end-dragon.mjs; then

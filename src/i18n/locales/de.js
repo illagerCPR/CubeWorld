@@ -425,4 +425,10 @@ export const de = {
   "纹章": "Emblem",
   "点击取下纹章": "Klicken, um das Emblem abzunehmen",
   "点击佩戴纹章（无敌 · 飞行 · 基岩之心）": "Klicken, um das Emblem zu tragen (Unverwundbarkeit · Flug · Betongold-Herz)",
+  "皮肤": "Skin",
+  "经典模型": "Klassisches Modell",
+  "纤细模型": "Schlankes Modell",
+  "上传皮肤 PNG": "Skin-PNG hochladen",
+  "恢复默认": "Auf Standard zurücksetzen",
+  "皮肤须为 64×64 PNG（旧版 64×32 可自动转换）。": "Skin muss ein 64×64-PNG sein (alte 64×32 werden automatisch umgewandelt).",
 };

@@ -241,7 +241,7 @@ ok(BlockRegistry.getNameById(99999) === null, 'getNameById 未注册 id 返回 n
   ok(game.includes('new LocalPlayerModel(this.renderer.scene, this)'), '本地玩家模型挂场景');
   ok(game.includes('this.player.updateCamera(this.world)'), 'updateCamera 传入 world（遮挡裁剪）');
   ok(game.includes('this.player.viewMode === 0'), '第三人称隐藏第一人称手');
-  ok(srcOf('../src/entity/LocalPlayerModel.js').includes("import { PARTS } from './RemotePlayer.js'"),
+  ok(srcOf('../src/entity/LocalPlayerModel.js').includes("import { buildParts } from './RemotePlayer.js'"),
     'LocalPlayerModel 与 RemotePlayer 共用部件布局（单一来源）');
   ok(srcOf('../src/ui/MenuScreen.js').includes('F5 切换视角 / F6 手动保存'), '主菜单键位提示更新');
   for (const lang of ['en', 'ja', 'ar', 'ru', 'pt']) {

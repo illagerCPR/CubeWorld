@@ -5,6 +5,7 @@ import { ensureStoneStyles } from './StoneStyle.js';
 import { VERSION_LABEL } from '../version.js';
 import { t, getLocale, onLocaleChange } from '../i18n/index.js';
 import { globeIconDataUri } from './LanguageScreen.js';
+import { personIconDataUri } from './SkinScreen.js';
 import logoUrl from '../../res/logo-cubeworld-js-edition.png';
 
 const MODE_LABEL = { creative: '创造模式', survival: '生存模式', spectator: '旁观模式' };
@@ -51,6 +52,11 @@ export class MenuScreen {
         this.languageScreen.show();
         return;
       }
+      // Build 21 M1：皮肤设置入口（多语言按钮右侧）
+      if (btn.id === 'skin-btn' && this.skinScreen) {
+        this.skinScreen.show();
+        return;
+      }
       if (btn.id === 'menu-single' || btn.id === 'menu-lan' || btn.classList.contains('back-btn')) {
         this.page = btn.id === 'menu-single' ? 'single' : (btn.id === 'menu-lan' ? 'lan' : 'main');
         this.render();
@@ -90,6 +96,9 @@ export class MenuScreen {
           <button id="language-btn" class="cw-stone-btn" title="${t('语言')}" aria-label="${t('语言')}" style="
             width:38px; height:38px; padding:0; background-size:64%; background-repeat:no-repeat; background-position:center;
             background-image:url('${globeIconDataUri()}');"></button>
+          <button id="skin-btn" class="cw-stone-btn" title="${t('皮肤')}" aria-label="${t('皮肤')}" style="
+            width:38px; height:38px; padding:0; background-size:70%; background-repeat:no-repeat; background-position:center;
+            background-image:url('${personIconDataUri()}');"></button>
         </div>
       </div>
       <div style="font-size: 11px; color: #aaa; text-align: center; line-height: 1.7; margin-top: 4vh;">

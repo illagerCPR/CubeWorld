@@ -1,0 +1,213 @@
+// PlayerSkin.js -- 玩家模型原版 skin 纹理（Build 21 M1）
+// 职责：
+//   ① 原版 64×64 皮肤 UV 映射：部件区域表（classic/slim 双模型）+ BoxGeometry 六面 UV 写入
+//      （镜像标志按 BoxGeometry buildPlane 顶点走向推导，截图校准）
+//   ② 双层渲染：base 层不透明 + overlay 第二层（帽/外套/袖/裤，alphaTest 透明壳，外扩 0.5px）
+//   ③ legacy 64×32 皮肤归一化（下半区下移 16px 拼成 64×64）
+//   ④ 皮肤来源与持久化：默认内置 PNG（res/default_skin/） / 本地上传 / M3 用户名拉取；
+//      localStorage 键 project-mc-skin-v1（单机本地，联机同步走 M2 协议）
+// 纯数据函数（partRects/faceRects/isLegacySkin 归一化坐标）node 可测；canvas/Image 操作仅浏览器路径。
+import * as THREE from 'three';
+
+// 默认皮肤（Build 21 M1，res/default_skin/）：用 new URL(..., import.meta.url) 引入——
+// Vite dev 直接 serve、build 时打包进 dist；node 测试环境 import 仅得 file:// href（无副作用）。
+export const SKIN_STORAGE_KEY = 'project-mc-skin-v1';
+export const DEFAULT_SKIN_URLS = {
+  classic: new URL('../../res/default_skin/default_skin_classic.png', import.meta.url).href,
+  slim: new URL('../../res/default_skin/default_skin_slim.png', import.meta.url).href,
+};
+
+// ── 部件区域表 ─────────────────────────────────────────────────────────
+// 每部件：{ u, v, w, h, d }（区域左上角 PNG 像素 + 部件三维像素规格）。
+// 六面区域由 Minecraft 标准排布公式推导（区域内：上排 top/bottom 并排，
+// 下排 right/front/left/back 一字排开），slim 仅改臂宽 w=3。
+// overlay 区域（第二层）与 base 同公式，仅区域原点不同（hat=+32x，其余右列=+16y，左列独立块）。
+const PART_DEFS = [
+  { key: 'head', u: 0, v: 0, w: 8, h: 8, d: 8, ov: [32, 0] },
+  { key: 'body', u: 16, v: 16, w: 8, h: 12, d: 4, ov: [16, 32] },
+  { key: 'armR', u: 40, v: 16, w: 4, h: 12, d: 4, ov: [40, 32] },
+  { key: 'armL', u: 32, v: 48, w: 4, h: 12, d: 4, ov: [48, 48] },
+  { key: 'legR', u: 0, v: 16, w: 4, h: 12, d: 4, ov: [0, 32] },
+  { key: 'legL', u: 16, v: 48, w: 4, h: 12, d: 4, ov: [0, 48] },
+];
+
+// 六面选择器 → BoxGeometry 面序映射（模型面朝 -Z）：
+//   BoxGeometry 面序 [px(+x), nx(-x), py(+y), ny(-y), pz(+z), nz(-z)]
+//   模型自身右=+X、面朝-Z → px=右面(right) / nx=左面(left) / py=top / ny=bottom /
+//   pz=背面(back) / nz=脸面(front)
+// 镜像标志推导（BoxGeometry buildPlane 顶点 uv 走向 + 皮肤十字展开连续性）：
+//   px/nx/nz 无镜像；py 水平镜像（俯视画面右=-X 与 uv u 增=+X 相反）；
+//   pz 水平镜像（背面在十字展开中翻正，左右反转）；ny 双向翻转（原版 bottom 特殊朝向）。
+const FACE_MAP = [
+  { face: 0, sel: 'right', flipU: false, flipV: false },
+  { face: 1, sel: 'left', flipU: false, flipV: false },
+  { face: 2, sel: 'top', flipU: true, flipV: false },
+  { face: 3, sel: 'bottom', flipU: true, flipV: true },
+  { face: 4, sel: 'back', flipU: true, flipV: false },
+  { face: 5, sel: 'front', flipU: false, flipV: false },
+];
+
+// 部件在指定模型下的区域表：{ [key]: { base: {sel:{x,y,w,h}}, overlay: {...}, dims:{w,h,d} } }
+// 纯函数（node 测试锚点）。
+export function partRects(model = 'classic') {
+  const armW = model === 'slim' ? 3 : 4;
+  const out = {};
+  for (const def of PART_DEFS) {
+    const w = (def.key === 'armR' || def.key === 'armL') ? armW : def.w;
+    const dims = { w, h: def.h, d: def.d };
+    const faces = (u, v) => ({
+      top: { x: u + dims.d, y: v, w: dims.w, h: dims.d },
+      bottom: { x: u + dims.d + dims.w, y: v, w: dims.w, h: dims.d },
+      right: { x: u, y: v + dims.d, w: dims.d, h: dims.h },
+      front: { x: u + dims.d, y: v + dims.d, w: dims.w, h: dims.h },
+      left: { x: u + dims.d + dims.w, y: v + dims.d, w: dims.d, h: dims.h },
+      back: { x: u + dims.d + dims.w + dims.d, y: v + dims.d, w: dims.w, h: dims.h },
+    });
+    out[def.key] = { base: faces(def.u, def.v), overlay: faces(def.ov[0], def.ov[1]), dims };
+  }
+  return out;
+}
+
+// 单面 UV 写入：BoxGeometry 每面 4 顶点 uv 序 [左上, 右上, 左下, 右下]（uv 空间）。
+// flipU/flipV 按区域角点交换（PNG y 向下 → uv v=1-y/64 已在角点坐标内处理）。
+function setFaceUV(geo, faceIndex, rect, flipU, flipV) {
+  const u0 = rect.x / 64, u1 = (rect.x + rect.w) / 64;
+  const vT = 1 - rect.y / 64, vB = 1 - (rect.y + rect.h) / 64;
+  const LT = [u0, vT], RT = [u1, vT], LB = [u0, vB], RB = [u1, vB];
+  let order = [LT, RT, LB, RB];
+  if (flipU && !flipV) order = [RT, LT, RB, LB];
+  if (!flipU && flipV) order = [LB, RB, LT, RT];
+  if (flipU && flipV) order = [RB, LB, RT, LT];
+  const uv = geo.attributes.uv;
+  for (let k = 0; k < 4; k++) uv.setXY(faceIndex * 4 + k, order[k][0], order[k][1]);
+}
+
+// 把整张皮肤贴到部件几何集合上（双层）。
+// rig: { joints: { [key]: { pivot, mesh } }, partsByName?: { [key]: mesh } }——
+// joints 只含关节部件（head/双臂/双腿），body 无 pivot 仅在 partsByName；
+// pivot 取 mesh.parent（body 的 parent=group，overlay 随整体运动）。
+// img: HTMLImageElement（64×64，legacy 已归一化）；model: 'classic'|'slim'
+export function applySkinToRig(rig, img, model = 'classic') {
+  const rects = partRects(model);
+  const texture = new THREE.CanvasTexture(img);
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  const baseMat = new THREE.MeshLambertMaterial({ map: texture });
+  const ovMat = new THREE.MeshLambertMaterial({
+    map: texture, transparent: true, alphaTest: 0.01, side: THREE.DoubleSide,
+  });
+  const disposables = [];
+  for (const [key, rect] of Object.entries(rects)) {
+    const joint = rig.joints && rig.joints[key];
+    const mesh = (joint && joint.mesh) || (rig.partsByName && rig.partsByName[key]);
+    if (!mesh) continue;
+    const pivot = (joint && joint.pivot) || mesh.parent;
+    // base 层：直接覆写 mesh 几何 UV + 换材质
+    for (const fm of FACE_MAP) setFaceUV(mesh.geometry, fm.face, rect.base[fm.sel], fm.flipU, fm.flipV);
+    mesh.geometry.attributes.uv.needsUpdate = true;
+    mesh.material = baseMat;
+    // overlay 层：克隆几何（UV 写 overlay 区域）+ 外扩 0.5px 的壳 mesh 挂同一 pivot
+    const ovGeo = mesh.geometry.clone();
+    for (const fm of FACE_MAP) setFaceUV(ovGeo, fm.face, rect.overlay[fm.sel], fm.flipU, fm.flipV);
+    ovGeo.attributes.uv.needsUpdate = true;
+    const ovMesh = new THREE.Mesh(ovGeo, ovMat);
+    const s = rect.dims;
+    ovMesh.scale.set((s.w + 0.5) / s.w, (s.h + 0.5) / s.h, (s.d + 0.5) / s.d);
+    pivot.add(ovMesh);
+    rig.overlayMeshes = rig.overlayMeshes || [];
+    rig.overlayMeshes.push(ovMesh);
+    disposables.push(ovGeo);
+  }
+  return {
+    texture,
+    materials: { baseMat, ovMat },
+    dispose() {
+      for (const ov of rig.overlayMeshes || []) {
+        if (ov.parent) ov.parent.remove(ov);
+      }
+      rig.overlayMeshes = [];
+      for (const g of disposables) g.dispose();
+      baseMat.dispose();
+      ovMat.dispose();
+      texture.dispose();
+    },
+  };
+}
+
+// ── legacy 64×32 归一化 ────────────────────────────────────────────────
+// 64×32（旧版）布局 = 64×64 的上半区；下半区（left arm/leg base 与全部 overlay）缺失。
+// 归一化：把上半区拷到新 64×64 画布，再把 arm/leg base 行（y16-32）复制下移 16px 补齐
+// left 侧与 overlay 位（社区通行做法：left 用 right 贴图镜像缺失——这里取简：下移补位，
+// left 部件显示 right 贴图，双层与 base 同图，视觉可接受；原版现代皮肤不受影响）。
+export function isLegacySkin(img) { return img.height === 32 && img.width === 64; }
+
+// 需要下移补位的行块（PNG y 范围）：[srcY, height] → 复制到 y+16
+const LEGACY_ROW_BLOCKS = [[16, 16]]; // y16..31（arm/leg base 行）→ y32..47 与 overlay 位共图
+
+// 在浏览器执行：返回归一化后的 canvas（legacy 输入）或原 img（现代皮肤）
+export function normalizeSkin(img) {
+  if (!isLegacySkin(img)) return img;
+  const cv = document.createElement('canvas');
+  cv.width = 64; cv.height = 64;
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, 0, 0); // 上半区原样
+  for (const [sy, hgt] of LEGACY_ROW_BLOCKS) {
+    ctx.drawImage(img, 0, sy, 64, hgt, 0, sy + 16, 64, hgt);
+  }
+  return cv;
+}
+
+// ── 皮肤来源与持久化 ───────────────────────────────────────────────────
+// prefs: { data: dataURL|null（null=用内置默认）, model: 'classic'|'slim', source: 'upload'|'username'|'default' }
+export function getSkinPrefs() {
+  try {
+    const raw = localStorage.getItem(SKIN_STORAGE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p && (p.model === 'classic' || p.model === 'slim')) {
+        return { data: typeof p.data === 'string' ? p.data : null, model: p.model, source: p.source || 'default' };
+      }
+    }
+  } catch (e) { /* 损坏的存储按默认处理 */ }
+  return { data: null, model: 'classic', source: 'default' };
+}
+
+export function saveSkinPrefs(prefs) {
+  try {
+    localStorage.setItem(SKIN_STORAGE_KEY, JSON.stringify(prefs));
+    return true;
+  } catch (e) { return false; }
+}
+
+export function clearSkinPrefs() {
+  try { localStorage.removeItem(SKIN_STORAGE_KEY); } catch (e) { /* 忽略 */ }
+}
+
+// 解析 dataURL（上传/存储）→ HTMLImageElement（浏览器异步）
+export function loadImageFromURL(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      if ((img.width === 64 && (img.height === 64 || img.height === 32))) resolve(img);
+      else reject(new Error(`皮肤尺寸须为 64×64（或旧版 64×32），当前 ${img.width}×${img.height}`));
+    };
+    img.onerror = () => reject(new Error('皮肤图片加载失败'));
+    img.src = url;
+  });
+}
+
+// 当前 prefs → 已归一化的皮肤图（浏览器异步）。顺序：用户 data（有则用，含 model）→ 内置默认。
+export async function loadActiveSkin() {
+  const prefs = getSkinPrefs();
+  const model = prefs.model;
+  try {
+    if (prefs.data) {
+      const img = await loadImageFromURL(prefs.data);
+      return { img: normalizeSkin(img), model, source: prefs.source };
+    }
+  } catch (e) { /* 上传数据失效回落默认 */ }
+  const img = await loadImageFromURL(DEFAULT_SKIN_URLS[model]);
+  return { img: normalizeSkin(img), model, source: 'default' };
+}

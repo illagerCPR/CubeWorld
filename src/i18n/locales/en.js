@@ -425,4 +425,10 @@ export const en = {
   "纹章": "Emblem",
   "点击取下纹章": "Click to remove the emblem",
   "点击佩戴纹章（无敌 · 飞行 · 基岩之心）": "Click to wear the emblem (Invulnerability · Flight · Bedrock Heart)",
+  "皮肤": "Skin",
+  "经典模型": "Classic Model",
+  "纤细模型": "Slim Model",
+  "上传皮肤 PNG": "Upload Skin PNG",
+  "恢复默认": "Reset to Default",
+  "皮肤须为 64×64 PNG（旧版 64×32 可自动转换）。": "Skin must be a 64×64 PNG (legacy 64×32 is converted automatically).",
 };

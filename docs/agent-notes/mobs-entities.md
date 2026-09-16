@@ -104,3 +104,14 @@
 - **索敌排除（同原版：怪物不以创造玩家为敌）**：`Mob.update` 通用索敌链加 `playerTargetable = !player.creative && !player.spectator`（普通视线索敌与 aggro 死追两处目标选择都排除；旁观顺手一并排除——此前旁观会被追打只是 hurt() 无效）；`updateShulker` 射击入口排除；`updateGuardianAI` 激怒追击分支排除；苦力怕引爆条件 `this.target === player` 因 target 不再指向创造玩家而自然短路。**Boss AI（DragonAI/WitherAI/StormColossusAI）刻意不动**——Boss 战由召唤/龙战触发，不在"激怒"语义内，且终局调试（F2/F3）依赖创造打龙。
 - **激怒设置排除**：`MobManager.attackMob(origin,dir,maxDist,damage,opts)` 新增 `opts.provoke`（默认 true 不改既有调用）——创造玩家命中仍生效（伤害/击退/受击反馈/掉落）但不设置 neutral/guardian 激怒（怪物无力反击创造玩家，激怒态失去意义）；Game 攻击调用传 `{ provoke: !this.player.creative }`。创造分支挖星髓的 `angerTideEchoes` 调用移除（生存分支保留）。联机重放走 `applyRemoteMobAttack`（不经 attackMob），激怒语义零漂移。
 - **测试**：build20-fixes.mjs 行为级——mock mob 验证 provoke=false 命中生效不激怒 / true 激怒 25s / 缺省保持旧行为。
+
+### Build 21 M1 批次（2026-09-16 交付）—— 玩家模型原版 skin 化（单机层）
+
+- **皮肤核心 `src/entity/PlayerSkin.js`**：`partRects(model)` 纯函数区域表（classic/slim 双模型；slim 仅臂宽 3px，公式 top=(u+d,v,w,d)/bottom=(u+d+w,v)/右前三连排布一次推导全部件）+ `applySkinToRig(rig, img, model)` 双层应用（base 覆写 mesh UV+材质 / overlay 克隆几何+外扩 0.5px 壳挂同 pivot，`alphaTest 0.01` 防透明排序）。**BoxGeometry 面序映射**（模型面朝 -Z）：px=right/nx=left/py=top/ny=bottom/pz=back/nz=front；镜像标志推导：px/nx/nz 无镜像、py 水平镜像、pz 水平镜像（背面十字展开翻正）、ny 双翻转——截图对拍校准。**rig 索引陷阱**：joints 只含 pivot 部件（body 无 pivot）——`rig.partsByName` 全部件索引必须建立，否则 body 层被跳过（冒烟 overlays=5 抓到）。
+- **布局对齐原版**：`buildParts(model)` 取代裸 PARTS（仍导出兼容）：head 8³/body 8×12×4/arm 4(3)×12×4/leg 4×12×4 px（1px=1/16 格），pivot=肩点 (±(0.25+armW/2), 1.375)/髋点 (±0.125, 0.75)（比部件顶低 2px），总高 32px=2.0 格。
+- **修复 A（抬头反向低头）**：模型头部俯仰 `rotation.x` 原为 `-pitch`——pitch>0（抬头）时头顶转向面向方向=低头。翻正为 `+pitch`（LocalPlayerModel.update 与 RemotePlayer 同步改，联机两端一致）。第二人称正面+抬头截图：看到仰起的脸 ✓。
+- **修复 B（手持物在手后面）**：`_setHeld` 挂点原 `z=+0.22` 在模型背后侧（面朝 -Z），移至 `set(0, -0.85, -0.28)` 掌前（LocalPlayerModel 与 RemotePlayer 两处同源）。侧后视角截图：钻石镐清晰挂掌前 ✓。
+- **FirstPersonHand 第一人称手臂贴 skin**：`applySkin(img, model)` 重建 armMesh 几何（4×4×8px 段）+ 六面全贴右臂 front 区 + NearestFilter；`loadSkin()` 构造期异步调用（loadActiveSkin 读 prefs，含内置默认回退）。
+- **皮肤来源链**：`getSkinPrefs/saveSkinPrefs/clearSkinPrefs`（localStorage `project-mc-skin-v1`：{data: dataURL|null, model, source}）→ `loadActiveSkin()`（上传 dataURL → 内置默认回退，`DEFAULT_SKIN_URLS` 用 `new URL(..., import.meta.url)` 引入 res/default_skin/——Vite dev/build 双兼容且 node import 无副作用）。legacy 64×32 自动归一化（上半区拷贝 + arm/leg 行下移 16px 补位）。
+- **SkinScreen**（主菜单多语言按钮右侧小按钮 personIconDataUri）：2D 正面预览（base+overlay drawImage 叠加 ×6 pixelated）/ classic-slim 切换 / 上传 PNG（FileReader→尺寸校验→归一化→dataURL 存储）/ 恢复默认；保存后 `window.game.playerModel.refreshSkin()` + `hand.loadSkin()` 实时换肤。LocalPlayerModel.refreshSkin：model 不变仅重贴纹理，model 变化整体重建部件（dispose 幂等 + `_skinSeq` 防异步竞态）。
+- **测试**：tests/build21-skins.mjs（340 断言：partRects 锚点/完备性/无重叠/buildParts 布局/修复 A 行为级+B 绊线/接线/i18n 10 包）；冒烟：SkinScreen 预览渲染默认皮肤 ✓ 第三人称全部件贴图（overlays=6）✓ slim 臂宽切换 ✓ 修复 A/B 截图 ✓。

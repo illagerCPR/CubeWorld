@@ -8,18 +8,25 @@ import { targetInterpDelay } from '../net/netStats.js';
 import { SVGTextures } from '../render/SVGTextures.js';
 import { buildHeldItemTemplate } from '../render/HeldItemMesh.js';
 import { RemoteHotbarSprite } from '../render/RemoteHotbarSprite.js';
+import { applySkinToRig } from './PlayerSkin.js';
 
-// 简化方块人部件（局部坐标原点在脚 y=0，单位：格）
-// 关节部件（head/arm/leg）用 pivot 支撑：mesh 挂在 pivot 下，旋转 pivot 即旋转肢体
-// 导出供 LocalPlayerModel（Build 20 ⑤ 第三人称本地玩家模型）共用同一布局
-export const PARTS = [
-  { box: [-0.25, 1.5, -0.25, 0.25, 2.0, 0.25], role: 'head', pivot: [0, 1.5, 0] },
-  { box: [-0.3, 0.6, -0.2, 0.3, 1.5, 0.2], role: 'body' },
-  { box: [-0.5, 0.6, -0.15, -0.3, 1.45, 0.15], role: 'armL', pivot: [-0.4, 1.45, 0] },
-  { box: [0.3, 0.6, -0.15, 0.5, 1.45, 0.15], role: 'armR', pivot: [0.4, 1.45, 0] },
-  { box: [-0.28, 0, -0.15, -0.02, 0.6, 0.15], role: 'legL', pivot: [-0.13, 0.6, 0] },
-  { box: [0.02, 0, -0.15, 0.28, 0.6, 0.15], role: 'legR', pivot: [0.13, 0.6, 0] },
-];
+// 简化方块人部件（局部坐标原点在脚 y=0，单位：格；1px = 1/16 格）
+// Build 21 M1：尺寸对齐原版（head 8³ / body 8×12×4 / arm 4×12×4 / leg 4×12×4 px），
+// 关节 pivot 对齐原版（肩点/髋点比部件顶低 2px）；布局常量导出供 LocalPlayerModel 复用。
+// slim（Alex 3px 臂）差异仅在双臂宽度，skin 应用时按 model 处理。
+export function buildParts(model = 'classic') {
+  const armW = model === 'slim' ? 3 / 16 : 4 / 16;
+  const armIn = 0.25; // 臂内缘贴 body 侧（body 半宽 0.25），classic/slim 相同
+  return [
+    { box: [-0.25, 1.5, -0.25, 0.25, 2.0, 0.25], role: 'head', pivot: [0, 1.5, 0] },
+    { box: [-0.25, 0.75, -0.125, 0.25, 1.5, 0.125], role: 'body' },
+    { box: [armIn, 0.75, -0.125, armIn + armW, 1.5, 0.125], role: 'armR', pivot: [armIn + armW / 2, 1.375, 0] },
+    { box: [-armIn - armW, 0.75, -0.125, -armIn, 1.5, 0.125], role: 'armL', pivot: [-armIn - armW / 2, 1.375, 0] },
+    { box: [0, 0, -0.125, 0.25, 0.75, 0.125], role: 'legR', pivot: [0.125, 0.75, 0] },
+    { box: [-0.25, 0, -0.125, 0, 0.75, 0.125], role: 'legL', pivot: [-0.125, 0.75, 0] },
+  ];
+}
+export const PARTS = buildParts('classic');
 
 // 远距瞬移阈值：插值目标距当前渲染位置超过该值视为传送，直接快照并丢弃旧样本
 const SNAP_DIST = 4;
@@ -41,6 +48,7 @@ export class RemotePlayer {
     this.group = new THREE.Group();
     this.parts = [];     // 普通 mesh 列表（渲染 / 受击红光）
     this.joints = {};    // role -> { pivot: Group, mesh: Mesh }
+    this.partsByName = {}; // Build 21：全部件索引（body 无 pivot 不入 joints，皮肤双层需要）
     for (const def of PARTS) {
       const [minX, minY, minZ, maxX, maxY, maxZ] = def.box;
       const geo = new THREE.BoxGeometry(maxX - minX, maxY - minY, maxZ - minZ);
@@ -64,6 +72,7 @@ export class RemotePlayer {
         mesh.position.set((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2);
         this.group.add(mesh);
       }
+      this.partsByName[def.role] = mesh;
       this.parts.push(mesh);
     }
 
@@ -185,13 +194,22 @@ export class RemotePlayer {
     if (!tpl) return;
     const g = tpl.clone();
     g.scale.set(0.26, 0.26, 0.26);
-    g.position.set(0.10, -0.88, 0.22); // 右手末端（armR pivot 局部坐标）
+    // Build 21 修复 B：原 z=+0.22 挂在模型背后侧（面朝 -Z），移到掌前（-Z 方向）
+    g.position.set(0, -0.85, -0.28);
     g.rotation.set(-0.5, 0.35, 0.15);  // 斜握姿态
     const arm = this.joints.armR;
     if (arm) { arm.pivot.add(g); this.heldGroup = g; }
   }
 
   setMode(mode) { this.flying = mode === 'spectator'; }
+
+  // Build 21：应用皮肤（img 须为已归一化 64×64 HTMLImageElement；model: 'classic'|'slim'）。
+  // M1 预接口（M2 联机 skin 消息接线）；重复调用先释放上一层（换肤）。
+  applySkinFromImage(img, model = 'classic') {
+    if (this._skinHandle) { this._skinHandle.dispose(); this._skinHandle = null; }
+    this._skinHandle = applySkinToRig(this, img, model);
+    this.skinModel = model;
+  }
 
   playHit() { this.hitFlash = 0.2; }
 
@@ -282,9 +300,10 @@ export class RemotePlayer {
     this.pitch = this._targetPitch;
     this.group.rotation.y = this.yaw;
 
-    // 头部俯仰（绕颈部 pivot）
+    // 头部俯仰（绕颈部 pivot）。Build 21 修复 A：原为 -pitch——抬头时模型反向低头，
+    // 翻正符号（pitch 正=抬头 → 头顶向后仰）
     if (this.joints.head) {
-      this.joints.head.pivot.rotation.x = -this.pitch;
+      this.joints.head.pivot.rotation.x = this.pitch;
     }
 
     // 行走摆动动画：水平速度驱动腿/手臂相位，飞行/水中/静止不摆动
@@ -321,6 +340,7 @@ export class RemotePlayer {
   }
 
   dispose() {
+    if (this._skinHandle) { this._skinHandle.dispose(); this._skinHandle = null; }
     if (this.group.parent) this.group.parent.remove(this.group);
     for (const m of this.parts) { m.geometry.dispose(); m.material.dispose(); }
     this.parts = [];
