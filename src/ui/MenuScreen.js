@@ -6,7 +6,17 @@ import { VERSION_LABEL } from '../version.js';
 import { t, getLocale, onLocaleChange } from '../i18n/index.js';
 import { globeIconDataUri } from './LanguageScreen.js';
 import { personIconDataUri } from './SkinScreen.js';
+import { getLanHost, setLanHost, lanWsUrl, probeLanServer } from '../net/lanStatus.js';
 import logoUrl from '../../res/logo-cubeworld-js-edition.png';
+
+// 刷新图标（Build 23：主界面 LAN 状态组件；石质按钮上浅色描边风格）
+function refreshIconDataUri() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+    <path d="M12 4.5a7.5 7.5 0 1 0 7.1 5.2" fill="none" stroke="#e8e8e8" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M20.6 3.2 L21 9.6 L15.2 8.4 Z" fill="#e8e8e8" stroke="#1a1a1a" stroke-width="0.8"/>
+  </svg>`;
+  return 'data:image/svg+xml,' + encodeURIComponent(svg);
+}
 
 const MODE_LABEL = { creative: '创造模式', survival: '生存模式', spectator: '旁观模式' };
 const MODE_COLOR = {
@@ -57,9 +67,26 @@ export class MenuScreen {
         this.skinScreen.show();
         return;
       }
+      // Build 23：LAN 状态组件刷新按钮
+      if (btn.id === 'lan-refresh-btn') {
+        this._probeLan();
+        return;
+      }
       if (btn.id === 'menu-single' || btn.id === 'menu-lan' || btn.classList.contains('back-btn')) {
         this.page = btn.id === 'menu-single' ? 'single' : (btn.id === 'menu-lan' ? 'lan' : 'main');
         this.render();
+      }
+    });
+    // Build 23：LAN 状态组件——IP 输入框变更（change 冒泡，事件委托同样免重绑）
+    this.el.addEventListener('change', (e) => {
+      if (e.target && e.target.id === 'lan-host-input') {
+        const saved = setLanHost(e.target.value);
+        if (saved != null) {
+          e.target.value = saved;
+          this._probeLan();
+        } else {
+          e.target.value = getLanHost(); // 非法输入回退当前值
+        }
       }
     });
     this.render();
@@ -106,7 +133,32 @@ export class MenuScreen {
         ${t('鼠标左键 破坏 / 右键 放置 / E 打开背包 / ESC 暂停 / C 命令面板(需启用)')}<br/>
         ${t('滚轮 切换物品 / 1-9 快捷栏 / F5 切换视角 / F6 手动保存')}
       </div>
+      <div id="lan-status-widget" style="
+        position: absolute; right: 12px; bottom: 8px; z-index: 60;
+        display: flex; align-items: center; gap: 8px;
+        font-size: 12px; color: rgba(255,255,255,0.78);
+        font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;">
+        <input type="text" id="lan-host-input" value="${getLanHost()}" title="${t('LAN 服务器 IP')}"
+          style="width: 110px; padding: 3px 6px; font-size: 12px; background: rgba(0,0,0,0.4);
+                 border: 1px solid #555; color: #fff;" />
+        <span id="lan-status-text" style="text-shadow: 1px 1px 0 #000;">${t('检测中…')}</span>
+        <button id="lan-refresh-btn" class="cw-stone-btn" title="${t('刷新')}" aria-label="${t('刷新')}" style="
+          width: 28px; height: 28px; padding: 0; background-size: 72%;
+          background-repeat: no-repeat; background-position: center;
+          background-image: url('${refreshIconDataUri()}');"></button>
+      </div>
     `;
+    this._probeLan(); // 异步探测（结果回写有元素存在性守卫，页面切换不串写）
+  }
+
+  // Build 23：探测 LAN 服务器可达性并回写状态文本（在线/离线）
+  _probeLan() {
+    probeLanServer(getLanHost()).then((r) => {
+      const el = this.el.querySelector('#lan-status-text');
+      if (!el) return; // 已切页，render() 重建后自然重新探测
+      el.textContent = r.online ? t('在线') : t('离线');
+      el.style.color = r.online ? '#7fe27f' : '#ff7f7f';
+    });
   }
 
   // ---------- 单人游戏页 ----------
@@ -270,7 +322,7 @@ export class MenuScreen {
           <label>${t('昵称')}</label>
           <input type="text" id="mp-name" maxlength="16" style="padding:5px 8px; background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; width:90px; font-size:13px;" placeholder="${t('玩家')}" />
           <label>${t('服务器')}</label>
-          <input type="text" id="mp-url" style="padding:5px 8px; background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; flex:1; font-size:13px;" value="ws://127.0.0.1:3001/ws" />
+          <input type="text" id="mp-url" style="padding:5px 8px; background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; flex:1; font-size:13px;" value="${lanWsUrl(getLanHost())}" />
         </div>
         <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center; font-size:13px;">
           <label>${t('房间名')}</label>

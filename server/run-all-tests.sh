@@ -216,6 +216,15 @@ else
     exit 1
 fi
 
+# Build 23（皮肤面板输入框自适应加宽/鉴权账号收尾清理/主界面 LAN 状态组件）
+echo "=== build23-menu-lan ==="
+if node tests/build23-menu-lan.mjs; then
+    echo "build23-menu-lan: OK"
+else
+    echo "build23-menu-lan: FAILED"
+    exit 1
+fi
+
 # 末影龙 Boss 回归（纯 node：类型注册/柱顶水晶/DragonAI 状态机/击败链路/末地门控）
 echo "=== end-dragon ==="
 if node tests/end-dragon.mjs; then
@@ -327,6 +336,13 @@ for t in test-mp test-store test-admin test-stage5 test-stage6 test-stage10 test
 done
 
 ./start.sh server-stop >/dev/null 2>&1
+
+# Build 23：跑批结束自动清除鉴权账号与测试世界（与跑批前清理对称）。
+# 面板/多账号套件会持久化 adminAccounts 到 config.json，遗留鉴权态会让
+# 后续人工调用 401；stage11 已有 API 级收尾，此处文件级兜底回到默认无鉴权状态。
+rm -rf server/world
+rm -f server/config.json
+echo "cleanup: 服务器测试数据与鉴权账号已清除"
 
 if [ "$failed" -ne 0 ]; then
     echo "RESULT: FAILED"

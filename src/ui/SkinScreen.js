@@ -136,6 +136,7 @@ export class SkinScreen {
     this._nameInput.type = 'text';
     this._nameInput.placeholder = t('Minecraft®: Java Edition档案用户名');
     this._nameInput.style.cssText = 'width: 150px; padding: 8px 10px; font-size: 13px; background: rgba(0,0,0,0.4); border: 1px solid #555; color: #fff;';
+    this._fitNameInput(this._nameInput); // Build 23：按占位文本实测加宽（须在 cssText 之后，否则被覆盖）
     nameRow.appendChild(this._nameInput);
     const fetchBtn = document.createElement('button');
     fetchBtn.className = 'cw-stone-btn';
@@ -280,9 +281,19 @@ export class SkinScreen {
     if (g.networkMode && g.net && g.net.sendSkin) g.net.sendSkin();
   }
 
+  // Build 23：按占位文本实测宽度加宽输入框（各语言文案长度差异大，固定宽度看不全）
+  _fitNameInput(input) {
+    if (!input || !input.placeholder) return;
+    const cv = document.createElement('canvas');
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
+    ctx.font = '13px "Segoe UI", "Microsoft YaHei", sans-serif';
+    const w = Math.ceil(ctx.measureText(input.placeholder).width) + 24; // 左右 padding 10×2 + 边框 1×2 + 舍入余量
+    input.style.width = Math.min(460, Math.max(160, w)) + 'px';
+  }
+
   show() {
-    this.render();
-    this.visible = true;
+    this.render();    this.visible = true;
     this.el.style.display = 'flex';
     if (this.game && this.game.controls) {
       this.game.controls.enabled = false;

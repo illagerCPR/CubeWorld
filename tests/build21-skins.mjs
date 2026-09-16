@@ -221,6 +221,6 @@ function noOverlap(a, b) {
   ok(ss.includes("prefs.source = 'username'"), '拉取成功标记来源');
 }
 
-ok(BUILD === 22, `BUILD 22（Build 22 修复批次统一 bump，当前 ${BUILD}）`);
+ok(BUILD === 23, `BUILD 23（Build 23 主菜单与皮肤面板批次统一 bump，当前 ${BUILD}）`);
 
 console.log(`build21-skins: ${passed} passed`);

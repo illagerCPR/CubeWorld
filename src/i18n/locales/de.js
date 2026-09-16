@@ -435,4 +435,9 @@ export const de = {
   "按用户名获取": "Nach Name abrufen",
   "正在获取皮肤…": "Skin wird abgerufen…",
   "获取失败：需连接中的服务器（代理 Mojang API）或改用上传 PNG。": "Abruf fehlgeschlagen: Verbundener Server (Mojang-API-Proxy) nötig oder PNG hochladen.",
+  "LAN 服务器 IP": "LAN-Server-IP",
+  "检测中…": "Prüfe…",
+  "在线": "Online",
+  "离线": "Offline",
+  "刷新": "Aktualisieren",
 };

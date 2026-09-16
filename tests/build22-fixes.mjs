@@ -7,7 +7,7 @@
 //     + 怪物/本地玩家/远端玩家/第一人称手臂四处接线绊线
 //   ④ 服务器皮肤拉取管理日志：handleSkinLookup 返回 {code,note} + 路由 logAdmin('skin-fetch') 绊线
 //   ⑤ i18n「Minecraft®: Java Edition档案用户名」10 包在场（旧键清除）
-//   ⑥ BUILD = 22
+//   ⑥ BUILD = 23
 import { readFileSync } from 'fs';
 import * as THREE from 'three';
 import { applySkinToRig, partRects } from '../src/entity/PlayerSkin.js';
@@ -201,6 +201,6 @@ function buildRig(model) {
 }
 
 // ── ⑥ BUILD ──
-ok(BUILD === 22, `BUILD 递增到 22（当前 ${BUILD}）`);
+ok(BUILD === 23, `BUILD 递增到 23（当前 ${BUILD}）`);
 
 console.log(`build22-fixes: ${passed} assertions ALL PASS`);

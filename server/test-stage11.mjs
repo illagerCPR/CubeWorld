@@ -248,6 +248,14 @@ let VIEWER_TOKEN = null;
   assert('收尾清空白名单配置', w.status === 200);
 }
 
+// --- 收尾：清除鉴权账号（Build 23）---
+// 面板/多账号测试会持久化 adminAccounts 到 config.json，遗留鉴权态会让
+// 跑批后续套件与人工调用 401；清空 = 恢复默认无鉴权状态
+{
+  const clear = await api('/config', 'POST', { adminAccounts: [] }, OP_TOKEN);
+  assert('收尾清除鉴权账号', clear.status === 200 && (clear.json.config.adminAccounts || []).length === 0);
+}
+
 const failed = results.filter(([, ok]) => !ok);
 console.log(`\n阶段 11 回归：${results.length - failed.length}/${results.length} 通过`);
 if (failed.length) { console.log('失败项：'); for (const [name] of failed) console.log('  - ' + name); process.exit(1); }
