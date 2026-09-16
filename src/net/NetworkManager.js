@@ -1,6 +1,7 @@
 // NetworkManager.js -- 局域网联机网络层：连接/重连、消息路由、方块/玩家/掉落物/聊天同步
 import { MSG } from '../../server/protocol.js';
 import { RemotePlayer } from '../entity/RemotePlayer.js';
+import { loadActiveSkin } from '../entity/PlayerSkin.js';
 import { playerColorCss } from './playerColor.js';
 import { createNetStats, pushRttSample } from './netStats.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
@@ -21,6 +22,7 @@ export class NetworkManager {
     this._applyingRemote = false;
     this._ready = false;          // 世界已就绪（可创建远端玩家/落地方块与掉落物）
     this._pendingPlayers = [];    // 世界就绪前的玩家加入缓存
+    this._pendingSkins = new Map(); // Build 21 M2：世界就绪前的远端皮肤缓存（id → msg）
     this._pendingBlocks = [];     // 世界就绪前的 block_change 缓存（修复首次加入丢包）
     this._pendingDrops = [];      // 世界就绪前的 drop_* 缓存
     this._pendingMobs = [];       // 世界就绪前的 mob_spawn 缓存
@@ -60,6 +62,7 @@ export class NetworkManager {
     this._reconnectAttempt = 0;
     this._ready = false;
     this._pendingPlayers = [];
+    this._pendingSkins = new Map(); // Build 21 M2：新连接重置皮肤缓存
     this._pendingBlocks = [];
     this._pendingDrops = [];
     this._pendingMobs = [];
@@ -133,6 +136,9 @@ export class NetworkManager {
     this._ready = true;
     for (const info of this._pendingPlayers) this._addRemote(info);
     this._pendingPlayers = [];
+    // Build 21 M2：世界就绪后冲掉缓存的远端皮肤
+    for (const msg of this._pendingSkins.values()) this._applySkin(msg);
+    this._pendingSkins.clear();
     for (const b of this._pendingBlocks) this.applyRemoteBlock(b.x, b.y, b.z, b.id);
     this._pendingBlocks = [];
     for (const d of this._pendingDrops) {
@@ -237,6 +243,7 @@ export class NetworkManager {
       case MSG.WELCOME:
         this.selfId = msg.selfId;
         for (const p of (msg.players || [])) this._queueOrAdd(p);
+        this.sendSkin(); // Build 21 M2：进房即上报本地皮肤（异步读 prefs，含默认回退）
         break;
       case MSG.WORLD_INFO:
         this.room = msg.room || this.room;
@@ -283,6 +290,12 @@ export class NetworkManager {
       case MSG.PLAYER_JOIN:
         this._queueOrAdd(msg);
         this._emit('system', { parts: [{ text: msg.name, color: playerColorCss(msg.id) }, { text: ' 加入了游戏' }] });
+        break;
+      case MSG.SKIN_SET:
+        // Build 21 M2：远端玩家皮肤（世界未就绪时缓存，onWorldStarted 冲掉）
+        if (msg.id === this.selfId) break;
+        if (this._ready) this._applySkin(msg);
+        else this._pendingSkins.set(msg.id, msg);
         break;
       case MSG.PLAYER_PROFILE:
         // Idea-3C：进房下发档案——世界已就绪立即应用，否则缓存到 onWorldStarted
@@ -612,6 +625,27 @@ export class NetworkManager {
       held: sel ? sel.name : null,
       hotbar,
     });
+  }
+
+  // Build 21 M2：上报本地皮肤（异步读 prefs——上传/默认都归一为 64×64 dataURL 后发送）。
+  // SkinScreen 保存设置后也会调用（联机时实时广播新皮肤）。
+  async sendSkin() {
+    if (!this._ready && !this.selfId) return;
+    try {
+      const { img, model } = await loadActiveSkin();
+      const cv = document.createElement('canvas');
+      cv.width = 64; cv.height = 64;
+      const ctx = cv.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0);
+      this._send(MSG.SKIN_SET, { data: cv.toDataURL('image/png'), model });
+    } catch (e) { /* 皮肤不可用时不发送（远端显示纯色兜底） */ }
+  }
+
+  // Build 21 M2：应用远端玩家皮肤（dataURL 无 CORS 问题）
+  _applySkin(msg) {
+    const rp = this.game.remotePlayers && this.game.remotePlayers.get(msg.id);
+    if (rp && rp.applySkinFromURL) rp.applySkinFromURL(msg.data, msg.model);
   }
 
   sendAttackPlayer(targetId, damage) { this._send(MSG.ATTACK_PLAYER, { targetId, damage }); }

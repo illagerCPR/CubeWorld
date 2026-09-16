@@ -5,6 +5,7 @@ export const MSG = {
   // 握手与房间
   HELLO: 'hello',
   WELCOME: 'welcome',
+  SKIN_SET: 'skin_set',         // Build 21 M2：玩家皮肤上报/下发（C2S 带 data；S2C 带 id）
   CREATE_ROOM: 'create_room',
   JOIN_ROOM: 'join_room',
   LEAVE_ROOM: 'leave_room',

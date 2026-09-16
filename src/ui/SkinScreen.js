@@ -129,6 +129,22 @@ export class SkinScreen {
     this._fileInput.addEventListener('change', () => this._onUpload(this._fileInput));
     this.panel.appendChild(this._fileInput);
 
+    // Build 21 M3：按正版用户名拉取皮肤（服务器代理优先，单机回退第三方镜像）
+    const nameRow = document.createElement('div');
+    nameRow.style.cssText = 'display:flex; gap:8px; align-items:center;';
+    this._nameInput = document.createElement('input');
+    this._nameInput.type = 'text';
+    this._nameInput.placeholder = t('正版用户名');
+    this._nameInput.style.cssText = 'width: 150px; padding: 8px 10px; font-size: 13px; background: rgba(0,0,0,0.4); border: 1px solid #555; color: #fff;';
+    nameRow.appendChild(this._nameInput);
+    const fetchBtn = document.createElement('button');
+    fetchBtn.className = 'cw-stone-btn';
+    fetchBtn.textContent = t('按用户名获取');
+    fetchBtn.style.cssText = 'padding: 8px 12px; font-size: 13px;';
+    fetchBtn.addEventListener('click', () => this._onFetchByName());
+    nameRow.appendChild(fetchBtn);
+    this.panel.appendChild(nameRow);
+
     this._hint = document.createElement('div');
     this._hint.style.cssText = 'font-size: 11px; color: #9ab; max-width: 268px; text-align: center; line-height: 1.5;';
     this.panel.appendChild(this._hint);
@@ -205,12 +221,63 @@ export class SkinScreen {
     }
   }
 
-  // 通知游戏内模型实时换肤（主菜单期 game 亦已存在；running=false 时刷新无副作用）
+  // Build 21 M3：按正版用户名拉取皮肤。回退链：
+  //   ① 联机：走连接中的服务器代理（同 host HTTP）——确定性可行（服务器无 CORS 限制）
+  //   ② 单机：试本机 3001（若恰好开着服务器）→ 第三方镜像（minotar，PNG 直取、model 按 classic）
+  // 失败：提示需联机服务器或改用上传。
+  async _onFetchByName() {
+    const name = (this._nameInput && this._nameInput.value || '').trim();
+    if (this._hint) this._hint.textContent = t('正在获取皮肤…');
+    const g = window.game;
+    const candidates = [];
+    if (g && g.networkMode && g.net && g.net._url) {
+      candidates.push(g.net._url.replace(/^ws/, 'http').replace(/\/ws$/, '') + '/api/skin/' + encodeURIComponent(name));
+    } else if (g && location.hostname) {
+      candidates.push(`http://${location.hostname}:3001/api/skin/${encodeURIComponent(name)}`);
+    }
+    candidates.push(`https://minotar.net/skin/${encodeURIComponent(name)}`);
+    for (let i = 0; i < candidates.length; i++) {
+      const url = candidates[i];
+      const isProxy = url.includes('/api/skin/');
+      try {
+        let data = null, model = 'classic';
+        if (isProxy) {
+          const r = await fetch(url);
+          if (!r.ok) throw new Error('proxy ' + r.status);
+          const j = await r.json();
+          data = j.data; model = j.model === 'slim' ? 'slim' : 'classic';
+        } else {
+          // 第三方镜像直接返回 PNG（无 slim 标记，按 classic 渲染）
+          const img = await loadImageFromURL(url);
+          const cv = document.createElement('canvas');
+          cv.width = 64; cv.height = 64;
+          const ctx = cv.getContext('2d');
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(normalizeSkin(img), 0, 0);
+          data = cv.toDataURL('image/png');
+        }
+        const prefs = getSkinPrefs();
+        prefs.data = data;
+        prefs.model = model;
+        prefs.source = 'username';
+        saveSkinPrefs(prefs);
+        this._notifyGame();
+        this.render();
+        if (this._hint) this._hint.textContent = '';
+        return;
+      } catch (e) { /* 试下一个候选 */ }
+    }
+    if (this._hint) this._hint.textContent = t('获取失败：需连接中的服务器（代理 Mojang API）或改用上传 PNG。');
+  }
+
+  // 通知游戏内模型实时换肤（主菜单期 game 亦已存在；running=false 时刷新无副作用）。
+  // Build 21 M2：联机时同步广播新皮肤给房间。
   _notifyGame() {
     const g = window.game;
     if (!g) return;
     if (g.playerModel && g.playerModel.refreshSkin) g.playerModel.refreshSkin();
     if (g.hand && g.hand.loadSkin) g.hand.loadSkin();
+    if (g.networkMode && g.net && g.net.sendSkin) g.net.sendSkin();
   }
 
   show() {

@@ -8,7 +8,7 @@ import { targetInterpDelay } from '../net/netStats.js';
 import { SVGTextures } from '../render/SVGTextures.js';
 import { buildHeldItemTemplate } from '../render/HeldItemMesh.js';
 import { RemoteHotbarSprite } from '../render/RemoteHotbarSprite.js';
-import { applySkinToRig } from './PlayerSkin.js';
+import { applySkinToRig, loadImageFromURL, normalizeSkin } from './PlayerSkin.js';
 
 // 简化方块人部件（局部坐标原点在脚 y=0，单位：格；1px = 1/16 格）
 // Build 21 M1：尺寸对齐原版（head 8³ / body 8×12×4 / arm 4×12×4 / leg 4×12×4 px），
@@ -92,6 +92,7 @@ export class RemotePlayer {
     this.nameSprite.position.set(this._target.x, this._target.y + 2.3, this._target.z);
     this.hotbarSprite.sprite.position.set(this._target.x, this._target.y + 2.62, this._target.z);
     this.flying = false;
+    this.skinModel = 'classic'; // Build 21：几何默认按 classic 构建（skin 消息到达 slim 时重建双臂）
     this.inWater = false;
     this.onGround = false;
     // 阶段5 时间戳插值：状态样本缓冲 + 时钟偏移估计 + 插值延迟（阶段6 自适应）
@@ -204,11 +205,39 @@ export class RemotePlayer {
   setMode(mode) { this.flying = mode === 'spectator'; }
 
   // Build 21：应用皮肤（img 须为已归一化 64×64 HTMLImageElement；model: 'classic'|'slim'）。
-  // M1 预接口（M2 联机 skin 消息接线）；重复调用先释放上一层（换肤）。
+  // 模型档位变化（classic↔slim）时先重建双臂几何（臂宽/pivot 不同），再贴双层纹理。
   applySkinFromImage(img, model = 'classic') {
+    if (this.skinModel !== model) this.rebuildArmsForModel(model);
     if (this._skinHandle) { this._skinHandle.dispose(); this._skinHandle = null; }
     this._skinHandle = applySkinToRig(this, img, model);
     this.skinModel = model;
+  }
+
+  // Build 21 M2：按模型档位重建双臂（slim 臂宽 3px、肩点内移；仅 x 维度变化，y/z 不变）。
+  // heldGroup 挂在 armR.pivot 下，pivot 平移会带着手持物一起动，无需重挂。
+  rebuildArmsForModel(model) {
+    const armW = model === 'slim' ? 3 / 16 : 4 / 16;
+    const armIn = 0.25;
+    for (const [role, sgn] of [['armR', 1], ['armL', -1]]) {
+      const joint = this.joints[role];
+      if (!joint) continue;
+      const minX = sgn > 0 ? armIn : -armIn - armW;
+      const maxX = sgn > 0 ? armIn + armW : -armIn;
+      const pivotX = sgn * (armIn + armW / 2);
+      joint.pivot.position.x = pivotX;
+      const old = joint.mesh;
+      old.geometry.dispose();
+      old.geometry = new THREE.BoxGeometry(armW, 0.75, 0.25);
+      old.position.set(0, -0.25, 0); // 臂中心在 pivot 正下 0.25（y 0.75..1.5，pivot y=1.375）
+    }
+  }
+
+  // Build 21 M2：从 URL/dataURL 加载并应用皮肤（联机 skin_set 消息的 data 为 dataURL）
+  async applySkinFromURL(url, model = 'classic') {
+    try {
+      const img = await loadImageFromURL(url);
+      this.applySkinFromImage(normalizeSkin(img), model);
+    } catch (e) { /* 皮肤加载失败保持纯色兜底 */ }
   }
 
   playHit() { this.hitFlash = 0.2; }

@@ -177,11 +177,50 @@ function noOverlap(a, b) {
 {
   for (const lang of ['zh-TW', 'en', 'fr', 'de', 'ja', 'ko', 'ar', 'ru', 'es', 'pt']) {
     const src = srcOf(`../src/i18n/locales/${lang}.js`);
-    for (const key of ['皮肤', '经典模型', '纤细模型', '上传皮肤 PNG', '恢复默认']) {
+    for (const key of ['皮肤', '经典模型', '纤细模型', '上传皮肤 PNG', '恢复默认',
+      '正版用户名', '按用户名获取', '正在获取皮肤…']) {
       ok(src.includes(key), `语言包 ${lang} 缺键: ${key}`);
     }
   }
 }
-ok(BUILD === 20, `批次 1 不 bump（BUILD 保持 20，M2/M3 随批次 2 升 21，当前 ${BUILD}）`);
+
+// ── ⑧ M2：联机 skin 协议 ──
+{
+  ok(srcOf('../server/protocol.js').includes("SKIN_SET: 'skin_set'"), '协议常量 SKIN_SET');
+  const room = srcOf('../server/room.js');
+  ok(room.includes('this.playerSkins = new Map();'), '房间皮肤账本（内存态）');
+  ok(room.includes("data.startsWith('data:image/png;base64,') || data.length > 16384"),
+    'onSkinSet 校验：PNG dataURL 前缀 + 16KB 体积防线');
+  ok(room.includes('case MSG.SKIN_SET: this.onSkinSet(player, msg); break;'), 'room 分发接线');
+  ok(room.includes('for (const [id, sk] of this.playerSkins)'), 'joinRoom 回放房内已有皮肤');
+  ok(room.includes('this.playerSkins.delete(id); // Build 21 M2'), '退房删皮肤（重连重发）');
+  const nm = srcOf('../src/net/NetworkManager.js');
+  ok(nm.includes('async sendSkin()') && nm.includes('MSG.SKIN_SET'), '客户端 sendSkin 上报');
+  ok(nm.includes('case MSG.SKIN_SET:') && nm.includes('_applySkin(msg)'), '客户端 SKIN_SET 接收与应用');
+  ok(nm.includes('this.sendSkin(); // Build 21 M2'), 'welcome 后立即上报');
+  ok(nm.includes('for (const msg of this._pendingSkins.values()) this._applySkin(msg);'),
+    'onWorldStarted 冲掉缓存的远端皮肤');
+  ok(nm.includes('if (msg.id === this.selfId) break;'), '自己的 skin_set 不回环应用');
+  const rp = srcOf('../src/entity/RemotePlayer.js');
+  ok(rp.includes('async applySkinFromURL(url, model'), 'RemotePlayer.applySkinFromURL（dataURL 无 CORS）');
+  const ss = srcOf('../src/ui/SkinScreen.js');
+  ok(ss.includes('g.net.sendSkin()'), 'SkinScreen 保存后联机广播新皮肤');
+}
+
+// ── ⑨ M3：Mojang 代理（服务器三跳 + 客户端回退链）──
+{
+  const idx = srcOf('../server/index.mjs');
+  ok(idx.includes("p.startsWith('/api/skin/')"), '公开 GET /api/skin/:username 路由（鉴权外——玩家无管理口令）');
+  ok(idx.includes('api.mojang.com/users/profiles/minecraft/'), '代理一跳：用户名→uuid');
+  ok(idx.includes('sessionserver.mojang.com/session/minecraft/profile/'), '代理二跳：uuid→textures');
+  ok(idx.includes("metadata.model === 'slim'"), '代理携带 slim 标记');
+  ok(idx.includes('const SKIN_CACHE_TTL = 5 * 60 * 1000;'), '5min 缓存防 Mojang 限速');
+  const ss = srcOf('../src/ui/SkinScreen.js');
+  ok(ss.includes("g.net._url.replace(/^ws/, 'http')"), '联机走连接中服务器的 HTTP 代理');
+  ok(ss.includes('https://minotar.net/skin/'), '单机回退第三方镜像');
+  ok(ss.includes("prefs.source = 'username'"), '拉取成功标记来源');
+}
+
+ok(BUILD === 21, `BUILD 21（Build 21 批次 2 统一 bump，当前 ${BUILD}）`);
 
 console.log(`build21-skins: ${passed} passed`);

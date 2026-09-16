@@ -113,6 +113,7 @@ export class Room {
     // Idea-3C：玩家档案（房间→昵称 键；index.mjs 从磁盘装入 + 注入 onSaveProfiles 落盘回调）
     this.playerProfiles = {};
     this._profilesDirty = false;
+    this.playerSkins = new Map(); // Build 21 M2：玩家皮肤（id → {data, model}；内存态，重连后客户端重发）
   }
 
   // 取（或建）指定维度的账本桶
@@ -286,6 +287,7 @@ export class Room {
     const p = this.players.get(id);
     if (!p) return;
     this.players.delete(id);
+    this.playerSkins.delete(id); // Build 21 M2：皮肤为内存态（重连后客户端重发）
     this.broadcast(MSG.PLAYER_LEAVE, { id, name: p.name });
     // Idea-3C：退房立即刷档案（丢包窗口最小化；断线重连同昵称直接恢复）
     this.saveProfiles();
@@ -390,6 +392,11 @@ export class Room {
     // Idea-3C：进房下发该昵称已有档案（仅发本人；客户端在世界就绪后应用）
     const prof = this.playerProfiles[player.name];
     if (prof) this.sendTo(player, MSG.PLAYER_PROFILE, { profile: prof });
+    // Build 21 M2：回放房内其他玩家的皮肤（内存账本；新玩家随后 sendSkin 上报自己的）
+    for (const [id, sk] of this.playerSkins) {
+      if (id === player.id || !this.players.has(id)) continue;
+      this.sendTo(player, MSG.SKIN_SET, { id, data: sk.data, model: sk.model });
+    }
     console.log(`[+] ${player.name} 加入房间「${this.name}」seed=${this.seed} (${this.players.size}人)`);
   }
 
@@ -399,6 +406,25 @@ export class Room {
     if (!prof) return; // 非法档案静默丢弃（信任场景下的最低防线）
     this.playerProfiles[player.name] = prof;
     this._profilesDirty = true;
+  }
+
+  // Build 21 M2：玩家皮肤上报——校验后入账本并广播给其他玩家（S2C 带 id；本人已有，免发）。
+  // 皮肤为内存态：退房即删（重连后客户端重发），不进快照/存档。
+  onSkinSet(player, msg) {
+    const data = typeof msg.data === 'string' ? msg.data : '';
+    const model = msg.model === 'slim' ? 'slim' : 'classic';
+    if (!data.startsWith('data:image/png;base64,') || data.length > 16384) {
+      console.log(`[skin] ${player.name}#${player.id} 上报被拒（格式/体积）`);
+      return;
+    }
+    this.playerSkins.set(player.id, { data, model });
+    let sent = 0;
+    for (const p of this.players.values()) {
+      if (p.id === player.id) continue;
+      this.sendTo(p, MSG.SKIN_SET, { id: player.id, data, model });
+      sent++;
+    }
+    console.log(`[skin] ${player.name}#${player.id} 上报 ${model} ${data.length}B → 广播 ${sent} 人（账本 ${this.playerSkins.size}）`);
   }
 
   // Idea-3C：档案落盘（退房即刷 + 10s 脏扫描共用）；无回调时只清脏标记
@@ -454,6 +480,7 @@ export class Room {
       case MSG.COLOSSUS_SLAM: this.onColossusSlam(player, msg); break;
       case MSG.AETHER_STATE: this.onAetherState(player, msg); break;
       case MSG.FINALE_STATE: this.onFinaleState(player, msg); break;
+      case MSG.SKIN_SET: this.onSkinSet(player, msg); break;
       case MSG.PLAYER_STATE: this.onPlayerState(player, msg); break;
       case MSG.PLAYER_FULL: this.onPlayerFull(player, msg); break;
       case MSG.ATTACK_PLAYER: this.onAttack(player, msg); break;

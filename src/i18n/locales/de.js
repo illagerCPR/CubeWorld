@@ -431,4 +431,8 @@ export const de = {
   "上传皮肤 PNG": "Skin-PNG hochladen",
   "恢复默认": "Auf Standard zurücksetzen",
   "皮肤须为 64×64 PNG（旧版 64×32 可自动转换）。": "Skin muss ein 64×64-PNG sein (alte 64×32 werden automatisch umgewandelt).",
+  "正版用户名": "Minecraft-Name",
+  "按用户名获取": "Nach Name abrufen",
+  "正在获取皮肤…": "Skin wird abgerufen…",
+  "获取失败：需连接中的服务器（代理 Mojang API）或改用上传 PNG。": "Abruf fehlgeschlagen: Verbundener Server (Mojang-API-Proxy) nötig oder PNG hochladen.",
 };

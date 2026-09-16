@@ -153,6 +153,62 @@ const adminHtml = (() => {
   } catch { return '<h1>管理面板文件缺失</h1>'; }
 })();
 
+// Build 21 M3：皮肤代理缓存（用户名小写 → {ts, payload}；5 分钟 TTL，规避 Mojang 限速）
+const skinCache = new Map();
+const SKIN_CACHE_TTL = 5 * 60 * 1000;
+
+// 皮肤代理专用 JSON 响应：带 CORS 头（前端 5173 与服务器 3001 跨端口，公开只读数据放行）
+function sendSkinJson(res, code, obj) {
+  const body = JSON.stringify(obj);
+  res.writeHead(code, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(body);
+}
+
+// 三跳代理：用户名 → uuid（api.mojang.com）→ textures（sessionserver）→ PNG（textures.minecraft.net）。
+// 返回 { data: dataURL, model: 'classic'|'slim', source: 'mojang', username }；失败给明确错误码。
+async function handleSkinLookup(res, username) {
+  if (!/^[A-Za-z0-9_]{3,16}$/.test(username)) {
+    sendSkinJson(res, 400, { error: '用户名格式无效（3-16 位字母/数字/下划线）' });
+    return;
+  }
+  const cacheKey = username.toLowerCase();
+  const cached = skinCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < SKIN_CACHE_TTL) {
+    sendSkinJson(res, 200, cached.payload);
+    return;
+  }
+  try {
+    const profRes = await fetch(`https://api.mojang.com/users/profiles/minecraft/${encodeURIComponent(username)}`);
+    if (profRes.status === 204 || profRes.status === 404) {
+      sendSkinJson(res, 404, { error: '未找到该正版用户名' });
+      return;
+    }
+    if (!profRes.ok) throw new Error(`mojang profile HTTP ${profRes.status}`);
+    const prof = await profRes.json();
+    if (!prof || !prof.id) { sendSkinJson(res, 404, { error: '未找到该正版用户名' }); return; }
+    const sessRes = await fetch(`https://sessionserver.mojang.com/session/minecraft/profile/${prof.id}`);
+    if (!sessRes.ok) throw new Error(`sessionserver HTTP ${sessRes.status}`);
+    const sess = await sessRes.json();
+    const prop = (sess.properties || []).find((x) => x.name === 'textures');
+    if (!prop) { sendSkinJson(res, 404, { error: '该账号没有皮肤数据' }); return; }
+    const tex = JSON.parse(Buffer.from(prop.value, 'base64').toString('utf8'));
+    const skinUrl = tex.textures && tex.textures.SKIN && tex.textures.SKIN.url;
+    if (!skinUrl) { sendSkinJson(res, 404, { error: '该账号没有皮肤 URL' }); return; }
+    const model = (tex.textures.SKIN.metadata && tex.textures.SKIN.metadata.model === 'slim') ? 'slim' : 'classic';
+    const imgRes = await fetch(skinUrl);
+    if (!imgRes.ok) throw new Error(`皮肤文件 HTTP ${imgRes.status}`);
+    const buf = Buffer.from(await imgRes.arrayBuffer());
+    const payload = { data: `data:image/png;base64,${buf.toString('base64')}`, model, source: 'mojang', username };
+    skinCache.set(cacheKey, { ts: Date.now(), payload });
+    sendSkinJson(res, 200, payload);
+  } catch (e) {
+    sendSkinJson(res, 502, { error: `皮肤代理失败：${e.message}` });
+  }
+}
+
 // 阶段5 管理面板鉴权：管理账号列表非空时开启，API 请求须带 Authorization: Bearer <token>
 // 阶段10：升级为多账号（serverConfig.adminAccounts），任一未过期账号均可通过；旧 adminToken 等价于 default 账号
 // 账号过期 → 'expired'（仅放行 POST /api/config 续期/关闭，其余 401）
@@ -194,6 +250,14 @@ function maskedConfig() {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://' + req.headers.host);
   const p = url.pathname;
+
+  // Build 21 M3：玩家皮肤代理（公开 GET——玩家无管理口令也能用；Mojang API 无 CORS
+  // 头且面向服务端设计，浏览器直连会被拦，经服务器中转三跳：用户名→uuid→textures→PNG）。
+  if (req.method === 'GET' && p.startsWith('/api/skin/')) {
+    const username = decodeURIComponent(p.slice('/api/skin/'.length)).trim();
+    await handleSkinLookup(res, username);
+    return;
+  }
 
   // 管理面板页面
   if (req.method === 'GET' && p === '/') {
