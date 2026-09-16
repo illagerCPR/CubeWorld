@@ -56,6 +56,8 @@ export class StructureManager {
   constructor(generator, seed) {
     this.generator = generator;
     this.seed = seed;
+    // 烘焙开关：置 true 时 decorateChunk 短路（全景烘焙要求画面零建筑），不影响记录查询
+    this.disabled = false;
     // 布局缓存：key = "type|ccx|ccz" -> record | null（null=选址未通过，同样缓存避免重复评估）
     this.cache = new Map();
     this.maxCache = 128; // 长距离探索会积累 null 记录，调小会挤掉村庄记录（村民生成路径已抗驱逐，此为兜底）
@@ -160,6 +162,7 @@ export class StructureManager {
 
   // 区块装饰入口：树之后调用。绝大多数区块在包围盒测试处 O(cell数) 跳过。
   decorateChunk(chunk) {
+    if (this.disabled) return;
     if (structureTypes.size === 0) return;
     const { cx, cz } = chunk;
     for (const [name, def] of structureTypes) {
@@ -180,6 +183,38 @@ export class StructureManager {
         }
       }
     }
+  }
+
+  // 树让位查询：返回与本区块（外扩 margin）相交的结构足迹盒数组。
+  // 树 pass 在结构 pass 之前，树/巨型蘑菇生成前查此表跳过，避免树冠伸进建筑
+  // （原版 MC 同款"树让位结构"）。与 decorateChunk 同一套 cell 扫描与记录缓存——
+  // 纯查询、不写块、确定性、与区块生成顺序无关（联机两端一致）。
+  footprintsNear(cx, cz, margin = 3) {
+    if (structureTypes.size === 0) return [];
+    const out = [];
+    const bx0 = cx * CHUNK_SIZE - margin, bx1 = cx * CHUNK_SIZE + CHUNK_SIZE - 1 + margin;
+    const bz0 = cz * CHUNK_SIZE - margin, bz1 = cz * CHUNK_SIZE + CHUNK_SIZE - 1 + margin;
+    for (const [name, def] of structureTypes) {
+      if (!dimMatches(def, this.generator)) continue;
+      const rChunks = Math.ceil(def.radius / CHUNK_SIZE) + 1;
+      const c0x = Math.floor((cx - rChunks) / def.cell);
+      const c1x = Math.floor((cx + rChunks) / def.cell);
+      const c0z = Math.floor((cz - rChunks) / def.cell);
+      const c1z = Math.floor((cz + rChunks) / def.cell);
+      for (let ccx = c0x; ccx <= c1x; ccx++) {
+        for (let ccz = c0z; ccz <= c1z; ccz++) {
+          const rec = this._cellRecord(name, def, ccx, ccz);
+          if (!rec) continue;
+          if (rec.maxX < bx0 || rec.minX > bx1 || rec.maxZ < bz0 || rec.minZ > bz1) continue;
+          out.push({
+            name,
+            minX: rec.minX - margin, maxX: rec.maxX + margin,
+            minZ: rec.minZ - margin, maxZ: rec.maxZ + margin,
+          });
+        }
+      }
+    }
+    return out;
   }
 
   // 逐块裁剪：只写落在当前区块内的方块；同坐标后写覆盖先写（求解方的追加顺序即绘制优先级）

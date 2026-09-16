@@ -41,9 +41,10 @@ export function solveVillage(rng, ax, groundY, az, gen) {
   const ID = {
     glass: blockId('glass'), door: blockId('oak_door'), torch: blockId('torch'),
     hay: blockId('hay_block'), water: blockId('water'), cobble: blockId('cobblestone'),
-    log: blockId('oak_log'), dirt: blockId('dirt'), pumpkin: blockId('pumpkin'),
-    melon: blockId('melon'), bed: blockId('white_bed'), craft: blockId('crafting_table'),
+    log: blockId('oak_log'), pumpkin: blockId('pumpkin'),
+    bed: blockId('white_bed'), craft: blockId('crafting_table'),
     furnace: blockId('furnace'), wool: blockId('white_wool'), chest: blockId('chest'),
+    farmland: blockId('farmland'),
   };
 
   const blocks = [];
@@ -172,24 +173,26 @@ export function solveVillage(rng, ax, groundY, az, gen) {
     spawnAt(spawn[0], spawn[1]);
   }
 
-  // ── 农田：原木边框 + 水渠 + 泥垄 + 南瓜/西瓜 ──────────────────────────
+  // ── 农田：原木边框 + 中央水渠 + 耕地垄 + 小麦（原版式，阶段由确定性 rng 抛签）──
   function buildFarm(cx, cz, w, d) {
     const x0 = cx - (w >> 1), x1 = x0 + w - 1;
     const z0 = cz - (d >> 1), z1 = z0 + d - 1;
     foundation(blocks, x0, z0, x1, z1, groundY, M.base, baseAt);
     clearBox(blocks, x0, groundY + 1, z0, x1, groundY + CLEAR_TOP, z1);
+    const midX = (x0 + x1) >> 1;
     for (let x = x0; x <= x1; x++) {
       for (let z = z0; z <= z1; z++) {
         const border = x === x0 || x === x1 || z === z0 || z === z1;
-        if (border) blocks.push([x, groundY + 1, z, ID.log]);
-        else blocks.push([x, groundY, z, ID.dirt]);
+        if (border) {
+          blocks.push([x, groundY + 1, z, ID.log]);
+        } else if (x === midX) {
+          blocks.push([x, groundY, z, ID.water]);
+        } else {
+          blocks.push([x, groundY, z, ID.farmland]);
+          const stage = Math.floor(rng() * 8); // wheat_crop_0..7，消耗次数由布局唯一确定
+          blocks.push([x, groundY + 1, z, blockId('wheat_crop_' + stage)]);
+        }
       }
-    }
-    const midX = (x0 + x1) >> 1;
-    for (let z = z0 + 1; z <= z1 - 1; z++) blocks.push([midX, groundY, z, ID.water]);
-    for (let z = z0 + 2; z <= z1 - 2; z += 2) {
-      blocks.push([midX - 1, groundY + 1, z, rng() < 0.5 ? ID.pumpkin : ID.melon]);
-      blocks.push([midX + 1, groundY + 1, z, rng() < 0.5 ? ID.pumpkin : ID.melon]);
     }
     spawnAt(x0 - 1, cz);
   }

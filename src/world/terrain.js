@@ -43,6 +43,8 @@ const CAVE_LAVA_LEVEL = 10;      // 挖空处 y ≤ 此值填岩浆（MC 风格�
 // 按 per-block 哈希概率置换——盐值/概率改动会移动全服黑曜石，联机两端必须同版本
 const OBSIDIAN_SALT = 7717;
 const OBSIDIAN_P = 0.07;
+// 树让位结构的足迹外扩格数（盖住树冠半径，原版 MC 同款"树不在建筑足迹附近生成"）
+const TREE_CLEAR_MARGIN = 3;
 
 export class TerrainGenerator {
   constructor(seed, biomeScale = DEFAULT_BIOME_SCALE) {
@@ -220,8 +222,8 @@ export class TerrainGenerator {
       }
     }
 
-    // 结构生成（树等）
-    this.generateStructures(chunk);
+    // 结构生成（树等；先查建筑足迹盒——树让位结构，防树冠伸进建筑）
+    this.generateStructures(chunk, this.structureManager.footprintsNear(cx, cz, TREE_CLEAR_MARGIN));
     // 自然建筑（村庄/要塞等，锚点网格 + 确定性布局 + 逐区块裁剪）
     this.structureManager.decorateChunk(chunk);
     chunk.generated = true;
@@ -310,12 +312,22 @@ export class TerrainGenerator {
     return null;
   }
 
-  // 结构：树、仙人掌等
-  generateStructures(chunk) {
+  // 结构：树、仙人掌等。footprints = footprintsNear 的足迹盒（外扩已含树冠半径），
+  // 命中的柱不生成树/巨型蘑菇。守卫放在 rand() 判定之后：footprints 为空的区块
+  // （绝大多数）植被 rand 流与旧版逐字节一致；仅足迹覆盖的区块内，命中列之后的
+  // 植被序列会移位（村庄周边本就清场，无碍）。
+  generateStructures(chunk, footprints = []) {
     const { cx, cz } = chunk;
     let r = (cx * 73856093) ^ (cz * 19349663) ^ (this.seed * 83492791);
     r = r >>> 0;
     const rand = () => { r = (r * 1664525 + 1013904223) >>> 0; return r / 4294967296; };
+    const inFootprint = (wx, wz) => {
+      for (let i = 0; i < footprints.length; i++) {
+        const f = footprints[i];
+        if (wx >= f.minX && wx <= f.maxX && wz >= f.minZ && wz <= f.maxZ) return true;
+      }
+      return false;
+    };
     
     for (let x = 2; x < CHUNK_SIZE - 2; x++) {
       for (let z = 2; z < CHUNK_SIZE - 2; z++) {
@@ -336,16 +348,18 @@ export class TerrainGenerator {
         const surfaceBlock = chunk.get(x, surfaceY, z);
         const surfaceName = BlockRegistry.getById(surfaceBlock)?.name;
         
-        // 树（生成位置若被水方块占据则跳过，避免水中生树）
+        // 树（生成位置若被水方块占据则跳过，避免水中生树；足迹盒内让位建筑）
         if (cfg.treeChance && rand() < cfg.treeChance &&
             surfaceName === cfg.surfaceBlock &&
-            chunk.get(x, surfaceY + 1, z) !== WATER()) {
+            chunk.get(x, surfaceY + 1, z) !== WATER() &&
+            !inFootprint(wx, wz)) {
           this.placeTree(chunk, x, surfaceY + 1, z, cfg.treeType, rand);
         }
-        // 巨型蘑菇：菌柄柱 + 顶层 3×3 伞盖（蘑菇岛专属，类似树）
+        // 巨型蘑菇：菌柄柱 + 顶层 3×3 伞盖（蘑菇岛专属，类似树；足迹盒内让位）
         if (cfg.hugeMushroomChance && rand() < cfg.hugeMushroomChance &&
             surfaceName === cfg.surfaceBlock &&
-            surfaceY + 7 < CHUNK_HEIGHT) {
+            surfaceY + 7 < CHUNK_HEIGHT &&
+            !inFootprint(wx, wz)) {
           this.placeMushroom(chunk, x, surfaceY + 1, z, rand);
         }
         // 向日葵（cross 花海）

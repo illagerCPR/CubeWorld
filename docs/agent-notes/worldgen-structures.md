@@ -41,6 +41,13 @@
 - **存档**：`SaveSystem.save` 写 `data.biomeScale`，`listSaves` 返回读档显示（旧档无字段回落 small，不回写）；菜单槽位仅非 small 显示「群系:X」。
 - **冒烟锚点**：新建 huge 世界 eval 断言 `game.biomeScale==='huge' && world.generator.biomeFreqMul===0.22`；联机 host 选档后 join 端 `biomeScale` 自动一致、两端 `generator.getBiome(同坐标)` 同值。
 
+### B25 批次备忘（防回退）—— 树让位结构 / 村庄耕地麦田 / 全景禁结构
+
+- **树让位机制（Build 25）**：`StructureManager.footprintsNear(cx, cz, margin=3)` 复用 decorateChunk 的 cell 扫描与记录缓存（纯查询不写块，确定性、区块顺序无关）；`generateChunk` 在树 pass 前取足迹盒传入 `generateStructures(chunk, footprints)`，树/巨型蘑菇判定加 `!inFootprint(wx, wz)`。**margin=3 的依据**：树冠半径 ≤2（橡木球状/云杉层状最大 r=2）+ 树干让位 → 树冠最远 bbox+2，建筑本体与外扩 1 均零树冠（build25-fixes 行为断言）；**回归验证盒只能用 bbox 本体或外扩 1**，bbox+2~3 出现树冠属预期（树站在足迹外 4 格、树冠伸到 +2 是合法风景），勿误判为漏。守卫放在 rand() 判定之后：footprints 为空的区块植被 rand 流与旧版逐字节一致；足迹覆盖区块内命中列之后的植被序列移位（村庄周边本就清场，无碍）。
+- **村庄农田（Build 25）**：`buildFarm` = 原木边框 + 中央水渠 + farmland 耕地 + `wheat_crop_0..7`（`Math.floor(rng()*8)` 抛签）；farm 是村庄 rng 流的最后消费者，其内 rng 消耗次数变化不影响房屋/道路/料堆布局；`ID.melon` 已移除（别处勿再引用）。旧 seed 农田方块因此变化属本批明确要求。
+- **全景禁结构（Build 25）**：`StructureManager.disabled`（decorateChunk 开头短路）只影响装饰写入，**不影响记录查询**（chestTableAt/recordsAround 照常）——烘焙世界 `world.generator.structureManager.disabled = true` 后画面零建筑。全景机位：`FACE_PLANS` 六群系各一面（蘑菇岛/沙漠/向日葵平原/针叶林/积雪针叶林/沼泽）+ `pickBiomeSpot` 纯函数环形扫描（步长 24、maxR 6000、八向探针同群系+陆地+平整）+ `avoidWaterYaw`；**per-face 生命周期**（prepareFace 加载±5→建mesh→拍→releaseFace dispose+`world.chunks.clear()`）控制内存峰值=单机位；`Sky.update(0.016, faceCenter)` 每面落地天穹。烘焙时长 15s→~2 分钟（6 机位各自加载）属预期。
+- **seed 类型陷阱重申（冒烟必查）**：node 验证用数字 seed（`20250903`），游戏菜单/`game.start` 传字符串（`'20250903'`）——**完全不同的噪声场与村庄位置**。浏览器冒烟坐标与 node 断言对不上时，先核对两侧 seed 类型是否一致（本批实际踩到：字符串世界同坐标 farmland=0）。
+
 ### 群系扩展批次备忘（防回退）—— B1 基建/高山/桦木森林/针叶林（B2 沼泽、B3 向日葵平原+蘑菇岛待做）
 
 - **BiomeConfig 参数化高度（勿回退硬编码）**：`getBaseHeight` 群系调制全部查配置——`heightScale`（fbm 振幅）/`heightOffset`（固定抬升，原雪原+8/沙漠-2 已迁入）/`peakBoost`（高山超出 MOUNTAIN_T 的余量加成，山脊越核心越高）/`snowLine`（≥ 此高度表面铺雪块+顶部雪层）/`gravelPatch`（detailNoise>0.55 成片置换表面为砾石）。新增群系先填这些字段，勿在 terrain.js 加 if 分支。
