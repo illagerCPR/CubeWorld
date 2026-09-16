@@ -153,6 +153,18 @@ export class ChunkMeshBuilder {
     const blocks = chunk.blocks;
     const ox = chunk.cx * CHUNK_SIZE;
     const oz = chunk.cz * CHUNK_SIZE;
+    // 记录本次构建时缺失的边界邻居：缺失方向经 world.getBlock 拿到 0（空气），
+    // 边界面会被多画（水柱整列侧面最明显，远看呈区块对齐的直线分界 CW-1）。
+    // 仅主线程调用（worker 只跑 _collectData，不进此函数）；邻居就绪后由
+    // World._finalizeChunk 读回此掩码反向触发重建
+    if (this.world) {
+      let edgeMask = 0;
+      if (!this.world.getChunk(chunk.cx - 1, chunk.cz)) edgeMask |= 1;
+      if (!this.world.getChunk(chunk.cx + 1, chunk.cz)) edgeMask |= 2;
+      if (!this.world.getChunk(chunk.cx, chunk.cz - 1)) edgeMask |= 4;
+      if (!this.world.getChunk(chunk.cx, chunk.cz + 1)) edgeMask |= 8;
+      chunk._meshEdgeMask = edgeMask;
+    }
     for (let y = 0; y < CHUNK_HEIGHT; y++) {
       for (let z = -1; z <= CHUNK_SIZE; z++) {
         const rowBase = (y * PAD + z + 1) * PAD;

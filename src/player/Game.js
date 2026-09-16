@@ -1251,6 +1251,10 @@ export class Game {
     const version = ++this._meshBuildSeq;
     chunk._meshVersion = version;
     chunk._meshInFlight = true;
+    // 派发快照吸收当前 dirty（回执落地后不再清）：
+    // 在途窗口内的新标脏（邻居加载/光照泛洪/setBlock）会保留到落地后、下帧重建——
+    // 旧版回执无条件清 dirty，在途期间的重建请求被吞，边界面伪影残留（CW-1）
+    chunk.dirty = false;
     mw.build(chunk.cx, chunk.cz,
       builder._cache.slice(), builder._skyCache.slice(), builder._blockLCache.slice(),
       { smoothLighting: RenderQuality.smoothLighting, aoEnabled: RenderQuality.aoEnabled },
@@ -1269,12 +1273,12 @@ export class Game {
     return true;
   }
 
-  // worker 回执落地：装配并替换旧网格
+  // worker 回执落地：装配并替换旧网格。
+  // 不在此清 dirty——派发时已吸收为 false；在途期间被标脏则保持 true、下帧重建
   _applyMeshOut(chunk, out) {
     this._removeChunkMeshes(chunk);
     const meshes = this.chunkBuilder.assembleMeshes(out, chunk);
     this._attachChunkMeshes(chunk, meshes);
-    chunk.dirty = false;
   }
 
   _removeChunkMeshes(chunk) {

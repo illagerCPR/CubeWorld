@@ -2,6 +2,8 @@
 // 在固定种子世界的美景机位，用 6 个 90° 方向各渲染一张 512²，导出 JPEG dataURL。
 // 产物保存为 res/panorama/{px,nx,py,ny,pz,nz}.jpg，由 Panorama 播放器加载（贴 cubemap 球面旋转播放）。
 // 烘焙时云层隐藏（播放器单独叠加动态云），体素光定格上午。
+// Build 24：机位优先选村庄附近（平原/沙漠村庄环扫 24~56 格）；完整光照增强档烘焙——
+// ACES 色调映射 + PostFX（泛光/体积光/分级）+ 水面真反射 + 太阳阴影贴图（4 子项全开）。
 import * as THREE from 'three';
 import { World } from '../core/World.js';
 import { CHUNK_SIZE } from '../core/Chunk.js';
@@ -10,7 +12,9 @@ import { Sky } from './Sky.js';
 import { SVGTextures } from './SVGTextures.js';
 import { BlockSVGDefinitions } from '../blocks/BlockDefs.js';
 import { ItemSVGDefinitions } from '../items/ItemDefs.js';
-import { VoxelLightUniforms } from './VoxelLight.js';
+import { VoxelLightUniforms, GfxState, ShadowUniforms } from './VoxelLight.js';
+import { PostFX } from './PostFX.js';
+import { SunShadow } from './SunShadow.js';
 
 export const PANO_SIZE = 512;
 const SEED = 20250903;
@@ -35,25 +39,43 @@ function surfaceTop(world, x, z) {
   return { y: 40, name: '' };
 }
 
-// 找开阔机位候选（按优先级排序）：baseHeight 陆地、四向 12 格同为陆地且高差小
-function pickVantageCandidates(world) {
+// 找距原点最近的村庄锚点（确定性结构求解，不生成区块）
+function pickVillage(world) {
+  const sm = world.generator.structureManager;
+  const recs = sm.recordsAround('village', 0, 0, 8);
+  let best = null, bd = Infinity;
+  for (const rec of recs) {
+    const d = rec.ax * rec.ax + rec.az * rec.az;
+    if (d < bd) { bd = d; best = rec; }
+  }
+  return best; // { ax, az, groundY, ... } | null
+}
+
+// 找开阔机位候选（按优先级排序）：baseHeight 陆地、四向 12 格同为陆地且高差小。
+// 有村庄时以村庄锚点为圆心在 24~56 格环扫（村庄入景且不被建筑遮挡）；否则绕原点。
+function pickVantageCandidates(world, vc) {
   const g = world.generator;
   const probe = [[12, 0], [-12, 0], [0, 12], [0, -12]];
   const cands = [];
-  for (let r = 0; r <= 16; r += 4) {
-    for (let a = 0; a < 16; a++) {
-      const x = Math.round(Math.cos((a / 16) * Math.PI * 2) * r);
-      const z = Math.round(Math.sin((a / 16) * Math.PI * 2) * r);
-      const h = g.getBaseHeight(x, z);
-      if (h < 64 || h > 72) continue;
-      let ok = true, minH = h, maxH = h;
-      for (const [dx, dz] of probe) {
-        const hh = g.getBaseHeight(x + dx, z + dz);
-        if (hh < 63) { ok = false; break; }
-        minH = Math.min(minH, hh); maxH = Math.max(maxH, hh);
+  const rings = vc ? [[24, 56, 8]] : [[0, 16, 4]];
+  const cx0 = vc ? vc.ax : 0, cz0 = vc ? vc.az : 0;
+  for (const [r0, r1, step] of rings) {
+    for (let r = r0; r <= r1; r += step) {
+      for (let a = 0; a < 32; a++) {
+        const x = Math.round(cx0 + Math.cos((a / 32) * Math.PI * 2) * r);
+        const z = Math.round(cz0 + Math.sin((a / 32) * Math.PI * 2) * r);
+        const h = g.getBaseHeight(x, z);
+        if (h < 64 || h > 72) continue;
+        let ok = true, minH = h, maxH = h;
+        for (const [dx, dz] of probe) {
+          const hh = g.getBaseHeight(x + dx, z + dz);
+          if (hh < 63) { ok = false; break; }
+          minH = Math.min(minH, hh); maxH = Math.max(maxH, hh);
+        }
+        if (ok && maxH - minH <= 6) cands.push({ x, z, h });
       }
-      if (ok && maxH - minH <= 6) cands.push({ x, z, h });
     }
+    if (cands.length) break;
   }
   if (!cands.length) cands.push({ x: 8, z: 8, h: g.getBaseHeight(8, 8) });
   return cands;
@@ -74,7 +96,9 @@ async function buildWorldScene() {
   const builder = new ChunkMeshBuilder(world, atlasTexture, atlasUV, waterTexture);
 
   console.log('[Bake] 阶段1: 图集完成');
-  const cands = pickVantageCandidates(world);
+  const vc = pickVillage(world);
+  if (vc) console.log('[Bake] 村庄锚点', vc.ax, vc.az, 'groundY', vc.groundY);
+  const cands = pickVantageCandidates(world, vc);
   console.log('[Bake] 阶段2: 候选', cands.length);
   const chunkSet = new Set();
   for (const cand of cands) {
@@ -175,22 +199,52 @@ async function buildWorldScene() {
   // 体素光定格上午
   VoxelLightUniforms.uDayLight.value = 0.10 + 0.90 * sky.getLightLevel();
   VoxelLightUniforms.uSunTint.value.copy(sky.sunTint);
-  return { scene, center, yaw };
+  return { scene, center, yaw, sky, world, builder };
 }
 
 // 渲染 6 面并返回 { px: dataURL, ... }
 export async function bakePanorama(rendererWrapper) {
   const renderer = rendererWrapper.renderer; // Game.renderer 是封装类，THREE 实例在 .renderer
-  const { scene, center, yaw } = await buildWorldScene();
+  const { scene, center, yaw, sky, world, builder } = await buildWorldScene();
   const camera = new THREE.PerspectiveCamera(90, 1, 0.1, 1000);
+  // 完整档：体积光天体在 layer 1、反射排除层水面在 layer 2（与 Game 相机分层一致）
+  camera.layers.enable(1);
+  camera.layers.enable(2);
   const oldSize = new THREE.Vector2();
   renderer.getSize(oldSize);
   const oldPixelRatio = renderer.getPixelRatio();
+  const oldToneMapping = renderer.toneMapping;
+  const oldShadowEnabled = renderer.shadowMap.enabled;
   renderer.setPixelRatio(1);
   renderer.setSize(PANO_SIZE, PANO_SIZE);
   camera.aspect = 1;
   camera.updateProjectionMatrix();
-  console.log('[Bake] 阶段7: 六面渲染开始');
+  console.log('[Bake] 完整档接线: ACES + PostFX + 真反射 + 太阳阴影');
+  // ---- 光照增强完整档（4 子项全开）----
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.shadowMap.enabled = true;
+  const postfx = new PostFX(renderer);          // 泛光 + 体积光 + 色彩分级（512² RT 同步尺寸）
+  postfx.setSceneCamera(scene, camera);
+  postfx.setEnabled(true);
+  postfx.reflectionEnabled = true;              // 水面真反射（planar RT）
+  const sunShadow = new SunShadow(renderer);
+  sunShadow.init(sky.sunLight, scene);
+  sunShadow.enabled = true;
+  sunShadow.setReceive(true, world);
+  GfxState.shadowReceive = true;
+  // HDR 提亮供泛光取源（与 Game.update 完整档同参）：光源块 2.2 / 太阳盘 1.25；日晕隐藏
+  GfxState.lightBoost = 2.2;
+  builder.lightMaterial.color.setScalar(2.2);
+  if (sky.sun) sky.sun.material.color.setScalar(1.25);
+  if (sky.sunGlow) sky.sunGlow.visible = false;
+  VoxelLightUniforms.uCloudShadow.value = 0;    // 云已隐藏（播放器动态叠加），云影关闭
+  // 预热一帧：首次 shadow pass 建 map，之后 uShadowOn 生效、正式面全带影子
+  sunShadow.update(center, 5);
+  postfx.render(scene, camera);
+  sunShadow.update(center, 5);
+  ShadowUniforms.uShadowOn.value = sunShadow.ready ? 1 : 0;
+  console.log('[Bake] 阶段7: 六面渲染开始 (shadow ready=' + sunShadow.ready + ')');
   const out = {};
   try {
     for (const [name, dir, up] of FACES) {
@@ -198,7 +252,10 @@ export async function bakePanorama(rendererWrapper) {
       camera.rotation.set(0, 0, 0);
       camera.up.set(up[0], up[1], up[2]);
       camera.lookAt(center.x + dir[0], center.y + dir[1], center.z + dir[2]);
-      renderer.render(scene, camera);
+      // 逐面刷新体积光投影与 shadow 相机（map 与矩阵同帧），PostFX 链完成反射/泛光/分级
+      postfx.updateGodRays(sky, camera);
+      sunShadow.update(center, 5);
+      postfx.render(scene, camera);
       const gl = renderer.getContext();
       const px = new Uint8Array(PANO_SIZE * PANO_SIZE * 4);
       gl.readPixels(0, 0, PANO_SIZE, PANO_SIZE, gl.RGBA, gl.UNSIGNED_BYTE, px);
@@ -216,6 +273,8 @@ export async function bakePanorama(rendererWrapper) {
   } finally {
     renderer.setPixelRatio(oldPixelRatio);
     renderer.setSize(oldSize.x, oldSize.y);
+    renderer.toneMapping = oldToneMapping;
+    renderer.shadowMap.enabled = oldShadowEnabled;
   }
   return { faces: out, center: center.toArray(), yaw };
 }

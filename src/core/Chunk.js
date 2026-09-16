@@ -14,6 +14,10 @@ export class Chunk {
     this.light = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * CHUNK_HEIGHT);
     this.hasLight = false; // 光照是否已初始化（生成后由 LightEngine 填充）
     this.dirty = true;
+    // 最近一次网格构建时缺失的边界邻居方向位（1=-x 2=+x 4=-z 8=+z）：
+    // 缺失方向被当空气构建，会多画本应剔除的边界面（CW-1 直线分界根因）；
+    // 邻居加载后由 World._finalizeChunk 据此反向触发本区块重建
+    this._meshEdgeMask = 0;
     this.mesh = null;
     this.waterMesh = null;
     this.lightMesh = null;

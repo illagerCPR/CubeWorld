@@ -110,6 +110,15 @@ export class World {
         }
       }
     }
+    // CW-1 修补：新区块就绪后，反向重建曾把本区块当空气构建过网格的邻居。
+    // 旧网格在缺失方向多画了边界面（水柱整列侧面远看呈区块对齐的直线分界）；
+    // 仅靠 initChunkLight 光照泛洪标脏不够——露天海面等无价差边界不触发泛洪，
+    // 多余面会永久残留（放置方块重建后消失的正是这些面）
+    const edgeFix = [[-1, 0, 2], [1, 0, 1], [0, -1, 8], [0, 1, 4]]; // [dx, dz, 邻居缺失位]
+    for (const [dx, dz, bit] of edgeFix) {
+      const n = this.getChunk(c.cx + dx, c.cz + dz);
+      if (n && (n._meshEdgeMask & bit)) n.dirty = true;
+    }
   }
 
   // B-①：异步预取区块（worker 生成，Transferable 回传）。
