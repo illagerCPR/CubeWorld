@@ -24,6 +24,9 @@ export const MSG = {
   // 方块
   BLOCK_SET: 'block_set',
   BLOCK_CHANGE: 'block_change',
+  // B26 流体批量：host 权威模拟的连续方块改动 250ms 窗口合并（限速按消息计不按格数）
+  BLOCK_SET_BATCH: 'block_set_batch',       // C2S
+  BLOCK_CHANGE_BATCH: 'block_change_batch', // S2C
 
   // 容器（T5：箱子内容整箱同步；服务器账本持久化 + 新加入者回放）
   CONTAINER_SET: 'container_set',

@@ -32,6 +32,7 @@ function register(def) {
     minTier: def.minTier ?? 0,
     light: def.light ?? 0,
     fluid: def.fluid ?? false,
+    fluidType: def.fluidType || null, // B26 流体模拟：'water'/'lava'（流动等级方块与源同值，判定按此不按 name）
     renderType: def.renderType || 'cube',
     updraft: def.updraft ?? false, // 天域批次 B：上升气流柱（Game._updateUpdraftState 消费）
     lore: def.lore || null, // 世界观批次 N1：方块悬浮 lore（InventoryScreen._bindHover 消费）

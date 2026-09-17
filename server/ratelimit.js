@@ -38,6 +38,7 @@ export class RateLimiter {
 export function tierOf(msgType, MSG) {
   if (msgType === MSG.CHAT) return 'chat';           // 含 '/' 命令（同走 chat 档）
   if (msgType === MSG.BLOCK_SET) return 'block';
+  if (msgType === MSG.BLOCK_SET_BATCH) return 'block'; // B26：批量按 1 条计（不按格数，防流动模拟误伤限速）
   if (msgType === MSG.PLAYER_STATE) return 'state';
   return null;
 }

@@ -115,7 +115,7 @@ export class EntityPhysics {
     );
     if (id === 0) return false;
     const def = BlockRegistry.getById(id);
-    return def && def.name === 'water';
+    return def && def.fluidType === 'water';
   }
 
   isInLava(entity) {
@@ -126,6 +126,6 @@ export class EntityPhysics {
     );
     if (id === 0) return false;
     const def = BlockRegistry.getById(id);
-    return def && def.name === 'lava';
+    return def && def.fluidType === 'lava';
   }
 }

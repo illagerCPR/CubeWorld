@@ -1019,13 +1019,13 @@ export class MobManager {
       const bodyDef = BlockRegistry.getById(this.world.getBlock(
         Math.floor(drop.position.x), Math.floor(drop.position.y + 0.05), Math.floor(drop.position.z)));
       // 岩浆销毁（原版：掉落物入岩浆即焚；联机销毁端上报 drop_taken 清账本，防幽灵拾取）
-      if (bodyDef && bodyDef.fluid && bodyDef.name === 'lava') {
+      if (bodyDef && bodyDef.fluidType === 'lava') {
         if (drop.mesh) this.scene.remove(drop.mesh);
         this.droppedItems.splice(i, 1);
         if (drop.id != null && this.onDropTaken) this.onDropTaken(drop.id);
         continue;
       }
-      const inWater = !!(bodyDef && bodyDef.fluid && bodyDef.name === 'water');
+      const inWater = !!(bodyDef && bodyDef.fluidType === 'water');
 
       // 重力/浮力：水中强阻尼向上趋近 2.2 m/s（终端沉降 -2.5，入水快速减速漂浮）；空气 -32
       if (inWater) {

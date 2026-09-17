@@ -35,6 +35,9 @@ export class NetworkManager {
     this._reconnectAttempt = 0;   // 当前重连尝试次数
     this._reconnectTimer = null;  // 重连定时器
     this._explicitClose = false;  // 主动关闭（returnToMenu）则不自动重连
+    // B26 流体批量发送：流体模拟改动 250ms 窗口覆盖式合并（同格只发最新），玩家操作保持单条即时
+    this._fluidBatch = new Map();     // posKey -> [x,y,z,id]
+    this._fluidBatchTimer = null;
     this.onStatusChange = null;   // (status: 'connected'|'reconnecting'|'closed', text) => void
     // 阶段10：RTT 直测（应用层 ping/pong 计时），供插值自适应与信息栏显示
     // 阶段11：rttMs + rttJitterMs（抖动 EMA）经 netStats 纯函数维护
@@ -321,6 +324,15 @@ export class NetworkManager {
         if (this._ready) this.applyRemoteBlock(msg.x, msg.y, msg.z, msg.id);
         else this._pendingBlocks.push(msg);
         break;
+      case MSG.BLOCK_CHANGE_BATCH:
+        // B26：流体批量广播，逐格走与单条相同的落地/缓存路径
+        if (msg.d && this.game.world && msg.d !== this.game.world.dimension) break;
+        for (const it of (Array.isArray(msg.list) ? msg.list : [])) {
+          if (!Array.isArray(it) || it.length !== 4) continue;
+          if (this._ready) this.applyRemoteBlock(it[0], it[1], it[2], it[3]);
+          else this._pendingBlocks.push({ x: it[0], y: it[1], z: it[2], id: it[3], d: msg.d });
+        }
+        break;
       case MSG.DROP_SPAWN:
         if (msg.d && this.game.world && msg.d !== this.game.world.dimension) break;
         if (this._ready) this._spawnDrop(msg);
@@ -505,8 +517,33 @@ export class NetworkManager {
   bindWorld(world) {
     world.onLocalBlockChange = (x, y, z, id) => {
       if (this._applyingRemote) return; // 远端落地不回环
+      // B26：流体模拟产生的改动走批量合并通道；玩家操作保持单条即时
+      if (world.fluidSim && world.fluidSim.writing) { this.queueFluidBlock(x, y, z, id); return; }
       this.sendBlock(x, y, z, id);
     };
+  }
+
+  // B26：流体改动入合并队列（覆盖式：同格保留最新 id）
+  queueFluidBlock(x, y, z, id) {
+    this._fluidBatch.set(`${x},${y},${z}`, [x, y, z, id]);
+    if (!this._fluidBatchTimer) {
+      this._fluidBatchTimer = setTimeout(() => {
+        this._fluidBatchTimer = null;
+        this.flushFluidBatch();
+      }, 250);
+    }
+  }
+
+  flushFluidBatch() {
+    if (!this._fluidBatch.size) return;
+    const list = [...this._fluidBatch.values()];
+    this._fluidBatch.clear();
+    this._send(MSG.BLOCK_SET_BATCH, { list });
+  }
+
+  clearFluidBatch() {
+    this._fluidBatch.clear();
+    if (this._fluidBatchTimer) { clearTimeout(this._fluidBatchTimer); this._fluidBatchTimer = null; }
   }
 
   // 本地发起方块修改（挖掘/放置/爆炸后调用）
@@ -679,6 +716,7 @@ export class NetworkManager {
   close() {
     this._explicitClose = true; // 主动关闭：不触发自动重连
     if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+    this.clearFluidBatch(); // B26：断开时丢弃未发流体批量（连接已失效，重连后由 host 全量收敛）
     if (this.ws) { try { this.ws.close(); } catch {} this.ws = null; }
     this.connected = false;
   }

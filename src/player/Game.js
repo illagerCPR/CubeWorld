@@ -759,7 +759,7 @@ export class Game {
     const bz = Math.floor(p.position.z);
     const id = this.world.getBlock(bx, by, bz);
     const def = BlockRegistry.getById(id);
-    p.inWater = !!(def && def.fluid && def.name === 'water');
+    p.inWater = !!(def && def.fluid && def.fluidType === 'water');
 
     if (p.survival) {
       if (p.inWater) {
@@ -777,7 +777,7 @@ export class Game {
         p.onFire = 0;
       } else {
         const feetDef = BlockRegistry.getById(this.world.getBlock(bx, Math.floor(p.position.y + 0.2), bz));
-        const inLava = !!(def && def.fluid && def.name === 'lava') || !!(feetDef && feetDef.fluid && feetDef.name === 'lava');
+        const inLava = !!(def && def.fluidType === 'lava') || !!(feetDef && feetDef.fluidType === 'lava');
         if (inLava) p.onFire = 3;
       }
     }
@@ -1142,6 +1142,13 @@ export class Game {
     if (this._cropTimer >= 8) {
       this._cropTimer = 0;
       this._growCrops();
+    }
+
+    // B26 流体模拟（host/单机权威；客户端看 host 的方块广播收敛，与作物同款门控）
+    if (this.world && this.world.fluidSim) {
+      const isClient = !!(this.networkMode && this.net && !this.net.isHost);
+      this.world.fluidSim.muted = isClient; // 客户端不积累模拟队列（靠广播收敛）
+      if (!isClient) this.world.fluidSim.update(dt);
     }
 
     // 传送门穿越检测（所有模式；观战/死亡在函数内早退）
@@ -1787,8 +1794,9 @@ export class Game {
             return;
           }
         }
-        // 桶：空桶对准流体舀取 / 满桶对任意面倒出（本作水体静态，无流动模拟）
-        if (sel && sel.name === 'bucket' && targetDef && targetDef.fluid) {
+        // 桶：空桶只舀流体源（流动等级方块不可舀，原版规则）/ 满桶对任意面倒出（倒出即触发流动模拟）
+        if (sel && sel.name === 'bucket' && targetDef && targetDef.fluid
+            && (targetDef.name === 'water' || targetDef.name === 'lava')) {
           const filled = targetDef.name === 'water' ? 'water_bucket' : 'lava_bucket';
           this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
           if (this.player.survival) {

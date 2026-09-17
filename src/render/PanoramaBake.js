@@ -152,7 +152,7 @@ function avoidWaterYaw(world, x0, z0) {
     let w = 0;
     for (const r of [24, 40, 56]) {
       const sx = Math.round(x0 + Math.cos(yaw) * r), sz = Math.round(z0 + Math.sin(yaw) * r);
-      if (surfaceTop(world, sx, sz).name === 'water') w++;
+      if (surfaceTop(world, sx, sz).fluidType === 'water') w++;
     }
     if (w < bestW) { bestW = w; bestYaw = yaw; }
     if (w === 0) break;

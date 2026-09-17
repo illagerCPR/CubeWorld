@@ -234,6 +234,24 @@ else
     exit 1
 fi
 
+# Build 25 回归（纯 node：树让位/村庄麦田/单机位多群系全景）
+echo "=== build25-fixes ==="
+if node tests/build25-fixes.mjs; then
+    echo "build25-fixes: OK"
+else
+    echo "build25-fixes: FAILED"
+    exit 1
+fi
+
+# Build 26 流体模拟回归（纯 node：等级往返/扩散/消退/水岩浆生成/批量通道）
+echo "=== build26-fluid ==="
+if node tests/build26-fluid.mjs; then
+    echo "build26-fluid: OK"
+else
+    echo "build26-fluid: FAILED"
+    exit 1
+fi
+
 # 末影龙 Boss 回归（纯 node：类型注册/柱顶水晶/DragonAI 状态机/击败链路/末地门控）
 echo "=== end-dragon ==="
 if node tests/end-dragon.mjs; then

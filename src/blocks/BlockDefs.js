@@ -794,8 +794,16 @@ reg('red_sand', { tool: 'shovel', hardness: 0.5 }, { red_sand: noiseTex([190, 10
 reg('gravel', { tool: 'shovel', hardness: 0.6 }, { gravel: blotchTex([130, 124, 120], 13, { dark: 0.72, light: 1.2 }) });
 reg('clay', { tool: 'shovel', hardness: 0.6 }, { clay: noiseTex([163, 166, 179], 14, { dark: 0.94, light: 1.06 }) });
 reg('bedrock', { hardness: -1 }, { bedrock: blotchTex([100, 100, 100], 15, { dark: 0.45, light: 1.35, dProb: 0.3, lProb: 0.25 }) });
-reg('water', { solid: false, transparent: true, fluid: true, hardness: 100 }, { water: waterTex() });
-reg('lava', { displayName: '岩浆', solid: false, transparent: true, fluid: true, light: 15, hardness: 100 }, { lava: lavaTex(17) });
+reg('water', { solid: false, transparent: true, fluid: true, fluidType: 'water', hardness: 100 }, { water: waterTex() });
+reg('lava', { displayName: '岩浆', solid: false, transparent: true, fluid: true, fluidType: 'lava', light: 15, hardness: 100 }, { lava: lavaTex(17) });
+// --- 流体流动等级方块（B26 流体模拟）：等级 1 最强（紧邻源）→ N 最弱，数字越大越弱；
+// fluidType 供游泳/伤害/渲染分路判定（与源方块同值）；textures 复用源纹理避免图集膨胀
+for (let wl = 1; wl <= 7; wl++) {
+  reg(`water_flow_${wl}`, { solid: false, transparent: true, fluid: true, fluidType: 'water', textures: { top: 'water', side: 'water', bottom: 'water' }, hardness: 100 });
+}
+for (let ll = 1; ll <= 3; ll++) {
+  reg(`lava_flow_${ll}`, { displayName: '岩浆', solid: false, transparent: true, fluid: true, fluidType: 'lava', light: 15, textures: { top: 'lava', side: 'lava', bottom: 'lava' }, hardness: 100 });
+}
 reg('ice', { transparent: true, hardness: 0.5 }, { ice: iceTex(18) });
 reg('packed_ice', { hardness: 0.5 }, { packed_ice: iceTex(19, [138, 172, 222]) });
 reg('blue_ice', { hardness: 0.5 }, { blue_ice: iceTex(20, [110, 150, 222]) });

@@ -468,6 +468,7 @@ export class Room {
   handle(player, msg) {
     switch (msg.t) {
       case MSG.BLOCK_SET: this.onBlockSet(player, msg); break;
+      case MSG.BLOCK_SET_BATCH: this.onBlockSetBatch(player, msg); break;
       case MSG.CONTAINER_SET: this.onContainerSet(player, msg); break;
       case MSG.DROP_SPAWN: this.onDropSpawn(player, msg); break;
       case MSG.DROP_TAKEN: this.onDropTaken(player, msg); break;
@@ -511,6 +512,30 @@ export class Room {
       blocks.set(`${x},${y},${z}`, id);
     }
     this.broadcastDim(MSG.BLOCK_CHANGE, { x, y, z, id, by: player.id, d: dim }, dim, player.id);
+    this.save();
+  }
+
+  // B26 流体批量：逐格落账本（与单格同规则）后一条批量广播；限速按消息计（1 条）不按格数
+  onBlockSetBatch(player, msg) {
+    if (!Array.isArray(msg.list) || msg.list.length === 0 || msg.list.length > 512) return;
+    const dim = player.dim;
+    const blocks = this.dimBucket(this.dimensionBlocks, dim);
+    const containers = this.dimBucket(this.dimensionContainers, dim);
+    const changes = [];
+    for (const it of msg.list) {
+      if (!Array.isArray(it) || it.length !== 4) continue;
+      const x = safeInt(it[0]), y = safeInt(it[1]), z = safeInt(it[2]), id = safeInt(it[3]);
+      if (id < 0 || id > 65535) continue;
+      if (id === 0) {
+        blocks.delete(`${x},${y},${z}`);
+        containers.delete(`${x},${y},${z}`);
+      } else {
+        blocks.set(`${x},${y},${z}`, id);
+      }
+      changes.push([x, y, z, id]);
+    }
+    if (!changes.length) return;
+    this.broadcastDim(MSG.BLOCK_CHANGE_BATCH, { list: changes, by: player.id, d: dim }, dim, player.id);
     this.save();
   }
 

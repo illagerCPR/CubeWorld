@@ -36,7 +36,7 @@ export function isHydrated(world, x, y, z) {
       if (dx === 0 && dz === 0) continue;
       const id = world.getBlock(x + dx, y, z + dz);
       const def = BlockRegistry.getById(id);
-      if (def && def.fluid && def.name === 'water') return true;
+      if (def && def.fluidType === 'water') return true;
     }
   }
   return false;

@@ -309,7 +309,7 @@ export class ChunkMeshBuilder {
             continue;
           }
 
-          const isWater = def.fluid && def.name === 'water';
+          const isWater = def.fluid && def.fluidType === 'water';
           const hasLight = def.light >= 13 && !isWater;
           const targetPos = isWater ? waterPositions : positions;
           const targetNorm = isWater ? waterNormals : normals;
@@ -326,7 +326,8 @@ export class ChunkMeshBuilder {
 
             // 面剔除
             if (neighborDef && !neighborDef.transparent && !neighborDef.fluid) continue;
-            if (isWater && neighborId === id) continue;
+            // 同型流体相邻剔除内面（源/各流动等级互通；B26 流体模拟等级间不再画内壁）
+            if (def.fluid && neighborDef && neighborDef.fluid && neighborDef.fluidType === def.fluidType) continue;
             // 非水方块相邻流体：流体透明（水/岩浆）时绘制其面，否则剔除
             if (!isWater && neighborDef && neighborDef.fluid && !neighborDef.transparent) continue;
 
