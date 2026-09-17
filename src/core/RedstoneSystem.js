@@ -1,5 +1,6 @@
 // RedstoneSystem.js -- 红石信号传播与方块交互
 // 最小实现：lever/button 激活 -> 红石粉传播 -> piston/lamp/TNT/door 响应
+import { doorId, trapdoorId } from './blockShape.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
 
 const REDSTONE_WIRE = 'redstone_wire';
@@ -182,7 +183,8 @@ export class RedstoneSystem {
         if (power > 0) {
           this.detonateTNT(x, y, z);
         }
-      } else if (def.name === OAK_DOOR || def.name === IRON_DOOR || def.name === OAK_TRAPDOOR) {
+      } else if (def.part === 'door_lower' || def.part === 'door_upper' || def.part === 'trapdoor') {
+        // B27：门/活板门状态家族（状态 = ID 家族，任意半格/朝向/开合态都响应）
         const power = this.getPower(x, y, z);
         const wasPowered = this.poweredBlocks.get(k2) || false;
         const isPowered = power > 0;
@@ -226,30 +228,33 @@ export class RedstoneSystem {
     }
   }
 
-  // 切换门状态（简化：破坏门方块表示打开）
+  // 切换门/活板门开合（B27：状态 = 方块 ID 家族；废除旧"删除方块表示打开"）
   toggleDoor(x, y, z) {
     const bid = this.world.getBlock(x, y, z);
-    if (bid === 0) return;
+    if (bid === 0) return false;
     const def = BlockRegistry.getById(bid);
-    if (!def) return;
-    // 检查是否是门的下半部分，切换整个门
-    const above = this.world.getBlock(x, y + 1, z);
-    const below = this.world.getBlock(x, y - 1, z);
-    
-    // 简化实现：直接移除门方块（表示打开）
-    this.world.setBlock(x, y, z, 0);
-    if (above !== 0) {
-      const aboveDef = BlockRegistry.getById(above);
-      if (aboveDef && aboveDef.name === def.name) {
-        this.world.setBlock(x, y + 1, z, 0);
-      }
+    if (!def || !def.part) return false;
+    if (def.part === 'trapdoor') {
+      const nid = trapdoorId(def.facing, !def.open);
+      if (!nid) return false;
+      this.world.setBlock(x, y, z, nid);
+      return true;
     }
-    if (below !== 0) {
-      const belowDef = BlockRegistry.getById(below);
-      if (belowDef && belowDef.name === def.name) {
-        this.world.setBlock(x, y - 1, z, 0);
-      }
-    }
+    return this.setDoorOpen(x, y, z, !def.open);
+  }
+
+  // 把整扇门（上下半同步）切到目标开合态；从任一半的坐标调用均可。
+  // 返回 true = 已切换（setBlock 落账本/联机自动同步）。
+  setDoorOpen(x, y, z, open) {
+    const def = BlockRegistry.getById(this.world.getBlock(x, y, z));
+    if (!def || (def.part !== 'door_lower' && def.part !== 'door_upper')) return false;
+    const yLower = def.part === 'door_upper' ? y - 1 : y;
+    const lid = doorId(def.baseBlock, 'lower', def.facing, open);
+    const uid = doorId(def.baseBlock, 'upper', def.facing, open);
+    if (!lid || !uid) return false;
+    this.world.setBlock(x, yLower, z, lid);
+    this.world.setBlock(x, yLower + 1, z, uid);
+    return true;
   }
 
   // TNT 爆炸

@@ -70,3 +70,18 @@
 - **气动参数（Game.js 顶部常量，实测锚点）**：THRUST=8 / DRAG=0.994 / BRAKE=0.5 / LIFT=6 / DEPLOY_VY=-0.5；`GLIDE_GRAVITY=-9` 与**动态下沉上限** `-3.9/(1+vh*0.10)`（飞得快下沉缓——否则每次拉起都要先从 -3.9 深坑爬出，翱翔出不来）在 Physics.js（GLIDE_GRAVITY **导出**供 Game 升力上限引用）。锚点：俯冲 3s 8→10 m/s、极速 ~27；拉起（vh 9.5, pitch 0.5）爬升 ~4 格、vy 峰 +3 后失速；升力模型 = `sin(pitch)·vAlong·LIFT` 超过重力才净爬升（鼓励"俯冲攒速→拉起翱翔→失速回落"循环）。**CLIMB 混合/上旋模型已被升力模型替换**——混合模型被 collide 侧重力对抗压回负 vy（稳态 targetVy - 0.15/blend），勿回退。
 - **HUD**：`hud.setGliding(on)` 开关 `glideTag`（准星下方偏上"🪂 鞘翅滑翔中"）；hideAll/start/respawn 三处都要隐藏（Hud 跨存档共享）。
 - **验证手法**：滑翔读 `p.pitch` 字段不经相机——eval 直接设 pitch 可靠（与"射线瞄准必须真实 mouse move"的陷阱不冲突）；手动步进 `g.running=false + g.update(1/60)`；落地折叠断言要在循环退出后**再补一帧 update**（fold 在帧开头，落地帧内不折叠是正确时序）；断言"站立零抖动"跑 60 帧数 gliding 翻转次数（应为 0）。
+
+### B27 批次备忘（防回退）—— 床/门/活板门形制（状态 ID 家族 + shape AABB + 睡眠体验）
+
+- **状态 = 独立方块 ID 家族（沿用 B26 流体"等级=ID"模式，勿改回 metadata 副数组）**：门 32 状态（oak/iron × lower/upper × 4 朝向 × 开合，合计 16/材质）、活板门 8、床 8（头尾 ×4 朝向）。**base 本名保留旧语义**（`oak_door`=下半/朝北/关态、`white_bed`=床尾/朝北、`oak_trapdoor`=关态/朝北）——旧存档/联机账本零迁移。命名与 id 查询统一走 `src/core/blockShape.js`（`doorId/trapdoorId/bedId`），勿散写字符串拼接。注册总数 197/255，**再加分批前先核 Uint8 余量**。
+- **BlockRegistry 白名单又添 6 字段**：`shape/part/facing/open/baseBlock`（+B26 的 fluidType）——register() 是字段白名单式重建，新 def 字段漏加白名单=静默丢弃（B26 fluidType 同款陷阱），测试必须含逐字段透传断言（build27 ①段）。
+- **shape AABB 双消费者**：渲染 `ChunkMesh.addBox`（格内盒 6 面、无 AO、盒空间坐标即 UV 比例——窄条面天然取切条；**贴边内缩 E=0.0008 防与邻格同面 z-fighting**）与碰撞 `cellBox`（仅 shape 方块分配，满格路径零分配）。渲染内缩不影响碰撞（碰撞用原 shape 值）。UV 逐面映射表含镜像补偿（+Z/-X 面与实体面图案对齐），改 addBox 前先读注释表。
+- **碰撞改造（勿回退到满格判定）**：`Physics.moveAxis` 与 `EntityPhysics.moveAxis` 的重叠检测+回退全部按盒边界（满格=无 shape 分支）；**auto-jump 目标位校验同样盒感知**（床 9/16 顶上不算阻挡才能走上床）。**门/活板门面板禁 auto-jump 踏越**（`maxBlockTopIsDoor` 门控）——实测坑：站在坡顶（ feet+1.0 恰好=上格门板顶）时 auto-jump 会"爬门"翻过关门，原版语义门不可踏越。`EntityPhysics.isStandingOn` 等其余 def.solid 检查点保持满格语义（导航/出生点/活塞推挡）。
+- **红石切换（删除式开门已废除）**：`toggleDoor(x,y,z)` 家族判定（`def.part`）→ `setDoorOpen` 整扇上下半同步切换（从任一半调用均可）；活板门单格切换。供电 rising-edge 触发保留。新门状态全部走 `world.setBlock` → 账本/联机自动同步（零协议改动）。
+- **右键链位次**：门/活板门分支插在熔炉分支之后、床分支之前——**村民交互仍在最前**（村民优先=原版语义，实测站在村口对门右键会被 4 格内村民截胡，属正确行为，测门要离村民远点）。铁门右键无动作（仅红石）；木门/活板门 toggleDoor + `audio.blockPlace`（wood 分路）。
+- **形制放置 `_tryPlaceShaped`**：门=下半贴玩家近边+上半（`_facingTowardPlayer`）；床=脚+头朝远离玩家方向（`_facingAwayFromPlayer`）；活板门=关态贴近边。**任一格非空气或与玩家重叠 → 整体失败不消耗**（创造不消耗、生存扣 1）。放置路径在通用 setBlock 之前分流。
+- **破坏连动（两处都要挂，勿漏）**：`_removeShapedPartner` 在**生存挖掘分支**和**创造瞬破分支**各挂一次（本批实测漏了创造分支——半扇门残留）。掉落 `_blockDrops` 按 `def.baseBlock` 返回 1 个基础物品（另一半连动消失不重复掉）。爆炸路径（TNT/床爆炸）不连动——残半扇门保留可开关，可接受。
+- **床交互（原版语义集）**：非主世界（nether/end/aether）右键 → `mobManager.pendingExplosions.push({radius:3})` 爆炸（带碎屑粒子，另一半一并清除）+ 距离衰减伤害 + 聊天提示；主世界=设 `bedSpawn` + 夜间 `_hostileNearby(8)`（`!type.passive && !dead`）通过后 `sleepOverlay.show(onBlack)` 黑屏过渡 0.95s 全黑瞬间 `sky.time=0.25`（**废除瞬跳**；双层 RAF 启动 transition——display 切后同帧写 opacity 不生效，Hud.flashDamage 同款教训）。联机保持"只设重生点不跳时间"（时间权威在服务器）。
+- **respawn 床失效校验**：重生时校验 bedSpawn 格仍是床（part bed_*），失效清 bedSpawn + 提示回世界出生点。仅单机 bedSpawn 生效（联机位置服务器权威，勿放开）。
+- **村庄门**：`village.js` buildHouse 用 `doorId('oak_door', half, facing)` 放上下两格，face 映射 `z-→n / z+→s / x-→w / x+→e`（面板贴外墙面）。旧存档村庄区块重生成时自动获得双格门（结构块不进账本）；**玩家手放的旧式单格门**靠 `World._finalizeChunk` 迁移扫描补上半（lower+上方空气 → 直写 upper，幂等不进账本——账本重放后重扫，幂等兜底）。
+- **agent-browser 实机陷阱（本批新增）**：①右键链里村民优先——村庄里测门会被村民截胡开交易屏，先离开村庄或在远空平台测；②headless 后台 tab rAF 节流到 ~2fps，`mouse down→up` 间隔必须 >1 帧周期（≥1.5s）否则 update 看不到按下沿；③`controls.enabled` 会被 UI 开关置 false——ESC 关屏顺序错乱后需 eval 置回；④会话崩溃后换新会话名重开（不同会话=不同浏览器 profile，localStorage 存档不跨会话）；⑤斜着走向关门会从门格侧面绕过（门只挡自己格的面板，正常）——直走测试必须 yaw 对准。

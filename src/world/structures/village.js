@@ -5,6 +5,7 @@ import { Biomes } from '../biomes.js';
 import { blockId } from './StructureManager.js';
 import { fillBox, wallsBox, clearBox, floorBox, foundation } from './StructureKit.js';
 import { steleStack } from '../steles.js';
+import { doorId } from '../../core/blockShape.js';
 
 const CLEAR_TOP = 7;   // 建筑足迹上方清空高度（容纳树冠）
 const ROAD_LEN = 28;   // 道路臂长（自井心）
@@ -46,6 +47,8 @@ export function solveVillage(rng, ax, groundY, az, gen) {
     furnace: blockId('furnace'), wool: blockId('white_wool'), chest: blockId('chest'),
     farmland: blockId('farmland'),
   };
+  // B27 双格门：face（门朝向，指向道路）→ 门面板贴的边（关态朝向键）
+  const FACE_TO_FACING = { 'z-': 'n', 'z+': 's', 'x-': 'w', 'x+': 'e' };
 
   const blocks = [];
   const meta = {
@@ -125,7 +128,9 @@ export function solveVillage(rng, ax, groundY, az, gen) {
     const setAt = (x, y, z, id) => blocks.push([x, y, z, id]);
     if (face === 'z-' || face === 'z+') {
       const fz = face === 'z-' ? z0 : z1;
-      setAt(midX, groundY + 1, fz, ID.door);
+      const facing = FACE_TO_FACING[face];
+      setAt(midX, groundY + 1, fz, doorId('oak_door', 'lower', facing, false)); // B27 双格门
+      setAt(midX, groundY + 2, fz, doorId('oak_door', 'upper', facing, false));
       spawn = [midX, fz + (face === 'z-' ? -1 : 1)];   // 门外一格（spawnAt 记录）
       setAt(x0 + 1, groundY + 2, fz, ID.glass);
       setAt(x1 - 1, groundY + 2, fz, ID.glass);
@@ -136,7 +141,9 @@ export function solveVillage(rng, ax, groundY, az, gen) {
       doorPos = [midX, fz];
     } else {
       const fx = face === 'x-' ? x0 : x1;
-      setAt(fx, groundY + 1, midZ, ID.door);
+      const facing = FACE_TO_FACING[face];
+      setAt(fx, groundY + 1, midZ, doorId('oak_door', 'lower', facing, false)); // B27 双格门
+      setAt(fx, groundY + 2, midZ, doorId('oak_door', 'upper', facing, false));
       spawn = [fx + (face === 'x-' ? -1 : 1), midZ];   // 门外一格（spawnAt 记录）
       setAt(fx, groundY + 2, z0 + 1, ID.glass);
       setAt(fx, groundY + 2, z1 - 1, ID.glass);

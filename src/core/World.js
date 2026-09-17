@@ -7,6 +7,7 @@ import { LightEngine } from './LightEngine.js';
 import { chestLoot } from '../world/loot.js';
 import { isCropId } from './crops.js';
 import { FluidSim, fluidInfo } from './FluidSim.js';
+import { doorId } from './blockShape.js';
 import { getDimension, DEFAULT_DIMENSION } from './dimensions.js';
 
 export class World {
@@ -109,6 +110,15 @@ export class World {
           for (let x = 0; x < CHUNK_SIZE; x++) {
             const id = c.blocks[Chunk.index(x, y, z)];
             if (id === 0) continue;
+            // ③ B27 旧存档迁移：旧版单格门（下半态 + 上方空气）补齐上半格（幂等，直写不进账本）
+            const sDef = BlockRegistry.getById(id);
+            if (sDef && sDef.part === 'door_lower' && y + 1 < CHUNK_HEIGHT && c.get(x, y + 1, z) === 0) {
+              const uid = doorId(sDef.baseBlock, 'upper', sDef.facing, false);
+              if (uid) {
+                c.set(x, y + 1, z, uid);
+                c.dirty = true;
+              }
+            }
             if (this.onCropBlockChange && isCropId(id)) {
               this.onCropBlockChange(baseX + x, y, baseZ + z, 0, id);
               continue;

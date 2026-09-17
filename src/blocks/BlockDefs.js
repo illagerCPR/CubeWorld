@@ -4,6 +4,7 @@
 // 注册名 / textures key / SVG 管线保持不变，仅替换纹理生成实现。
 import { BlockRegistry } from '../core/BlockRegistry.js';
 import { SVGTextures } from '../render/SVGTextures.js';
+import { doorClosedShape, doorOpenShape, trapdoorShape, BED_SHAPE } from '../core/blockShape.js';
 
 const { pixelSvg, rng } = SVGTextures;
 
@@ -1324,9 +1325,45 @@ reg('tnt', { textures: { top: 'tnt_top', side: 'tnt_side', bottom: 'tnt_bottom' 
   tnt_side: tntSideTex(142),
   tnt_bottom: noiseTex([124, 40, 32], 143, { dark: 0.9, light: 1.1 })
 });
-reg('oak_door', { transparent: true, hardness: 1, solid: false }, { oak_door: doorTex([162, 130, 78], 144) });
-reg('iron_door', { transparent: true, hardness: 5, solid: false, tool: 'pickaxe' }, { iron_door: doorTex([198, 198, 202], 145, true) });
-reg('oak_trapdoor', { transparent: true, hardness: 1, solid: false }, { oak_trapdoor: trapdoorTex(146) });
+// --- B27 门/床/活板门状态家族（状态 = 独立方块 ID，命名约定见 core/blockShape.js）---
+const FACINGS = ['n', 's', 'e', 'w'];
+
+// 门家族：8 状态/半格（4 朝向 × 开关），关态朝北下半沿用 base 本名（旧存档零迁移）
+function regDoorFamily(base, hardness, extra = {}) {
+  for (const half of ['lower', 'upper']) {
+    for (const facing of FACINGS) {
+      for (const open of [false, true]) {
+        const name = open
+          ? `${base}_${half}_${facing}_open`
+          : (facing === 'n' ? (half === 'lower' ? base : `${base}_${half}`) : `${base}_${half}_${facing}`);
+        reg(name, {
+          displayName: extra.displayName || base,
+          transparent: true, solid: true, hardness,
+          textures: base,
+          part: `door_${half}`, facing, open, baseBlock: base,
+          shape: open ? doorOpenShape(facing) : doorClosedShape(facing),
+          ...(extra.def || {}),
+        }, { [base]: extra.texSvg });
+      }
+    }
+  }
+}
+
+regDoorFamily('oak_door', 1, { displayName: '橡木门', texSvg: doorTex([162, 130, 78], 144) });
+regDoorFamily('iron_door', 5, { displayName: '铁门', texSvg: doorTex([198, 198, 202], 145, true), def: { tool: 'pickaxe' } });
+
+// 活板门：4 朝向 × 开关（关态朝北沿用本名）
+for (const facing of FACINGS) {
+  for (const open of [false, true]) {
+    const name = open ? `oak_trapdoor_${facing}_open` : (facing === 'n' ? 'oak_trapdoor' : `oak_trapdoor_${facing}`);
+    reg(name, {
+      displayName: '橡木活板门', transparent: true, solid: true, hardness: 1,
+      textures: 'oak_trapdoor',
+      part: 'trapdoor', facing, open, baseBlock: 'oak_trapdoor',
+      shape: trapdoorShape(facing, open),
+    }, { oak_trapdoor: trapdoorTex(146) });
+  }
+}
 reg('note_block', { hardness: 1 }, { note_block: (function () { const px = makeTex();
   for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
     px[y * 16 + x] = rgb([120, 92, 56], 0.92 + hash2(x, y, 147) * 0.14);
@@ -1352,18 +1389,62 @@ reg('white_wool', { hardness: 0.8 }, { white_wool: (function () { const px = mak
   return pixelSvg(px); })()
 });
 reg('white_terracotta', { hardness: 1.25, tool: 'pickaxe' }, { white_terracotta: noiseTex([180, 156, 138], 153, { dark: 0.93, light: 1.06 }) });
-reg('white_bed', { transparent: true, hardness: 0.2 }, { white_bed: (function () { const px = makeTex();
+// 床：头/尾双格（4 朝向），foot 朝北沿用 white_bed 本名（旧存档零迁移）
+function bedHeadTopTex() {
+  const px = makeTex();
   for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
     px[y * 16 + x] = rgb([238, 238, 240], 0.95 + hash2(x, y, 154) * 0.08);
   }
   const frame = rgb([200, 200, 206]);
   for (let i = 0; i < 16; i++) {
-    setPx(px, i, 0, frame); setPx(px, i, 15, frame);
-    setPx(px, 0, i, frame); setPx(px, 15, i, frame);
+    setPx(px, i, 0, frame); setPx(px, i, 15, frame); setPx(px, 0, i, frame); setPx(px, 15, i, frame);
   }
-  fillRect(px, 0, 11, 15, 12, rgb([226, 226, 230]));
-  return pixelSvg(px); })()
-});
+  // 枕头（居中：顶面 UV 映射随朝向旋转不可控，居中方枕四向可读）
+  fillRect(px, 3, 4, 12, 11, rgb([250, 250, 252]));
+  const pl = rgb([214, 214, 220]);
+  for (let x = 3; x <= 12; x++) { setPx(px, x, 4, pl); setPx(px, x, 11, pl); }
+  for (let y = 4; y <= 11; y++) { setPx(px, 3, y, pl); setPx(px, 12, y, pl); }
+  return pixelSvg(px);
+}
+function bedFootTopTex() {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb([238, 238, 240], 0.95 + hash2(x, y, 154) * 0.08);
+  }
+  const frame = rgb([200, 200, 206]);
+  for (let i = 0; i < 16; i++) {
+    setPx(px, i, 0, frame); setPx(px, i, 15, frame); setPx(px, 0, i, frame); setPx(px, 15, i, frame);
+  }
+  // 毯子褶皱横纹
+  const fold = rgb([222, 222, 228]);
+  for (let y = 5; y <= 13; y += 3) fillRect(px, 2, y, 13, y, fold);
+  return pixelSvg(px);
+}
+function bedSideTex() {
+  const px = makeTex();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    px[y * 16 + x] = rgb([232, 232, 236], 0.94 + hash2(x, y, 155) * 0.08);
+  }
+  fillRect(px, 0, 0, 15, 1, rgb([206, 206, 212])); // 顶缘床垫线
+  fillRect(px, 0, 12, 15, 12, rgb([214, 214, 220])); // 床裙分缝
+  return pixelSvg(px);
+}
+for (const half of ['foot', 'head']) {
+  for (const facing of FACINGS) {
+    const name = (half === 'foot' && facing === 'n') ? 'white_bed' : `white_bed_${half}_${facing}`;
+    reg(name, {
+      displayName: '白色床', transparent: true, solid: true, hardness: 0.2,
+      textures: { top: half === 'head' ? 'white_bed_head_top' : 'white_bed_foot_top', side: 'white_bed_side', bottom: 'oak_planks' },
+      part: `bed_${half}`, facing, open: false, baseBlock: 'white_bed',
+      shape: BED_SHAPE,
+    }, {
+      white_bed_head_top: bedHeadTopTex(),
+      white_bed_foot_top: bedFootTopTex(),
+      white_bed_side: bedSideTex(),
+      white_bed: bedFootTopTex(), // 物品栏图标沿用整体床贴图
+    });
+  }
+}
 
 // --- 容器方块（T5：箱子，内容经 loot.js 惰性生成） ---
 function chestTex(seed, latch) {

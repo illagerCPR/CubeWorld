@@ -1,6 +1,7 @@
 // EntityPhysics.js -- 通用实体物理（AABB 碰撞）
 import { World } from '../core/World.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
+import { cellBox } from '../core/blockShape.js';
 import { CHUNK_HEIGHT } from '../core/Chunk.js';
 
 const GRAVITY = -32;
@@ -57,16 +58,21 @@ export class EntityPhysics {
             if (id === 0) continue;
             const def = BlockRegistry.getById(id);
             if (!def || !def.solid) continue;
-            if (max[0] > bx && min[0] < bx + 1 &&
-                max[1] > by && min[1] < by + 1 &&
-                max[2] > bz && min[2] < bz + 1) {
-              // 回退坐标取当前轴对应的方块坐标：z 轴必须用 bz（曾误用 bx，
-              // 沿 z 撞墙的实体会被瞬移到 z≈x 的远点，村民游荡高频触发）
-              const bc = (axis === 'z') ? bz : bx;
-              if (amount > 0) {
-                entity.position[axis] = (axis === 'y') ? by - height - 0.001 : bc - half - 0.001;
+            // B27 形制方块（门/床）：碰撞收缩到格内 AABB
+            const box = def.shape ? cellBox(def, bx, by, bz) : null;
+            const bX0 = box ? box[0] : bx, bY0 = box ? box[1] : by, bZ0 = box ? box[2] : bz;
+            const bX1 = box ? box[3] : bx + 1, bY1 = box ? box[4] : by + 1, bZ1 = box ? box[5] : bz + 1;
+            if (max[0] > bX0 && min[0] < bX1 &&
+                max[1] > bY0 && min[1] < bY1 &&
+                max[2] > bZ0 && min[2] < bZ1) {
+              // 回退到碰撞盒边界（盒 = 满格或格内 shape；z 轴边界必须取 bz 侧盒边界，
+              // 曾误用 bx 致沿 z 撞墙的实体被瞬移到 z≈x 的远点，村民游荡高频触发）
+              if (axis === 'y') {
+                entity.position.y = (amount > 0) ? bY0 - height - 0.001 : bY1 + 0.001;
+              } else if (axis === 'x') {
+                entity.position.x = (amount > 0) ? bX0 - half - 0.001 : bX1 + half + 0.001;
               } else {
-                entity.position[axis] = (axis === 'y') ? by + 1 + 0.001 : bc + 1 + half + 0.001;
+                entity.position.z = (amount > 0) ? bZ0 - half - 0.001 : bZ1 + half + 0.001;
               }
               if (axis === 'y') {
                 if (amount < 0) entity.onGround = true;

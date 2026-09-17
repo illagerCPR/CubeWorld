@@ -309,6 +309,11 @@ export class ChunkMeshBuilder {
             }
             continue;
           }
+          if (def.shape) {
+            // B27 形制方块（门/床/活板门）：格内 AABB 盒渲染（无 AO，四角取自身格光）
+            idx = this.addBox(positions, normals, uvs, colors, indices, x, y, z, def, idx, voxLight);
+            continue;
+          }
 
           const isWater = def.fluid && def.fluidType === 'water';
           const hasLight = def.light >= 13 && !isWater;
@@ -681,5 +686,44 @@ export class ChunkMeshBuilder {
     indices.push(idx, idx + 1, idx + 2, idx + 2, idx + 1, idx + 3); // 正面（上方可见）
     indices.push(idx, idx + 2, idx + 1, idx + 2, idx + 3, idx + 1); // 反面（下方仰视可见）
     return idx + 4;
+  }
+
+  // B27 形制方块（门/床/活板门）：格内 AABB 盒渲染。6 面按 faceCorners 绕向（外法线），
+  // 无 AO（shape 方块 transparent，不参与遮蔽），四角取自身格光。
+  // UV：盒空间坐标即贴图比例（满幅面取整图、窄条面取对应切条，原版观感）；侧向 v 轴随 y 上升。
+  // 贴边整体内缩 E：门板贴墙面/床贴地面时避免与邻格同平面 z-fighting。
+  // 返回推进后的顶点索引（6 面 24 顶点）。voxLight 非空时写入自身格光照。
+  addBox(positions, normals, uvs, colors, indices, x, y, z, def, idx, voxLight) {
+    const { from, to } = def.shape;
+    const E = 0.0008;
+    const lo = [x + from[0] + E, y + from[1] + E, z + from[2] + E];
+    const hi = [x + to[0] - E, y + to[1] - E, z + to[2] - E];
+    const skyL = voxLight ? this._skyAt(x, y, z) / 15 : 0;
+    const blkL = voxLight ? this._blockLAt(x, y, z) / 15 : 0;
+    for (let f = 0; f < 6; f++) {
+      const face = FACES[f];
+      const texName = def[face.uvFace] || def.side;
+      const uv = this.atlasUV.get(texName) || { u0: 0, v0: 0, u1: 1, v1: 1 };
+      for (const c of faceCorners[f]) {
+        const cc = [c[0] === 0 ? from[0] : to[0], c[1] === 0 ? from[1] : to[1], c[2] === 0 ? from[2] : to[2]];
+        positions.push(c[0] === 0 ? lo[0] : hi[0], c[1] === 0 ? lo[1] : hi[1], c[2] === 0 ? lo[2] : hi[2]);
+        normals.push(face.dir[0], face.dir[1], face.dir[2]);
+        colors.push(1, 1, 1);
+        if (voxLight) voxLight.push(skyL, blkL);
+        // 盒空间 → UV 比例：与实体方块六面标准图案逐面对齐（u 表已含镜像补偿）
+        // f: 0(+X)u=z 1(-X)u=1-z 2(+Y)u=1-z,v=x 3(-Y)u=z,v=x 4(+Z)u=1-x 5(-Z)u=x；侧向 v 随 y
+        let fu, fv;
+        if (f === 0) { fu = cc[2]; fv = cc[1]; }
+        else if (f === 1) { fu = 1 - cc[2]; fv = cc[1]; }
+        else if (f === 2) { fu = 1 - cc[2]; fv = cc[0]; }
+        else if (f === 3) { fu = cc[2]; fv = cc[0]; }
+        else if (f === 4) { fu = 1 - cc[0]; fv = cc[1]; }
+        else { fu = cc[0]; fv = cc[1]; }
+        uvs.push(uv.u0 + fu * (uv.u1 - uv.u0), uv.v0 + fv * (uv.v1 - uv.v0));
+      }
+      indices.push(idx, idx + 1, idx + 2, idx + 2, idx + 1, idx + 3);
+      idx += 4;
+    }
+    return idx;
   }
 }

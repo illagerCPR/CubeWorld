@@ -1,6 +1,7 @@
 // Physics.js -- 玩家物理：AABB 碰撞、重力
 import { World } from '../core/World.js';
 import { BlockRegistry } from '../core/BlockRegistry.js';
+import { cellBox } from '../core/blockShape.js';
 import { CHUNK_HEIGHT } from '../core/Chunk.js';
 
 const GRAVITY = -32;
@@ -102,6 +103,9 @@ export class Physics {
     let bestResolve = null;
     // 同时收集最高阻挡方块顶面（用于水中自动上岸）
     let maxBlockTopY = -Infinity;
+    // B27：最高阻挡面是否来自门/活板门面板——门不可 auto-jump 踏越（原版语义），
+    // 否则站在坡顶对上格门板会触发 1.0 台阶"爬门"穿门
+    let maxBlockTopIsDoor = false;
 
     for (let bx = bxMin; bx <= bxMax; bx++) {
       for (let by = byMin; by <= byMax; by++) {
@@ -110,18 +114,22 @@ export class Physics {
           if (id === 0) continue;
           const def = BlockRegistry.getById(id);
           if (!def || !def.solid) continue;
+          // B27 形制方块（门/床）：碰撞收缩到格内 AABB（cellBox 仅 shape 方块分配）
+          const box = def.shape ? cellBox(def, bx, by, bz) : null;
+          const bX0 = box ? box[0] : bx, bY0 = box ? box[1] : by, bZ0 = box ? box[2] : bz;
+          const bX1 = box ? box[3] : bx + 1, bY1 = box ? box[4] : by + 1, bZ1 = box ? box[5] : bz + 1;
 
           // AABB 重叠检测
-          if (maxX > bx && minX < bx + 1 &&
-              maxY > by && minY < by + 1 &&
-              maxZ > bz && minZ < bz + 1) {
+          if (maxX > bX0 && minX < bX1 &&
+              maxY > bY0 && minY < bY1 &&
+              maxZ > bZ0 && minZ < bZ1) {
             let resolve;
             if (axis === 'y') {
-              resolve = amount > 0 ? (by - height - 0.0001) : (by + 1 + 0.0001);
+              resolve = amount > 0 ? (bY0 - height - 0.0001) : (bY1 + 0.0001);
             } else if (axis === 'x') {
-              resolve = amount > 0 ? (bx - half - 0.0001) : (bx + 1 + half + 0.0001);
+              resolve = amount > 0 ? (bX0 - half - 0.0001) : (bX1 + half + 0.0001);
             } else {
-              resolve = amount > 0 ? (bz - half - 0.0001) : (bz + 1 + half + 0.0001);
+              resolve = amount > 0 ? (bZ0 - half - 0.0001) : (bZ1 + half + 0.0001);
             }
             // 取最保守的回退（向移动方向反方向最远）
             if (bestResolve === null) {
@@ -131,8 +139,11 @@ export class Physics {
             } else {
               bestResolve = Math.max(bestResolve, resolve);
             }
-            // 记录最高阻挡方块顶面（用于水中上岸）
-            if (by + 1 > maxBlockTopY) maxBlockTopY = by + 1;
+            // 记录最高阻挡方块顶面（用于水中上岸；形制方块取盒顶）
+            if (bY1 > maxBlockTopY) {
+              maxBlockTopY = bY1;
+              maxBlockTopIsDoor = def.part === 'door_lower' || def.part === 'door_upper' || def.part === 'trapdoor';
+            }
           }
         }
       }
@@ -145,6 +156,7 @@ export class Physics {
       // 撞山应走碰撞回退 → wallCrash 伤害停滑（原版语义）
       if (axis !== 'y' &&
           !entity.gliding &&
+          !maxBlockTopIsDoor && // B27：门板不可踏越
           isFinite(maxBlockTopY) &&
           maxBlockTopY - entity.position.y > 0 &&
           maxBlockTopY - entity.position.y <= 1.0 + 0.01) {
@@ -168,8 +180,16 @@ export class Physics {
               if (id === 0) continue;
               const def = BlockRegistry.getById(id);
               if (!def || !def.solid) continue;
-              blocked = true;
-              break;
+              // B27：形制方块按格内盒判定（床 9/16 顶上不算阻挡，auto-jump 才能直接走上床）
+              const box = def.shape ? cellBox(def, bx, by, bz) : null;
+              if (box) {
+                if (tMaxX > box[0] && tMinX < box[3] &&
+                    targetY + height > box[1] && targetY < box[4] &&
+                    tMaxZ > box[2] && tMinZ < box[5]) { blocked = true; break; }
+              } else {
+                blocked = true;
+                break;
+              }
             }
             if (blocked) break;
           }

@@ -32,6 +32,7 @@ import { CommandPanel } from '../ui/CommandPanel.js';
 import { ChatBox } from '../ui/ChatBox.js';
 import { BossBar } from '../ui/BossBar.js';
 import { PortalOverlay } from '../ui/PortalOverlay.js';
+import { SleepOverlay } from '../ui/SleepOverlay.js';
 import { CHUNK_SIZE, Chunk, CHUNK_HEIGHT } from '../core/Chunk.js';
 import { FINALE_TIDE_SEGMENTS, FINALE_TIDE_DURATION, finaleEnvelope, finalePulse, finaleListenGate } from '../world/finale-tide.js';
 import {
@@ -50,6 +51,7 @@ import { Mob } from '../entity/Mob.js';
 import { LocalPlayerModel } from '../entity/LocalPlayerModel.js';
 import { VoxelLightUniforms, GfxState, ShadowUniforms } from '../render/VoxelLight.js';
 import { RedstoneSystem } from '../core/RedstoneSystem.js';
+import { doorId, trapdoorId, bedId } from '../core/blockShape.js';
 import { SaveSystem } from '../core/SaveSystem.js';
 import { getDimension, setAetherDuskProfile } from '../core/dimensions.js';
 import { DEFAULT_BIOME_SCALE, safeBiomeScale } from '../world/biomes.js';
@@ -102,6 +104,7 @@ export class Game {
     this.inventory = new Inventory();
     this.hud = new Hud();
     this.infoBar = new InfoBar();
+    this.sleepOverlay = new SleepOverlay(); // B27 睡眠黑屏过渡（无状态表现层，跨存档复用）
     // 视频设置：加载并实时套用（FOV/亮度/云/灵敏度/AO 等，主菜单期即可生效）
     this.settings = loadSettings();
     applySettings(this);
@@ -1584,6 +1587,7 @@ export class Game {
         if (def.name === 'end_crystal') this._breakCrystal(hit.block.x, hit.block.y, hit.block.z);
         // Build 20 ④：创造挖星髓不再激怒潮鸣（激怒调用仅生存分支保留）
         if (def.name === 'gale_block') this._clearGaleColumn(hit.block.x, hit.block.y, hit.block.z); // 批次 B：拆风阵块清气流柱
+        this._removeShapedPartner(def, hit.block.x, hit.block.y, hit.block.z); // B27 门/床：创造瞬破同样连动另一半
         this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
         removeConnectedPortals(this.world, hit.block.x, hit.block.y, hit.block.z);
         if (this.redstone) this.redstone.onBlockChange(hit.block.x, hit.block.y, hit.block.z);
@@ -1623,6 +1627,7 @@ export class Game {
           if (def.name === 'end_crystal') this._breakCrystal(hit.block.x, hit.block.y, hit.block.z);
           if (def.name === 'star_marrow_ore') this.mobManager?.angerTideEchoes(hit.block.x, hit.block.y, hit.block.z); // 批次 B：潮鸣激怒
           if (def.name === 'gale_block') this._clearGaleColumn(hit.block.x, hit.block.y, hit.block.z); // 批次 B：拆风阵块清气流柱
+          this._removeShapedPartner(def, hit.block.x, hit.block.y, hit.block.z); // B27 门/床：破坏任一半连动另一半
           this.world.setBlock(hit.block.x, hit.block.y, hit.block.z, 0);
           removeConnectedPortals(this.world, hit.block.x, hit.block.y, hit.block.z);
           if (this.redstone) this.redstone.onBlockChange(hit.block.x, hit.block.y, hit.block.z);
@@ -1707,15 +1712,44 @@ export class Game {
         return;
       }
 
-      // 床：记录重生点；夜间入睡跳到天亮（联机时间权威在服务器，仅单机跳时间）
-      if (furnaceDef && furnaceDef.name === 'white_bed' && !this.player.spectator) {
+      // B27 门/活板门：右键开关（木门/活板门切换整扇；铁门仅红石——原版语义）
+      if (furnaceDef && furnaceDef.part && !this.player.spectator &&
+          (furnaceDef.part === 'door_lower' || furnaceDef.part === 'door_upper' || furnaceDef.part === 'trapdoor')) {
+        if (furnaceDef.baseBlock === 'oak_door' || furnaceDef.part === 'trapdoor') {
+          if (this.redstone) {
+            this.redstone.toggleDoor(furnaceHit.block.x, furnaceHit.block.y, furnaceHit.block.z);
+            audio.blockPlace(furnaceDef); // 开关音沿用材质分路（wood）
+          }
+        }
+        this.controls.mouseRight = false;
+        return;
+      }
+
+      // 床：非主世界引爆（原版语义——床只能在主世界睡）；主世界记重生点 + 夜间入睡
+      if (furnaceDef && (furnaceDef.part === 'bed_foot' || furnaceDef.part === 'bed_head') && !this.player.spectator) {
+        if (this.world.dimension !== 'overworld') {
+          this.bedSpawn = null;
+          const bx = furnaceHit.block.x + 0.5, by = furnaceHit.block.y + 0.5, bz = furnaceHit.block.z + 0.5;
+          if (this.mobManager) this.mobManager.pendingExplosions.push({ x: bx, y: by, z: bz, radius: 3 }); // 另一半床体一并清除
+          const d = this.player.position.distanceTo(new THREE.Vector3(bx, by, bz));
+          const dmg = Math.round(12 * Math.max(0, 1 - d / 6));
+          if (dmg > 0) this.player.hurt(dmg, 'bed', true);
+          if (this.chatBox) this.chatBox.add(t('床在这个维度无法安眠——轰！'), '#faa');
+          this.controls.mouseRight = false;
+          return;
+        }
         this.bedSpawn = { x: furnaceHit.block.x, y: furnaceHit.block.y, z: furnaceHit.block.z, dimension: this.world.dimension };
         if (!this.networkMode && this.sky.isNight()) {
-          this.sky.time = 0.25; // 日出
-          if (this.chatBox) this.chatBox.add(t('你睡了一觉，重生点已设置'), '#cfc');
+          if (this._hostileNearby(8)) {
+            if (this.chatBox) this.chatBox.add(t('你现在无法入睡，附近有怪物在游荡'), '#fcc');
+          } else {
+            if (this.chatBox) this.chatBox.add(t('你睡了一觉，重生点已设置'), '#cfc');
+            this.sleepOverlay.show(() => { this.sky.time = 0.25; }); // 全黑瞬间跳日出
+          }
         } else if (this.chatBox) {
           this.chatBox.add(this.networkMode ? t('重生点已设置（联机时间由服务器管理）') : t('重生点已设置（夜晚右键床可直接入睡）'), '#cfc');
         }
+        audio.blockPlace(furnaceDef); // 床交互音（cloth 分路）
         this.controls.mouseRight = false;
         return;
       }
@@ -1856,6 +1890,15 @@ export class Game {
         const blockDef = BlockRegistry.getByName(sel.name);
         if (blockDef) {
           this.hand.swing(); // 阶段10：放置方块挥动
+          // B27：门/床/活板门形制放置（多格 + 朝向；失败不消耗）
+          if (blockDef.part && this._tryPlaceShaped(placeX, placeY, placeZ, blockDef)) {
+            if (this.player.survival) {
+              this.inventory.removeSelected(1);
+              this.hotbar.update();
+            }
+            this.controls.mouseRight = false;
+            return;
+          }
           this.world.setBlock(placeX, placeY, placeZ, blockDef.id);
           audio.blockPlace(blockDef);
           if (this.redstone) this.redstone.onBlockChange(placeX, placeY, placeZ);
@@ -3005,6 +3048,8 @@ export class Game {
   _blockDrops(def) {
     // Idea-2C：潜影盒不走通用掉落（_breakShulkerBox 已产出内容跟随盒体的单一掉落）
     if (def.name === 'shulker_box') return [];
+    // B27 门/床/活板门家族：任一状态破坏只掉 1 个基础物品（另一半连动消失不重复掉）
+    if (def.baseBlock) return [{ name: def.baseBlock, count: 1 }];
     // 小麦成熟：小麦×1 + 种子 1-3（原版式）；未熟：仅种子×1
     if (def.name === `wheat_crop_${CROP_MAX_STAGE}`) {
       return [
@@ -3026,6 +3071,101 @@ export class Game {
     }
     const name = this._blockDropName(def);
     return name ? [{ name, count: 1 }] : [];
+  }
+
+  // ── B27 门/床/活板门形制工具 ──────────────────────────────────────────
+  static SHAPED_DIRS = { n: [0, -1], s: [0, 1], w: [-1, 0], e: [1, 0] };
+
+  // 玩家相对目标格的水平朝向键：门/活板门面板贴"玩家近边"
+  _facingTowardPlayer(bx, bz) {
+    const dx = this.player.position.x - (bx + 0.5);
+    const dz = this.player.position.z - (bz + 0.5);
+    return Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'e' : 'w') : (dz > 0 ? 's' : 'n');
+  }
+
+  _facingAwayFromPlayer(bx, bz) {
+    const f = this._facingTowardPlayer(bx, bz);
+    return { n: 's', s: 'n', e: 'w', w: 'e' }[f];
+  }
+
+  // 目标格是否与玩家 AABB 重叠（同放置主检查口径，供多格形制的第二格使用）
+  _cellOverlapsPlayer(x, y, z) {
+    const px = this.player.position.x, py = this.player.position.y, pz = this.player.position.z;
+    return x >= Math.floor(px - 0.3) && x <= Math.floor(px + 0.3) &&
+           y >= Math.floor(py) && y <= Math.floor(py + 1.8) &&
+           z >= Math.floor(pz - 0.3) && z <= Math.floor(pz + 0.3);
+  }
+
+  // 形制放置（门=下半贴近边+上半；床=脚+头朝远离玩家方向；活板门=关态贴近边）。
+  // 目标格必须为空气，任一格不满足即整体失败（返回 false，不消耗物品）。
+  _tryPlaceShaped(x, y, z, blockDef) {
+    const DIRS = Game.SHAPED_DIRS;
+    if (this.world.getBlock(x, y, z) !== 0) return false;
+    if (blockDef.part === 'door_lower') {
+      const uy = y + 1;
+      if (this.world.getBlock(x, uy, z) !== 0 || this._cellOverlapsPlayer(x, uy, z)) return false;
+      const facing = this._facingTowardPlayer(x, z);
+      const lid = doorId(blockDef.baseBlock, 'lower', facing, false);
+      const uid = doorId(blockDef.baseBlock, 'upper', facing, false);
+      if (!lid || !uid) return false;
+      this.world.setBlock(x, y, z, lid);
+      this.world.setBlock(x, uy, z, uid);
+      audio.blockPlace(blockDef);
+      if (this.redstone) { this.redstone.onBlockChange(x, y, z); this.redstone.onBlockChange(x, uy, z); }
+      return true;
+    }
+    if (blockDef.part === 'bed_foot') {
+      const facing = this._facingAwayFromPlayer(x, z);
+      const [dx, dz] = DIRS[facing];
+      const hx = x + dx, hz = z + dz;
+      if (this.world.getBlock(hx, y, hz) !== 0 || this._cellOverlapsPlayer(hx, y, hz)) return false;
+      const fid = bedId('foot', facing), hid = bedId('head', facing);
+      if (!fid || !hid) return false;
+      this.world.setBlock(x, y, z, fid);
+      this.world.setBlock(hx, y, hz, hid);
+      audio.blockPlace(blockDef);
+      return true;
+    }
+    if (blockDef.part === 'trapdoor') {
+      const facing = this._facingTowardPlayer(x, z);
+      const tid = trapdoorId(facing, false);
+      if (!tid) return false;
+      this.world.setBlock(x, y, z, tid);
+      audio.blockPlace(blockDef);
+      if (this.redstone) this.redstone.onBlockChange(x, y, z);
+      return true;
+    }
+    return false;
+  }
+
+  // 破坏门/床任一半时连动清除另一半（另一半经家族掉落规则不重复产出）
+  _removeShapedPartner(def, x, y, z) {
+    const DIRS = Game.SHAPED_DIRS;
+    if (def.part === 'door_lower') this._clearIfFamily(x, y + 1, z, def.baseBlock);
+    else if (def.part === 'door_upper') this._clearIfFamily(x, y - 1, z, def.baseBlock);
+    else if (def.part === 'bed_foot') {
+      const [dx, dz] = DIRS[def.facing];
+      this._clearIfFamily(x + dx, y, z + dz, def.baseBlock);
+    } else if (def.part === 'bed_head') {
+      const [dx, dz] = DIRS[def.facing];
+      this._clearIfFamily(x - dx, y, z - dz, def.baseBlock);
+    }
+  }
+
+  _clearIfFamily(x, y, z, baseBlock) {
+    const d = BlockRegistry.getById(this.world.getBlock(x, y, z));
+    if (d && d.baseBlock === baseBlock) this.world.setBlock(x, y, z, 0);
+  }
+
+  // 半径内是否有存活敌对怪（入睡门控；村民/铁傀儡/动物等 passive 不算）
+  _hostileNearby(radius) {
+    if (!this.mobManager) return false;
+    const p = this.player.position;
+    for (const m of this.mobManager.mobs) {
+      if (m.dead || !m.type || m.type.passive) continue;
+      if (m.position.distanceToSquared(p) <= radius * radius) return true;
+    }
+    return false;
   }
 
   // 作物登记表维护（World.setBlock 钩子）：作物入表、非作物出表（懒清理兜底在 _growCrops）
@@ -3331,10 +3471,18 @@ export class Game {
       }
       return;
     }
-    // 重生到床重生点（仅单机；同维度才生效），否则当前维度出生点
+    // 重生到床重生点（仅单机；同维度才生效），否则当前维度出生点。
+    // B27：床失效校验——床被挖掉/非床方块占位 → 清重生点回世界出生点（原版语义）
     let sp;
     if (!this.networkMode && this.bedSpawn && this.bedSpawn.dimension === this.world.dimension) {
-      sp = { x: this.bedSpawn.x + 0.5, y: this.bedSpawn.y + 1, z: this.bedSpawn.z + 0.5 };
+      const bedDef = BlockRegistry.getById(this.world.getBlock(this.bedSpawn.x, this.bedSpawn.y, this.bedSpawn.z));
+      if (bedDef && (bedDef.part === 'bed_foot' || bedDef.part === 'bed_head')) {
+        sp = { x: this.bedSpawn.x + 0.5, y: this.bedSpawn.y + 1, z: this.bedSpawn.z + 0.5 };
+      } else {
+        this.bedSpawn = null;
+        if (this.chatBox) this.chatBox.add(t('你的床已不见或被挡住了，回到世界出生点'), '#fcc');
+        sp = this.world.getSpawnPoint();
+      }
     } else {
       sp = this.world.getSpawnPoint();
     }

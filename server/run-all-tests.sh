@@ -252,6 +252,15 @@ else
     exit 1
 fi
 
+# Build 27 床/门形制回归（纯 node：状态 ID 家族/白名单透传/红石切换/几何/碰撞/村庄配对/迁移）
+echo "=== build27-doors-beds ==="
+if node tests/build27-doors-beds.mjs; then
+    echo "build27-doors-beds: OK"
+else
+    echo "build27-doors-beds: FAILED"
+    exit 1
+fi
+
 # 末影龙 Boss 回归（纯 node：类型注册/柱顶水晶/DragonAI 状态机/击败链路/末地门控）
 echo "=== end-dragon ==="
 if node tests/end-dragon.mjs; then
