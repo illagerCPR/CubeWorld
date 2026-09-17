@@ -1,6 +1,7 @@
 // ChunkMesh.js -- 区块网格构建（局部方块缓存 + 逐顶点 AO + 平滑体素光照 + 水面贪心合并）
 import * as THREE from 'three';
 import { BlockRegistry } from '../core/BlockRegistry.js';
+import { fluidInfo } from '../core/FluidSim.js';
 import { CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL } from '../core/Chunk.js';
 import { SVGTextures } from './SVGTextures.js';
 import { applyVoxelLight, applyVoxelLightWater, GfxState } from './VoxelLight.js';
@@ -311,6 +312,8 @@ export class ChunkMeshBuilder {
 
           const isWater = def.fluid && def.fluidType === 'water';
           const hasLight = def.light >= 13 && !isWater;
+          // B26 M2 部分水位：上方同型流体（下落柱）→ 满高；否则按等级 (8-level)/9（源 8/9）
+          const fluidH = def.fluid ? this._fluidHeightAt(x, y, z, def) : 1;
           const targetPos = isWater ? waterPositions : positions;
           const targetNorm = isWater ? waterNormals : normals;
           const targetUv = isWater ? waterUvs : uvs;
@@ -326,14 +329,17 @@ export class ChunkMeshBuilder {
 
             // 面剔除
             if (neighborDef && !neighborDef.transparent && !neighborDef.fluid) continue;
-            // 同型流体相邻剔除内面（源/各流动等级互通；B26 流体模拟等级间不再画内壁）
-            if (def.fluid && neighborDef && neighborDef.fluid && neighborDef.fluidType === def.fluidType) continue;
+            // 同型流体相邻：顶/底面剔除（垂直重叠）；侧面仅同高剔除（不同高画台阶侧壁）
+            if (def.fluid && neighborDef && neighborDef.fluid && neighborDef.fluidType === def.fluidType) {
+              if (f === 2 || f === 3) continue;
+              if (this._fluidHeightAt(nx, ny, nz, neighborDef) === fluidH) continue;
+            }
             // 非水方块相邻流体：流体透明（水/岩浆）时绘制其面，否则剔除
             if (!isWater && neighborDef && neighborDef.fluid && !neighborDef.transparent) continue;
 
-            // 水面（顶面）单独收集，贪心合并绘制
+            // 水面（顶面）单独收集，贪心合并绘制（带水位高度供分层合并）
             if (isWater && f === 2) {
-              waterTops.push(x, y, z);
+              waterTops.push(x, y, z, fluidH);
               continue;
             }
 
@@ -388,7 +394,8 @@ export class ChunkMeshBuilder {
             // 顶点色 = 面向系数 × AO；AO 各向异性时翻转对角线避免暗色斜纹
             for (let c = 0; c < 4; c++) {
               const [cx, cy, cz] = corners[c];
-              targetPos.push(x + cx, y + cy, z + cz);
+              const vy = (def.fluid && cy === 1) ? fluidH : cy; // 流体顶边降到部分水位
+              targetPos.push(x + cx, y + vy, z + cz);
               targetNorm.push(face.dir[0], face.dir[1], face.dir[2]);
               const l = faceLight * AO_CURVE[a[c]];
               targetCol.push(l, l, l);
@@ -402,14 +409,15 @@ export class ChunkMeshBuilder {
               for (let c = 0; c < 4; c++) {
                 const [cx, cy, cz] = corners[c];
                 let u, v;
+                const vy = (cy === 1) ? fluidH : cy; // 流体顶边 UV 随水位
                 if (f === 0 || f === 1) {
                   // +X/-X 面：沿 z 走 u，沿 y 走 v
                   u = z + cz + offZ;
-                  v = y + cy;
+                  v = y + vy;
                 } else if (f === 4 || f === 5) {
                   // +Z/-Z 面：沿 x 走 u，沿 y 走 v
                   u = x + cx + offX;
-                  v = y + cy;
+                  v = y + vy;
                 } else {
                   // -Y 底面：沿 x 走 u，沿 z 走 v
                   u = x + cx + offX;
@@ -432,7 +440,7 @@ export class ChunkMeshBuilder {
             if (hasLight) {
               for (let c = 0; c < 4; c++) {
                 const [cx, cy, cz] = corners[c];
-                lightPos.push(x + cx, y + cy + (cy === 1 ? yOff : 0), z + cz);
+                lightPos.push(x + cx, y + (cy === 1 ? fluidH + yOff : 0), z + cz);
                 lightNorm.push(face.dir[0], face.dir[1], face.dir[2]);
               }
               lightUv.push(uv.u0, uv.v0, uv.u0, uv.v1, uv.u1, uv.v0, uv.u1, uv.v1);
@@ -518,23 +526,31 @@ export class ChunkMeshBuilder {
     return meshes;
   }
 
-  // 贪心合并水面顶面，消除方块边界网格
+  // B26 M2：流体格水面高度——上方同型流体（下落柱）满高，否则 (8-等级)/9（源 8/9，最弱 1/9）
+  _fluidHeightAt(x, y, z, def) {
+    const aboveDef = BlockRegistry.getById(this._solidAt(x, y + 1, z));
+    if (aboveDef && aboveDef.fluid && aboveDef.fluidType === def.fluidType) return 1;
+    const info = fluidInfo(this._solidAt(x, y, z));
+    return (8 - (info ? info.level : 0)) / 9;
+  }
+
+  // 贪心合并水面顶面，消除方块边界网格（B26 M2：按 y + 水位高度分层，仅同高合并）
   _mergeWaterTops(waterTops, wPos, wNorm, wUv, wCol, wVLight, wIdx, startIdx, chunk) {
     if (waterTops.length === 0) return startIdx;
-    const WATER_Y_OFF = -0.1;
     const offX = chunk.cx * CHUNK_SIZE;
     const offZ = chunk.cz * CHUNK_SIZE;
 
-    // 按 y 分层
+    // 按 (y, 高度) 分层：不同水位不合并（高度值离散来自同一确定性函数，取整作 key 安全）
     const layers = new Map();
-    for (let i = 0; i < waterTops.length; i += 3) {
-      const x = waterTops[i], y = waterTops[i + 1], z = waterTops[i + 2];
-      if (!layers.has(y)) layers.set(y, []);
-      layers.get(y).push(x, z);
+    for (let i = 0; i < waterTops.length; i += 4) {
+      const x = waterTops[i], y = waterTops[i + 1], z = waterTops[i + 2], h = waterTops[i + 3];
+      const key = y * 16 + Math.round(h * 16);
+      if (!layers.has(key)) layers.set(key, { y, h, coords: [] });
+      layers.get(key).coords.push(x, z);
     }
 
     let idx = startIdx;
-    for (const [y, coords] of layers) {
+    for (const { y, h, coords } of layers.values()) {
       // 构建该层的 boolean grid
       const grid = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE);
       for (let i = 0; i < coords.length; i += 2) {
@@ -549,22 +565,22 @@ export class ChunkMeshBuilder {
           let w = 1;
           while (x + w < CHUNK_SIZE && grid[(x + w) + z * CHUNK_SIZE] && !merged[(x + w) + z * CHUNK_SIZE]) w++;
           // 向下扩展
-          let h = 1;
+          let d = 1;
           outer: for (let zz = z + 1; zz < CHUNK_SIZE; zz++) {
             for (let xx = x; xx < x + w; xx++) {
               if (!grid[xx + zz * CHUNK_SIZE] || merged[xx + zz * CHUNK_SIZE]) break outer;
             }
-            h++;
+            d++;
           }
           // 标记已合并
-          for (let zz = z; zz < z + h; zz++) {
+          for (let zz = z; zz < z + d; zz++) {
             for (let xx = x; xx < x + w; xx++) {
               merged[xx + zz * CHUNK_SIZE] = 1;
             }
           }
-          // 生成 quad（4 顶点，水面在 y+1+yOff）
-          const sy = y + 1 + WATER_Y_OFF;
-          const x0 = x, x1 = x + w, z0 = z, z1 = z + h;
+          // 生成 quad（4 顶点，水面在 y + h）
+          const sy = y + h;
+          const x0 = x, x1 = x + w, z0 = z, z1 = z + d;
           wPos.push(x0, sy, z0, x0, sy, z1, x1, sy, z0, x1, sy, z1);
           wNorm.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0);
           wCol.push(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);

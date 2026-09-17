@@ -799,7 +799,7 @@ reg('lava', { displayName: '岩浆', solid: false, transparent: true, fluid: tru
 // --- 流体流动等级方块（B26 流体模拟）：等级 1 最强（紧邻源）→ N 最弱，数字越大越弱；
 // fluidType 供游泳/伤害/渲染分路判定（与源方块同值）；textures 复用源纹理避免图集膨胀
 for (let wl = 1; wl <= 7; wl++) {
-  reg(`water_flow_${wl}`, { solid: false, transparent: true, fluid: true, fluidType: 'water', textures: { top: 'water', side: 'water', bottom: 'water' }, hardness: 100 });
+  reg(`water_flow_${wl}`, { displayName: '水', solid: false, transparent: true, fluid: true, fluidType: 'water', textures: { top: 'water', side: 'water', bottom: 'water' }, hardness: 100 });
 }
 for (let ll = 1; ll <= 3; ll++) {
   reg(`lava_flow_${ll}`, { displayName: '岩浆', solid: false, transparent: true, fluid: true, fluidType: 'lava', light: 15, textures: { top: 'lava', side: 'lava', bottom: 'lava' }, hardness: 100 });

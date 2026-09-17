@@ -215,6 +215,7 @@ LAN 联机阶段 0-11 已全部完成（`https://github.com/illagerCPR/CubeWorld
 
 | 文件 | 涵盖批次 | 何时必读 |
 |---|---|---|
+| `docs/agent-notes/fluid-sim.md` | B26 流体模拟（M1 可流动水/岩浆 + M3 联机批量/相遇固化 + M2 部分水位） | 流体、FluidSim、方块注册白名单、水面渲染高度 |
 | `docs/agent-notes/worldgen-structures.md` | 自然建筑/村庄/要塞、T5 战利品箱与村民交易、W 水面/洞穴、生物群系规模、群系扩展、B25 树让位/村庄麦田/全景禁结构 | 地形生成、结构、群系、loot/容器/交易 |
 | `docs/agent-notes/dimensions-portals.md` | 维度基建/下界/末地/天域/联机同步、传送门、下界优化、末地完善（龙/末地城）、天域叙事基石（批次 A）、天域群风与众生（批次 B）、天域守誓巨像（批次 C）、天域复潮（批次 D） | 维度、传送门、下界/末地、换维联机、天域内容注册/i18n 审计/气流与免摔落/Boss AI/复潮档案 |
 | `docs/agent-notes/survival-items.md` | P0 燧石/打火石/黑曜石、P1 挖掘/盔甲/经验、P2 床/掷眼、P3 桶/弓/耕种 | 生存机制、工具/盔甲/食物、合成/掉落 |

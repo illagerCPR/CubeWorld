@@ -50,7 +50,8 @@ const ID = {
 
   const cm = srcOf('../src/render/ChunkMesh.js');
   ok(cm.includes("def.fluid && def.fluidType === 'water'"), '水面独立纹理管线判定按 fluidType');
-  ok(cm.includes('neighborDef.fluidType === def.fluidType) continue;'), '同型流体相邻剔除内面');
+  ok(cm.includes('if (f === 2 || f === 3) continue;'), '同型流体相邻：顶/底面剔除');
+  ok(cm.includes('this._fluidHeightAt(nx, ny, nz, neighborDef) === fluidH) continue;'), '侧面仅同高剔除（不同高画台阶侧壁）');
 
   const nm = srcOf('../src/net/NetworkManager.js');
   ok(nm.includes('world.fluidSim.writing') && nm.includes('queueFluidBlock'), '联机上报分流：模拟改动走批量通道');
@@ -238,6 +239,39 @@ const lvlAt = (world, x, y, z) => {
   nm.clearFluidBatch();
   nm.flushFluidBatch();
   ok(sent.length === 1, 'clear 后 flush 不再发送');
+}
+
+// ── ③ M2 部分水位渲染 ──
+{
+  const { ChunkMeshBuilder } = await import('../src/render/ChunkMesh.js');
+  const THREE = await import('three');
+  const world = makeWorld();
+  world.setBlock(0, 101, 0, ID.water, false);
+  world.setBlock(3, 106, 0, ID.water, false); // 悬空源 → 下落柱
+  stepWater(world, 2); // 驱动扩散产生 flow_1 层
+  world.ensureChunk(0, -1);
+  const builder = new ChunkMeshBuilder(world, new THREE.Texture(), new Map(), new THREE.Texture());
+  const collectAt = (cx, cz) => {
+    const c = world.ensureChunk(cx, cz);
+    builder._fillCache(c);
+    builder._fillLightCaches(c);
+    builder._refreshOpaqueLUT();
+    return builder._collectData(c);
+  };
+  const data = collectAt(0, 0);
+  ok(!!data.water, '水面几何存在');
+  const ys = [];
+  for (let i = 1; i < data.water.position.length; i += 3) ys.push(data.water.position[i]);
+  // 水格在 y=101（平台 100 上方）：源层顶 y ≈ 101+8/9；flow_1 层 ≈ 101+7/9（merge 顶点）
+  const hasSrc = ys.some((v) => Math.abs(v - (101 + 8 / 9)) < 1e-4);
+  const hasFlow1 = ys.some((v) => Math.abs(v - (101 + 7 / 9)) < 1e-4);
+  ok(hasSrc, '源水面高度 = 8/9');
+  ok(hasFlow1, 'flow_1 水面高度 = 7/9');
+  // 下落柱满高：柱侧面顶点触达 y+1 = 106
+  ok(ys.some((v) => Math.abs(v - 106) < 1e-4), '下落柱侧面满高（顶点 y=106）');
+  // 源内部(相邻源之间)顶面只出现一次合并层：8/9 层顶点数远小于满格面数
+  const srcCount = ys.filter((v) => Math.abs(v - (101 + 8 / 9)) < 1e-4).length;
+  ok(srcCount > 0 && srcCount % 4 === 0, '源层顶点按 quad 对齐（贪心合并生效）');
 }
 
 // 流动模拟产生的 setBlock 与玩家操作分流：writing 标志窗口

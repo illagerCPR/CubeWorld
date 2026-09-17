@@ -4,7 +4,7 @@
 //     与外扩1内树冠方块数=0，周边环带仍有树——修复前树冠伸进建筑）
 //   ② 村庄农田改原版式：行为级（耕地+每格 wheat_crop_0..7+水渠贴耕地）+ 源码绊线（melon 移除）
 //   ③ 全景烘焙：结构禁用 + 单机位多群系交界选点（同点六面连续拍摄）+ 光照增强默认完整档绊线
-//   ④ BUILD = 25（本批次 bump）
+//   ④ BUILD = 26（B26 流体模拟批次 bump）
 import { readFileSync } from 'fs';
 import { TerrainGenerator } from '../src/world/terrain.js';
 import { Chunk } from '../src/core/Chunk.js';
@@ -160,6 +160,6 @@ function farmWaterAt(at, nameOf, rec) {
 }
 
 // ── ④ BUILD 钉值 ──
-ok(BUILD === 25, 'BUILD 25（村庄麦田/树让位/全景重烘批次 bump）');
+ok(BUILD === 26, 'BUILD 26（B26 流体模拟批次 bump）');
 
 console.log(`PASS build25-fixes: ${passed} 断言`);
